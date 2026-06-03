@@ -18,6 +18,8 @@ export function todayIndex(): number {
 }
 
 // ズームごとの 1 日あたりピクセル / pixels per day per zoom
+// Fit はコンテナ幅から動的に算出するため、ここでは Week 相当のフォールバック
+// Fit is computed from the container width elsewhere; here it falls back to the Week scale
 export function pxPerDay(zoom: ZoomMode): number {
   switch (zoom) {
     case "Day":
@@ -26,6 +28,8 @@ export function pxPerDay(zoom: ZoomMode): number {
       return 16;
     case "Month":
       return 5;
+    case "Fit":
+      return 16;
   }
 }
 

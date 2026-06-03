@@ -47,4 +47,5 @@ export interface GanttViewState {
 }
 
 export const VIEW_TYPE_GANTT = "task-gantt-view";
-export type ZoomMode = "Day" | "Week" | "Month";
+// Fit = ペイン幅に収まるよう自動スケール / Fit = auto-scale to the pane width
+export type ZoomMode = "Day" | "Week" | "Month" | "Fit";

@@ -30,6 +30,8 @@ const HEAD_H = 40; // ヘッダー高さ / header height
 const TABLE_W = 360; // 左の表の幅 / left table width
 const BAR_PAD = 5; // バーの上下余白 / vertical padding inside a row
 const RESIZE_EDGE = 8; // バー端リサイズの当たり幅 / edge-resize hit width
+const MIN_PPD = 2; // Fit 時の最小 1 日幅（これ未満は横スクロール）/ minimum px/day in Fit mode
+const FIT_SCROLLBAR_PAD = 16; // 縦スクロールバー分の余白 / room for the vertical scrollbar
 
 export class GanttView extends ItemView {
   plugin: GanttPlugin;
@@ -48,6 +50,9 @@ export class GanttView extends ItemView {
 
   // バーがドラッグされたか（ドラッグ直後のクリック抑止用）/ whether a bar was dragged (to suppress the trailing click)
   private dragged = new WeakMap<SVGGElement, boolean>();
+
+  // Fit モードでペイン幅に追従するための再描画タイマー / debounce timer to re-fit in Fit mode
+  private fitTimer: number | null = null;
 
   // DOM 参照 / DOM refs
   private tbodyEl!: HTMLElement;
@@ -99,6 +104,14 @@ export class GanttView extends ItemView {
     });
   }
 
+  // Obsidian がペイン/ウィンドウのリサイズ時に呼ぶフック。Fit のみ再描画（デバウンス）
+  // Obsidian calls this on pane/window resize; re-fit in Fit mode only (debounced)
+  onResize(): void {
+    if (this.zoom !== "Fit") return;
+    if (this.fitTimer != null) window.clearTimeout(this.fitTimer);
+    this.fitTimer = window.setTimeout(() => this.rerender(), 80);
+  }
+
   // ツールバーと詳細パネルは永続化、再描画はガント部だけ / persistent toolbar + detail; only the grid re-renders
   private buildSkeleton(): void {
     const root = this.contentEl;
@@ -121,6 +134,10 @@ export class GanttView extends ItemView {
       window.clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
+    if (this.fitTimer != null) {
+      window.clearTimeout(this.fitTimer);
+      this.fitTimer = null;
+    }
   }
 
   // ディスクから集計し直して再描画 / re-collect from disk, then render
@@ -136,7 +153,7 @@ export class GanttView extends ItemView {
     if (!this.gridHost) this.buildSkeleton();
     this.rows = buildRows(this.tasks, this.collapsed);
     this.range = computeRange(this.tasks);
-    this.ppd = pxPerDay(this.zoom);
+    this.ppd = this.computePpd();
     const titleEl = this.contentEl.querySelector(".ogantt-title");
     if (titleEl) titleEl.setText(this.folder || "(vault root)");
 
@@ -151,17 +168,26 @@ export class GanttView extends ItemView {
     this.renderGrid(main);
   }
 
+  // 1 日あたりピクセルを決定。Fit はペイン幅から算出（収まらなければ最小幅で横スクロール）
+  // pixels-per-day; Fit derives it from the pane width (falls back to scrolling below MIN_PPD)
+  private computePpd(): number {
+    if (this.zoom !== "Fit") return pxPerDay(this.zoom);
+    const totalDays = Math.max(1, this.range.max - this.range.min + 1);
+    const avail = (this.gridHost?.clientWidth ?? 0) - TABLE_W - FIT_SCROLLBAR_PAD;
+    if (avail <= 0) return pxPerDay("Week"); // まだレイアウト前 / not laid out yet
+    return Math.max(MIN_PPD, Math.floor(avail / totalDays));
+  }
+
   // ----- ツールバー / toolbar -----
   private renderToolbar(root: HTMLElement): void {
     const bar = root.createDiv({ cls: "ogantt-toolbar" });
     bar.createSpan({ cls: "ogantt-title", text: this.plugin.settings.rootFolder || "(vault root)" });
     bar.createDiv({ cls: "ogantt-spacer" });
-    (["Day", "Week", "Month"] as ZoomMode[]).forEach((z) => {
+    (["Day", "Week", "Month", "Fit"] as ZoomMode[]).forEach((z) => {
       const btn = bar.createEl("button", { text: z });
       if (z === this.zoom) btn.addClass("is-active");
       btn.onclick = () => {
-        this.zoom = z;
-        this.ppd = pxPerDay(z);
+        this.zoom = z; // ppd は rerender 内の computePpd() が決める / ppd is set by computePpd() in rerender
         bar.querySelectorAll("button.is-active").forEach((b) => b.removeClass("is-active"));
         btn.addClass("is-active");
         void this.refresh();
@@ -233,8 +259,11 @@ export class GanttView extends ItemView {
     corner.createDiv({ cls: "ogantt-th", text: tr().colDue });
 
     // (2) 日付軸 / date axis
+    // Fit は算出した ppd から目盛り粒度を選ぶ / in Fit, pick tick granularity from the computed ppd
+    const tickZoom: ZoomMode =
+      this.zoom !== "Fit" ? this.zoom : this.ppd >= 24 ? "Day" : this.ppd >= 10 ? "Week" : "Month";
     const axis = grid.createDiv({ cls: "ogantt-axis" });
-    for (const tick of buildTicks(this.range, this.zoom, this.ppd)) {
+    for (const tick of buildTicks(this.range, tickZoom, this.ppd)) {
       const t = axis.createDiv({ cls: "ogantt-tick" + (tick.major ? " is-major" : "") });
       t.style.left = `${tick.x}px`;
       t.setText(tick.label);

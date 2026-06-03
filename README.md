@@ -25,6 +25,7 @@ Click a task to open the detail panel and edit its dates, status, assignee, and 
 3. Direct subfolders become **groups**, and the `.md` files inside them become **tasks**.
 4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter.
 5. Click a task in the table — or **double-click its bar** in the timeline — to slide in a **detail panel** (dates, status, assignee, body) from the right.
+6. Use the **Day / Week / Month / Fit** buttons to change the timeline scale. **Fit** auto-scales the chart to the pane width and re-fits when you resize.
 
 The UI follows Obsidian's display language: Japanese when Obsidian is set to Japanese, English otherwise.
 
@@ -130,6 +131,7 @@ MIT — see [`LICENSE`](./LICENSE).
 3. 直下のサブフォルダが**グループ**、その中の `.md` が**タスク**になります。
 4. バーを**ドラッグ／端をリサイズ**すると、そのファイルのフロントマター `start`/`end` に書き戻します。
 5. 表のタスクをクリック、または**タイムラインのバーをダブルクリック**すると、右から**詳細パネル**（日付・ステータス・担当者・本文）がスライドインします。
+6. **Day / Week / Month / Fit** ボタンで時間軸の拡大率を変更できます。**Fit** はチャートをペイン幅に自動で収め、リサイズにも追従します。
 
 UI 表示は Obsidian の表示言語に追従します（日本語なら日本語、それ以外は英語）。
 

@@ -86,6 +86,7 @@ export class GanttSettingTab extends PluginSettingTab {
           .addOption("Day", "Day")
           .addOption("Week", "Week")
           .addOption("Month", "Month")
+          .addOption("Fit", "Fit")
           .setValue(this.plugin.settings.defaultZoom)
           .onChange(async (v) => {
             this.plugin.settings.defaultZoom = v as ZoomMode;
