@@ -8,7 +8,7 @@
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "test": "esbuild src/model.ts --bundle --format=esm --outfile=test/model.mjs --alias:obsidian=./test/obsidian-stub.mjs --log-level=warning && node test/model.test.mjs"
   },
-  "keywords": ["obsidian", "gantt", "project-management", "wrike"],
+  "keywords": ["obsidian", "gantt", "project-management", "timeline"],
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.11.0",

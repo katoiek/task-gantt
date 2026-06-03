@@ -1,8 +1,11 @@
 ---
-start: 2026-02-01
-end: 2026-02-03
-status: done
+start: 2026-02-24
+end: 2026-03-25
+status: in-progress
 assignee: kato
+after:
+  - "[[拭き掃除]]"
+  - SS:[[Wiping 拭き掃除]]
 ---
 
 # 掃き掃除

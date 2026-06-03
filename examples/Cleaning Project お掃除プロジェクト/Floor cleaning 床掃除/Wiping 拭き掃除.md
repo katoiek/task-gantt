@@ -1,10 +1,8 @@
 ---
-start: 2026-02-04
-end: 2026-02-07
+end: 2026-03-03
 status: in-progress
 assignee: kato
-after:
-  - "[[掃き掃除]]"
+start: 2026-02-24
 ---
 
 # 拭き掃除

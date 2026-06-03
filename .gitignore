@@ -5,5 +5,5 @@ main.js.map
 .DS_Store
 test/model.mjs
 
-# 参照用スクショ（ClickUp等、本体ではない）はコミットしない / keep reference screenshots local
+# 参照用スクショ（本体ではない）はコミットしない / keep reference screenshots local
 examples/*.png

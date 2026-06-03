@@ -1,4 +1,4 @@
-/* ===== Gantt board (Wrike 風レイアウト) ===== */
+/* ===== Gantt board (表＋タイムライン レイアウト / table + timeline layout) ===== */
 .ogantt-board {
   display: flex;
   flex-direction: column;

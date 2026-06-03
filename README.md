@@ -2,7 +2,7 @@
 
 **English** | [日本語](#日本語)
 
-A ClickUp/Wrike-style Gantt for Obsidian. **One Markdown file = one task**; a configured folder is shown and edited as a Wrike-style "table + timeline" Gantt.
+An interactive project-management Gantt for Obsidian. **One Markdown file = one task**; a configured folder is shown and edited as a "table + timeline" Gantt.
 
 ## Screenshots
 
@@ -95,7 +95,7 @@ MIT — see [`LICENSE`](./LICENSE).
 
 [English](#gantt-for-obsidian) | **日本語**
 
-ClickUp / Wrike のようなタスク管理 UI を Obsidian で実現するプラグインです。**1 ファイル = 1 タスク**とし、指定フォルダ配下を **Wrike 風の「表＋タイムライン」ガント**で表示・編集します。
+プロジェクト管理ツールのようなタスク管理 UI を Obsidian で実現するプラグインです。**1 ファイル = 1 タスク**とし、指定フォルダ配下を **「表＋タイムライン」ガント**で表示・編集します。
 
 ## スクリーンショット
 
