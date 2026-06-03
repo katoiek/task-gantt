@@ -24,7 +24,7 @@ Click a task to open the detail panel and edit its dates, status, assignee, and 
 2. Open the view from the **"Open Gantt" ribbon icon** in the left column (or the command **"Open Gantt"**). The ribbon button opens the Gantt for the folder of the currently open note — or the folder selected in the file explorer — and falls back to the default folder set in settings (the **vault root** when none is set). You can also right-click any folder → **Open as Gantt** to open that specific folder.
 3. Direct subfolders become **groups**, and the `.md` files inside them become **tasks**.
 4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter.
-5. Click a task to slide in a **detail panel** (dates, status, assignee, body) from the right.
+5. Click a task in the table — or **double-click its bar** in the timeline — to slide in a **detail panel** (dates, status, assignee, body) from the right.
 
 The UI follows Obsidian's display language: Japanese when Obsidian is set to Japanese, English otherwise.
 
@@ -129,7 +129,7 @@ MIT — see [`LICENSE`](./LICENSE).
 2. 左列の **「Gantt を開く」リボンアイコン**（またはコマンド「Gantt を開く」）でビューを開く。リボンボタンは、**現在開いているノートのフォルダ**（またはエクスプローラで選択中のフォルダ）を Gantt 表示し、どちらも無ければ設定の既定フォルダ（未設定なら **Vault ルート**）を開きます。特定のフォルダを開きたいときは、フォルダを右クリック →**「Open as Gantt」**でも開けます。
 3. 直下のサブフォルダが**グループ**、その中の `.md` が**タスク**になります。
 4. バーを**ドラッグ／端をリサイズ**すると、そのファイルのフロントマター `start`/`end` に書き戻します。
-5. タスクをクリックすると、右から**詳細パネル**（日付・状態・担当・本文）がスライドインします。
+5. 表のタスクをクリック、または**タイムラインのバーをダブルクリック**すると、右から**詳細パネル**（日付・ステータス・担当者・本文）がスライドインします。
 
 UI 表示は Obsidian の表示言語に追従します（日本語なら日本語、それ以外は英語）。
 
