@@ -789,19 +789,18 @@ export class GanttView extends ItemView {
       return r.createDiv({ cls: "ogantt-detail-field" });
     };
 
-    // 開始 / start（マイルストーンは非表示）/ start (hidden for milestones)
-    if (!t.milestone) {
-      const startIn = fieldRow(tr().fieldStart).createEl("input", { type: "date" });
-      startIn.value = t.start ?? "";
-      startIn.addEventListener("change", () => void this.saveField(k.start, startIn.value));
-    }
-    // 終了 or 期限 / end (label "期限" when milestone)
+    // 開始 / start（常に表示。マイルストーンは空欄で、日付を入れると通常タスク化／空にすると再びマイルストーン）
+    // start (always shown; empty for a milestone — entering a date turns it into a ranged task, clearing it reverts to a milestone)
+    const startIn = fieldRow(tr().fieldStart).createEl("input", { type: "date" });
+    startIn.value = t.start ?? "";
+    startIn.addEventListener("change", () => void this.saveField(k.start, startIn.value));
+    // 終了 or 期限 / end (label "期限/Due" when milestone)
     const endIn = fieldRow(t.milestone ? tr().fieldDue : tr().fieldEnd).createEl("input", { type: "date" });
     endIn.value = t.end ?? "";
     endIn.addEventListener("change", () => void this.saveField(k.end, endIn.value));
 
     // ステータス / status
-    const statusSel = fieldRow("状態 / Status").createEl("select");
+    const statusSel = fieldRow(tr().fieldStatus).createEl("select");
     statusSel.createEl("option", { text: "—", value: "" });
     for (const s of this.plugin.settings.statuses) {
       const opt = statusSel.createEl("option", { text: s.label, value: s.id });
@@ -810,12 +809,12 @@ export class GanttView extends ItemView {
     statusSel.addEventListener("change", () => void this.saveField(k.status, statusSel.value));
 
     // 担当 / assignee
-    const asgIn = fieldRow("担当 / Assignee").createEl("input", { type: "text" });
+    const asgIn = fieldRow(tr().fieldAssignee).createEl("input", { type: "text" });
     asgIn.value = t.assignee ?? "";
     asgIn.addEventListener("change", () => void this.saveField(k.assignee, asgIn.value));
 
     // 本文 / body（テキストエリア、フォーカスを外したら保存）/ body textarea, saved on blur
-    d.createEl("div", { cls: "ogantt-detail-label", text: "本文 / Body" });
+    d.createEl("div", { cls: "ogantt-detail-label", text: tr().fieldBody });
     const bodyArea = d.createEl("textarea", { cls: "ogantt-detail-body-edit" });
     bodyArea.value = await readBody(this.app, t.path);
     const autosize = () => {
