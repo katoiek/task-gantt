@@ -45,6 +45,9 @@ export class GanttView extends ItemView {
   private undoStack: { label: string; files: Map<string, string> }[] = [];
   private static readonly UNDO_LIMIT = 50;
 
+  // バーがドラッグされたか（ドラッグ直後のクリック抑止用）/ whether a bar was dragged (to suppress the trailing click)
+  private dragged = new WeakMap<SVGGElement, boolean>();
+
   // DOM 参照 / DOM refs
   private tbodyEl!: HTMLElement;
   private gridHost!: HTMLElement;
@@ -111,6 +114,14 @@ export class GanttView extends ItemView {
     this.refreshTimer = window.setTimeout(() => void this.refresh(), 300);
   }
 
+  // ビューを閉じたら保留中のタイマーを止める（破棄後の再描画を防ぐ）/ stop the pending timer on close
+  async onClose(): Promise<void> {
+    if (this.refreshTimer != null) {
+      window.clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  }
+
   // ディスクから集計し直して再描画 / re-collect from disk, then render
   async refresh(): Promise<void> {
     if (!this.gridHost) this.buildSkeleton();
@@ -143,8 +154,7 @@ export class GanttView extends ItemView {
   private renderToolbar(root: HTMLElement): void {
     const bar = root.createDiv({ cls: "ogantt-toolbar" });
     bar.createSpan({ cls: "ogantt-title", text: this.plugin.settings.rootFolder || "(vault root)" });
-    const spacer = bar.createDiv();
-    spacer.style.flex = "1";
+    bar.createDiv({ cls: "ogantt-spacer" });
     (["Day", "Week", "Month"] as ZoomMode[]).forEach((z) => {
       const btn = bar.createEl("button", { text: z });
       if (z === this.zoom) btn.addClass("is-active");
@@ -369,7 +379,7 @@ export class GanttView extends ItemView {
       }
 
       g.addEventListener("click", (ev) => {
-        if ((g as any)._dragged) return; // ドラッグ後のクリックは無視 / ignore click after drag
+        if (this.dragged.get(g)) return; // ドラッグ後のクリックは無視 / ignore click after drag
         ev.stopPropagation();
         void this.openDetail(t.path);
       });
@@ -385,7 +395,7 @@ export class GanttView extends ItemView {
   private startLink(g: SVGGElement, svg: SVGElement, source: Task, sourceEnd: "start" | "finish", ev: PointerEvent): void {
     ev.preventDefault();
     ev.stopPropagation();
-    (g as any)._dragged = true; // バーのクリックを抑止 / suppress the bar click
+    this.dragged.set(g, true); // バーのクリックを抑止 / suppress the bar click
     const handle = ev.target as Element;
     handle.setPointerCapture(ev.pointerId);
     const box = svg.getBoundingClientRect();
@@ -415,7 +425,7 @@ export class GanttView extends ItemView {
       tmp.remove();
       clearHi();
       // クリック抑止フラグはこの後の click 後に解除 / clear the click-suppress flag after the click fires
-      window.setTimeout(() => ((g as any)._dragged = false), 0);
+      window.setTimeout(() => this.dragged.set(g, false), 0);
       const row = this.rows[Math.floor((e.clientY - box.top) / ROW_H)];
       if (row?.kind === "task" && row.task && row.task.path !== source.path) {
         const target = row.task;
@@ -655,7 +665,7 @@ export class GanttView extends ItemView {
     handle.addEventListener("pointerdown", (ev: PointerEvent) => {
       ev.preventDefault();
       ev.stopPropagation();
-      (g as any)._dragged = false;
+      this.dragged.set(g, false);
       const startX = ev.clientX;
       handle.setPointerCapture(ev.pointerId);
 
@@ -674,7 +684,7 @@ export class GanttView extends ItemView {
 
       const onMove = (e: PointerEvent) => {
         const dx = e.clientX - startX;
-        if (Math.abs(dx) > 3) (g as any)._dragged = true;
+        if (Math.abs(dx) > 3) this.dragged.set(g, true);
         if (milestone) {
           g.setAttribute("transform", `translate(${dx},0)`);
           return;

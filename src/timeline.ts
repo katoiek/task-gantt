@@ -37,9 +37,15 @@ export interface DateRange {
 // タスク群から表示範囲を決める（前後に余白）/ compute the visible range with padding
 export function computeRange(tasks: Task[]): DateRange {
   const days: number[] = [];
+  // 不正な日付（NaN）は範囲計算から除外して全体崩壊を防ぐ / drop NaN day indices so a bad date can't break the whole range
+  const push = (s?: string) => {
+    if (!s) return;
+    const i = dayIndex(s);
+    if (Number.isFinite(i)) days.push(i);
+  };
   for (const t of tasks) {
-    if (t.start) days.push(dayIndex(t.start));
-    if (t.end) days.push(dayIndex(t.end));
+    push(t.start);
+    push(t.end);
   }
   if (days.length === 0) {
     const today = todayIndex();

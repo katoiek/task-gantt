@@ -92,7 +92,7 @@ export class GanttSettingTab extends PluginSettingTab {
           })
       );
 
-    containerEl.createEl("h3", { text: "ステータス / Statuses" });
+    new Setting(containerEl).setName("ステータス / Statuses").setHeading();
     this.plugin.settings.statuses.forEach((status, index) => {
       const setting = new Setting(containerEl)
         .addText((t) =>
@@ -131,7 +131,7 @@ export class GanttSettingTab extends PluginSettingTab {
       })
     );
 
-    containerEl.createEl("h3", { text: "フロントマターのキー名 / Frontmatter keys" });
+    new Setting(containerEl).setName("フロントマターのキー名 / Frontmatter keys").setHeading();
     const keys = this.plugin.settings.keys;
     (Object.keys(keys) as (keyof typeof keys)[]).forEach((k) => {
       new Setting(containerEl).setName(k).addText((t) =>

@@ -18,6 +18,10 @@
 .ogantt-title {
   font-weight: 600;
 }
+/* ツールバーの伸縮スペーサー（右寄せ用）/ flexible spacer to push controls right */
+.ogantt-spacer {
+  flex: 1;
+}
 .ogantt-toolbar button.is-active {
   background: var(--interactive-accent);
   color: var(--text-on-accent);

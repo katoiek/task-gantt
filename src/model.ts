@@ -9,13 +9,20 @@ function parseDepRaw(raw: string): { type: DepType; link: string } {
   return { type: "FS", link: raw.trim() };
 }
 
-// 日付らしき値を YYYY-MM-DD 文字列へ / coerce a date-ish value to YYYY-MM-DD
+// after エントリから型プレフィックス(FS:/SS:/FF:)を除いてリンク部だけ取り出す / strip the type prefix, keep the link
+function stripDepType(raw: unknown): string {
+  return String(raw).replace(/^\s*(FS|SS|FF)\s*:\s*/i, "");
+}
+
+// 日付らしき値を YYYY-MM-DD 文字列へ（不正値は undefined）/ coerce to YYYY-MM-DD (undefined if not a valid date)
 function toDateStr(v: unknown): string | undefined {
   if (v == null || v === "") return undefined;
   if (v instanceof Date) return v.toISOString().slice(0, 10);
   const s = String(v).trim();
   const m = s.match(/^\d{4}-\d{2}-\d{2}/);
-  return m ? m[0] : s;
+  // 日付として解釈できない値（例: "未定"）は無効扱いにしてレイアウト崩壊を防ぐ
+  // values that aren't a date (e.g. "未定") are dropped so they can't break the layout
+  return m ? m[0] : undefined;
 }
 
 // after を文字列配列へ正規化 / normalize `after` into a string array
@@ -242,10 +249,9 @@ export async function addDependency(
   await app.fileManager.processFrontMatter(succ, (fm) => {
     const arr = fm[k.after] == null ? [] : Array.isArray(fm[k.after]) ? fm[k.after] : [fm[k.after]];
     // 既存の同 pred を除去 / drop any existing entry to the same predecessor
-    const kept = arr.filter((raw: unknown) => {
-      const link = String(raw).replace(/^\s*(FS|SS|FF)\s*:\s*/i, "");
-      return resolveLink(app, link, successorPath)?.path !== predPath;
-    });
+    const kept = arr.filter(
+      (raw: unknown) => resolveLink(app, stripDepType(raw), successorPath)?.path !== predPath
+    );
     const link = app.fileManager.generateMarkdownLink(pred, successorPath);
     kept.push(type === "FS" ? link : `${type}:${link}`); // FS はプレフィックス無しで後方互換
     fm[k.after] = kept;
@@ -266,10 +272,9 @@ export async function removeDependency(
   await app.fileManager.processFrontMatter(succ, (fm) => {
     if (fm[k.after] == null) return;
     const list = Array.isArray(fm[k.after]) ? fm[k.after] : [fm[k.after]];
-    const filtered = list.filter((raw: unknown) => {
-      const link = String(raw).replace(/^\s*(FS|SS|FF)\s*:\s*/i, "");
-      return resolveLink(app, link, successorPath)?.path !== predPath;
-    });
+    const filtered = list.filter(
+      (raw: unknown) => resolveLink(app, stripDepType(raw), successorPath)?.path !== predPath
+    );
     if (filtered.length) fm[k.after] = filtered;
     else delete fm[k.after];
   });
