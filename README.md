@@ -4,6 +4,20 @@
 
 A ClickUp/Wrike-style Gantt for Obsidian. **One Markdown file = one task**; a configured folder is shown and edited as a Wrike-style "table + timeline" Gantt.
 
+## Screenshots
+
+Open any folder as a Gantt from the right-click menu:
+
+![Open a folder as a Gantt from the right-click menu](docs/images/open-as-gantt.png)
+
+The folder opens as a table + timeline, with groups, bars, milestones, and dependency arrows:
+
+![The opened Gantt chart with groups, bars, milestones and dependencies](docs/images/gantt-chart.png)
+
+Click a task to open the detail panel and edit its dates, status, assignee, and body:
+
+![Task detail panel for editing dates, status, assignee and body](docs/images/detail-panel.png)
+
 ## Usage
 
 1. In **Settings → Gantt**, set the **target folder** (e.g. `Projects/Cleanup`).
@@ -82,6 +96,20 @@ MIT — see [`LICENSE`](./LICENSE).
 [English](#gantt-for-obsidian) | **日本語**
 
 ClickUp / Wrike のようなタスク管理 UI を Obsidian で実現するプラグインです。**1 ファイル = 1 タスク**とし、指定フォルダ配下を **Wrike 風の「表＋タイムライン」ガント**で表示・編集します。
+
+## スクリーンショット
+
+右クリックメニューからフォルダを Gantt として開きます：
+
+![右クリックメニューからフォルダを Gantt として開く](docs/images/open-as-gantt.png)
+
+「表＋タイムライン」で開き、グループ・バー・マイルストーン・依存の矢印が表示されます：
+
+![開いたガントチャート（グループ・バー・マイルストーン・依存）](docs/images/gantt-chart.png)
+
+タスクをクリックすると詳細パネルが開き、日付・状態・担当・本文を編集できます：
+
+![タスクの詳細パネル（日付・状態・担当・本文の編集）](docs/images/detail-panel.png)
 
 ## 使い方
 
