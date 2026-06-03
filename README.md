@@ -61,7 +61,7 @@ The body is the task description (shown in the detail panel).
 
 The task name is the file name (without extension); the group is the parent subfolder name. Frontmatter key names can be changed in settings.
 
-Sample data for a quick try lives in `examples/お掃除プロジェクト/` (point the target folder at it).
+Sample data for a quick try lives in `examples/Cleaning Project お掃除プロジェクト/` (point the target folder at it).
 
 ## Dependencies
 
@@ -154,7 +154,7 @@ after:
 
 タスク名はファイル名（拡張子なし）。グループは直上のサブフォルダ名。フロントマターのキー名は設定で変更できます。
 
-`examples/お掃除プロジェクト/` に動作確認用のサンプルがあります（対象フォルダにそれを指定）。
+`examples/Cleaning Project お掃除プロジェクト/` に動作確認用のサンプルがあります（対象フォルダにそれを指定）。
 
 ## 依存関係
 
