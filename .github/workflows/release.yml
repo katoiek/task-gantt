@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write # provenance 署名に必要 / required to sign attestations
+  attestations: write # 成果物の attestation 生成 / create artifact attestations
 
 jobs:
   build:
@@ -24,6 +26,15 @@ jobs:
         run: |
           npm install
           npm run build
+
+      # 成果物の出所を暗号的に証明する / attest the provenance of the build artifacts
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
 
       - name: Create release
         env:

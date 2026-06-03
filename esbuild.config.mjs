@@ -1,11 +1,11 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+import { builtinModules as builtins } from "node:module";
 
 const prod = process.argv[2] === "production";
 
-// frappe-gantt の CSS は text として取り込み、実行時に注入する
-// Bundle frappe-gantt's CSS as a string and inject it at runtime
+// Obsidian が提供する依存と Node 標準モジュールは external にする
+// Mark Obsidian-provided deps and Node built-ins as external
 const context = await esbuild.context({
   entryPoints: ["src/main.ts"],
   bundle: true,

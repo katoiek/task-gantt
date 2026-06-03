@@ -1,6 +1,6 @@
 {
   "name": "task-gantt",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Manage tasks on an interactive Gantt timeline where each note is a single task (file-per-task).",
   "main": "main.js",
   "scripts": {
@@ -12,7 +12,6 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "builtin-modules": "^3.3.0",
     "esbuild": "^0.20.0",
     "obsidian": "latest",
     "tslib": "^2.6.2",
