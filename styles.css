@@ -1,0 +1,386 @@
+/* ===== Gantt board (Wrike 風レイアウト) ===== */
+.ogantt-board {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.ogantt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.ogantt-title {
+  font-weight: 600;
+}
+.ogantt-toolbar button.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.ogantt-empty {
+  padding: 24px;
+  color: var(--text-muted);
+}
+
+/* 単一スクロール内の CSS グリッド。sticky で表ヘッダ・日付軸・左列を固定し行を揃える */
+/* CSS grid in one scroll container; sticky heads + left column keep rows aligned */
+.ogantt-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.ogantt-main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.ogantt-grid {
+  display: grid;
+  /* columns/rows are set inline from JS */
+}
+
+.ogantt-corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  background: var(--background-secondary);
+  border-right: 1px solid var(--background-modifier-border);
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+.ogantt-th {
+  width: 84px;
+  padding: 0 8px;
+  flex: none;
+}
+.ogantt-th-name {
+  flex: 1;
+  width: auto;
+}
+.ogantt-tbody {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  grid-column: 1;
+  grid-row: 2;
+  background: var(--background-primary);
+  border-right: 1px solid var(--background-modifier-border);
+}
+.ogantt-tr {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--background-modifier-border-hover);
+  cursor: pointer;
+  font-size: 0.85em;
+}
+.ogantt-tr.is-group {
+  background: var(--background-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.ogantt-chevron {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.ogantt-chevron .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+.ogantt-tr.is-selected {
+  background: var(--background-modifier-hover);
+}
+.ogantt-td {
+  width: 84px;
+  padding: 0 8px;
+  flex: none;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ogantt-td-name {
+  flex: 1;
+  width: auto;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ogantt-td-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  font-weight: 600;
+}
+.ogantt-folder-icon {
+  display: inline-flex;
+  color: var(--text-accent);
+}
+.ogantt-folder-icon .svg-icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---- 右のタイムライン / right timeline ---- */
+.ogantt-axis {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  grid-column: 2;
+  grid-row: 1;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.ogantt-svgwrap {
+  grid-column: 2;
+  grid-row: 2;
+}
+.ogantt-tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 3px;
+  font-size: 0.72em;
+  color: var(--text-muted);
+  border-left: 1px solid var(--background-modifier-border-hover);
+}
+.ogantt-tick.is-major {
+  color: var(--text-normal);
+  border-left-color: var(--background-modifier-border);
+  font-weight: 600;
+}
+
+.ogantt-svg {
+  display: block;
+}
+.ogantt-grid-row {
+  stroke: var(--background-modifier-border-hover);
+  stroke-width: 1;
+}
+.ogantt-grid-group {
+  fill: var(--background-secondary);
+  opacity: 0.5;
+}
+.ogantt-today {
+  stroke: var(--color-red);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  opacity: 0.7;
+}
+.ogantt-bar {
+  cursor: grab;
+}
+.ogantt-bar:active {
+  cursor: grabbing;
+}
+.ogantt-bar-progress {
+  fill: rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+.ogantt-milestone {
+  stroke: var(--background-primary);
+  stroke-width: 1;
+  cursor: grab;
+}
+.ogantt-milestone:active {
+  cursor: grabbing;
+}
+/* フォルダのまとめバー / group (folder) summary bar */
+.ogantt-group-bar {
+  fill: var(--text-accent);
+  opacity: 0.85;
+}
+.ogantt-group-cap {
+  fill: var(--text-accent);
+  opacity: 0.85;
+}
+.ogantt-bar-label {
+  font-size: 11px;
+  fill: var(--text-muted);
+  dominant-baseline: middle;
+  pointer-events: none;
+}
+.ogantt-dep {
+  fill: none;
+  stroke: var(--text-normal);
+  opacity: 0.55;
+  stroke-width: 1.8;
+  pointer-events: none;
+}
+.ogantt-dep.is-violation {
+  stroke: var(--color-red);
+  opacity: 0.9;
+}
+.ogantt-dep-arrow {
+  fill: var(--text-normal);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.ogantt-dep-arrow.is-violation {
+  fill: var(--color-red);
+  opacity: 0.9;
+}
+/* 線のどこでもクリックで切断 / click anywhere on the line to remove */
+.ogantt-dep-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.ogantt-dep-g:hover .ogantt-dep {
+  stroke: var(--color-red);
+  opacity: 1;
+  stroke-width: 2.2;
+}
+.ogantt-dep-g:hover .ogantt-dep-arrow {
+  fill: var(--color-red);
+  opacity: 1;
+}
+/* ホバーで出る × 目印 / X marker on hover */
+.ogantt-dep-x {
+  opacity: 0;
+  pointer-events: none;
+}
+.ogantt-dep-g:hover .ogantt-dep-x {
+  opacity: 1;
+}
+.ogantt-dep-x-bg {
+  fill: var(--background-primary);
+  stroke: var(--color-red);
+  stroke-width: 1.2;
+}
+.ogantt-dep-x-mark {
+  stroke: var(--color-red);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+/* 依存タイプのラベル（SS/FF）/ dependency type label */
+.ogantt-dep-type {
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--text-muted);
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* 依存作成ハンドル / dependency connector handles */
+.ogantt-handle {
+  fill: var(--background-primary);
+  stroke: var(--interactive-accent);
+  stroke-width: 2;
+  opacity: 0;
+  cursor: crosshair;
+}
+.ogantt-bar-g:hover .ogantt-handle {
+  opacity: 1;
+}
+.ogantt-link-temp {
+  fill: none;
+  stroke: var(--interactive-accent);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.ogantt-bar.is-link-target,
+.ogantt-milestone.is-link-target {
+  stroke: var(--interactive-accent);
+  stroke-width: 2.5;
+}
+
+/* ---- 詳細パネル（右からスライドイン）/ detail slide-over ---- */
+.ogantt-detail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 380px; /* JS から上書き / overridden from JS */
+  max-width: 92%;
+  background: var(--background-primary);
+  border-left: 1px solid var(--background-modifier-border);
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
+  transform: translateX(100%);
+  transition: transform 0.18s ease;
+  overflow-y: auto;
+  z-index: 5;
+  padding: 12px 14px 12px 18px;
+}
+.ogantt-detail.is-open {
+  transform: translateX(0);
+}
+/* 左端の幅リサイズハンドル / left-edge resize handle */
+.ogantt-detail-resizer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 6;
+}
+.ogantt-detail-resizer:hover {
+  background: var(--interactive-accent);
+  opacity: 0.5;
+}
+.ogantt-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ogantt-detail-title {
+  flex: 1;
+  font-size: 1.1em;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 2px 0;
+}
+.ogantt-detail-title:hover,
+.ogantt-detail-title:focus {
+  border-bottom-color: var(--background-modifier-border);
+}
+.ogantt-detail-meta {
+  margin: 12px 0;
+}
+.ogantt-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.9em;
+}
+.ogantt-detail-label {
+  width: 96px;
+  flex: none;
+  color: var(--text-muted);
+}
+.ogantt-detail-field {
+  flex: 1;
+}
+.ogantt-detail-field input,
+.ogantt-detail-field select {
+  width: 100%;
+}
+.ogantt-detail-body-edit {
+  width: 100%;
+  min-height: 160px;
+  margin-top: 6px;
+  resize: vertical;
+  font-family: var(--font-text);
+  line-height: 1.5;
+}
+.ogantt-muted {
+  color: var(--text-muted);
+}

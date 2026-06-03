@@ -1,0 +1,10 @@
+{
+  "id": "task-gantt",
+  "name": "Gantt",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Manage tasks on an interactive Gantt timeline where each note is a single task. Drag bars to reschedule, link FS/SS/FF dependencies, set milestones, and edit details in a side panel.",
+  "author": "Kei Kato",
+  "authorUrl": "https://github.com/katoiek",
+  "isDesktopOnly": false
+}

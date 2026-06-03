@@ -1,0 +1,22 @@
+{
+  "name": "task-gantt",
+  "version": "0.1.0",
+  "description": "Manage tasks on an interactive Gantt timeline where each note is a single task (file-per-task).",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test": "esbuild src/model.ts --bundle --format=esm --outfile=test/model.mjs --alias:obsidian=./test/obsidian-stub.mjs --log-level=warning && node test/model.test.mjs"
+  },
+  "keywords": ["obsidian", "gantt", "project-management", "wrike"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.20.0",
+    "obsidian": "latest",
+    "tslib": "^2.6.2",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {}
+}
