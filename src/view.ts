@@ -269,8 +269,11 @@ export class GanttView extends ItemView {
         if (t.path === this.selectedPath) tr.addClass("is-selected");
         const nameTd = tr.createDiv({ cls: "ogantt-td ogantt-td-name", text: t.name });
         nameTd.style.paddingLeft = `${indent}px`;
-        tr.createDiv({ cls: "ogantt-td", text: t.milestone ? "" : t.start ?? "" });
-        tr.createDiv({ cls: "ogantt-td", text: t.milestone ? `◆ ${t.end ?? ""}` : t.end ?? "" });
+        // マイルストーンは開始列に菱形マーカー、期限列は日付のみ（列をはみ出さない）
+        // milestone: diamond marker in the start cell, date alone in the due cell (no overflow)
+        const startTd = tr.createDiv({ cls: "ogantt-td", text: t.milestone ? "◆" : t.start ?? "" });
+        if (t.milestone) startTd.addClass("ogantt-td-ms");
+        tr.createDiv({ cls: "ogantt-td", text: t.end ?? "" });
         tr.onclick = () => void this.openDetail(t.path);
       }
     }
@@ -381,6 +384,11 @@ export class GanttView extends ItemView {
 
       g.addEventListener("click", (ev) => {
         if (this.dragged.get(g)) return; // ドラッグ後のクリックは無視 / ignore click after drag
+        ev.stopPropagation();
+        void this.openDetail(t.path);
+      });
+      // ダブルクリックでも詳細パネルを開く（ドラッグ判定に関係なく確実に）/ double-click also opens the detail panel
+      g.addEventListener("dblclick", (ev) => {
         ev.stopPropagation();
         void this.openDetail(t.path);
       });

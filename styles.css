@@ -110,6 +110,13 @@
   flex: none;
   color: var(--text-muted);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* マイルストーンの菱形マーカー（開始列）/ milestone diamond marker (start cell) */
+.ogantt-td-ms {
+  color: var(--text-accent);
+  font-weight: 600;
 }
 .ogantt-td-name {
   flex: 1;
