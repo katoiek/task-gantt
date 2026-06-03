@@ -382,12 +382,8 @@ export class GanttView extends ItemView {
         g.appendChild(handle);
       }
 
-      g.addEventListener("click", (ev) => {
-        if (this.dragged.get(g)) return; // ドラッグ後のクリックは無視 / ignore click after drag
-        ev.stopPropagation();
-        void this.openDetail(t.path);
-      });
-      // ダブルクリックでも詳細パネルを開く（ドラッグ判定に関係なく確実に）/ double-click also opens the detail panel
+      // バーはダブルクリックで詳細パネルを開く（シングルクリックでは開かない＝ドラッグ操作と区別）
+      // open the detail panel on double-click only (single click is left for dragging)
       g.addEventListener("dblclick", (ev) => {
         ev.stopPropagation();
         void this.openDetail(t.path);
@@ -737,9 +733,20 @@ export class GanttView extends ItemView {
           }
           // SS/FF 後続を連動（メモリ更新＋ディスク書き込み）/ cascade to SS/FF successors
           await this.realignSuccessors(task.path);
+          // メモリから即再描画（ディスク再読込前に正しい位置を表示）/ render from memory for instant correct positions
+          this.rerender();
+        } else {
+          // 日数変化なし＝クリック扱い。動かした分を視覚的に元へ戻すだけ（再描画しない）。
+          // これで要素が残り click/dblclick が発火し、詳細パネルを開ける。
+          // No day change = a click: reset any sub-threshold movement without re-rendering,
+          // so the element survives and click/dblclick fire to open the detail panel.
+          if (milestone) {
+            g.removeAttribute("transform");
+          } else {
+            handle.setAttribute("x", String(x0));
+            handle.setAttribute("width", String(w0));
+          }
         }
-        // メモリから即再描画（ディスク再読込前に正しい位置を表示）/ render from memory for instant correct positions
-        this.rerender();
       };
       handle.addEventListener("pointermove", onMove);
       handle.addEventListener("pointerup", onUp);
