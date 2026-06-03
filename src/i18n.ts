@@ -2,13 +2,15 @@
 // Obsidian の表示言語が日本語のときだけ日本語、それ以外は英語を出す
 // Show Japanese only when Obsidian's UI language is Japanese; English otherwise.
 
+import { moment } from "obsidian";
+
 type Lang = "ja" | "en";
 
-// Obsidian は表示言語を localStorage["language"] に保存する（既定の英語は未設定/別値）
-// Obsidian stores its UI language in localStorage["language"] ("" / unset for English)
+// Obsidian は表示言語に合わせて moment のロケールを設定する（日本語は "ja"）
+// Obsidian sets moment's locale to match the UI language ("ja" for Japanese)
 function detectLang(): Lang {
   try {
-    return window.localStorage.getItem("language") === "ja" ? "ja" : "en";
+    return moment.locale().startsWith("ja") ? "ja" : "en";
   } catch {
     return "en";
   }
