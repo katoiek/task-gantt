@@ -4,6 +4,7 @@ import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT } from ".
 import {
   collectTasks,
   buildRows,
+  createTask,
   writeDates,
   writeField,
   writeBody,
@@ -33,6 +34,14 @@ const BAR_PAD = 5; // バーの上下余白 / vertical padding inside a row
 const RESIZE_EDGE = 8; // バー端リサイズの当たり幅 / edge-resize hit width
 const MIN_PPD = 2; // Fit 時の最小 1 日幅（これ未満は横スクロール）/ minimum px/day in Fit mode
 const FIT_SCROLLBAR_PAD = 16; // 縦スクロールバー分の余白 / room for the vertical scrollbar
+const FALLBACK_BAR = "#7c8db5"; // ステータス/担当者が未設定のときのバー色 / bar color when status/assignee is unset
+
+// 担当者名から安定した色を生成（同じ名前は常に同じ色）/ deterministic color from an assignee name
+function assigneeColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return `hsl(${h}, 55%, 55%)`;
+}
 
 export class GanttView extends ItemView {
   plugin: GanttPlugin;
@@ -44,6 +53,13 @@ export class GanttView extends ItemView {
   private selectedPath: string | null = null;
   private folder = ""; // 表示対象フォルダ / scoped folder path
   private collapsed = new Set<string>(); // 折りたたみ中フォルダのキー / collapsed folder keys
+
+  // 表示オプション（ビューを開いている間だけ保持）/ view options (kept while the view is open)
+  private colorBy: "status" | "assignee" = "status";
+  private groupBy: "folder" | "status" | "assignee" = "folder";
+  private filterStatus = ""; // "" = すべて / all
+  private filterAssignee = ""; // "" = すべて / all
+  private optionsHost!: HTMLElement; // フィルタ/グループ/凡例の差し替え先 / options + legend container
 
   // 取り消し履歴（操作前のファイル内容スナップショット）/ undo history (pre-op file snapshots)
   private undoStack: { label: string; files: Map<string, string> }[] = [];
@@ -119,6 +135,7 @@ export class GanttView extends ItemView {
     root.empty();
     root.addClass("ogantt-board");
     this.renderToolbar(root);
+    this.optionsHost = root.createDiv({ cls: "ogantt-options" }); // 中身は rerender で差し替え / repopulated on rerender
     this.gridHost = root.createDiv({ cls: "ogantt-host" });
     this.detailEl = root.createDiv({ cls: "ogantt-detail" });
   }
@@ -153,14 +170,16 @@ export class GanttView extends ItemView {
   // ドラッグや整列の直後、metadataCache 更新前に正しい位置を即表示するため / shows correct positions before metadataCache updates
   rerender(): void {
     if (!this.gridHost) this.buildSkeleton();
-    this.rows = buildRows(this.tasks, this.collapsed);
-    this.range = computeRange(this.tasks);
+    this.renderOptions(); // フィルタ/グループ/凡例を最新データで更新 / refresh options + legend
+    const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
+    this.rows = buildRows(view, this.collapsed);
+    this.range = computeRange(view);
     this.ppd = this.computePpd();
     const titleEl = this.contentEl.querySelector(".ogantt-title");
     if (titleEl) titleEl.setText(this.folder || "(vault root)");
 
     this.gridHost.empty();
-    if (this.tasks.length === 0) {
+    if (view.length === 0) {
       this.gridHost.createDiv({ cls: "ogantt-empty" }).setText(
         tr().emptyMessage(this.folder || "vault")
       );
@@ -184,7 +203,15 @@ export class GanttView extends ItemView {
   private renderToolbar(root: HTMLElement): void {
     const bar = root.createDiv({ cls: "ogantt-toolbar" });
     bar.createSpan({ cls: "ogantt-title", text: this.plugin.settings.rootFolder || "(vault root)" });
+    // 新規タスク追加 / add a new task
+    const add = bar.createEl("button", { cls: "ogantt-add" });
+    setIcon(add, "plus");
+    add.setAttr("aria-label", tr().newTaskAria);
+    add.onclick = () => void this.createNewTask();
     bar.createDiv({ cls: "ogantt-spacer" });
+    // 今日へスクロール / scroll to today
+    const todayBtn = bar.createEl("button", { cls: "ogantt-today-btn", text: tr().today });
+    todayBtn.onclick = () => this.scrollToToday();
     (["Day", "Week", "Month", "Fit"] as ZoomMode[]).forEach((z) => {
       const btn = bar.createEl("button", { text: z });
       if (z === this.zoom) btn.addClass("is-active");
@@ -207,6 +234,112 @@ export class GanttView extends ItemView {
     setIcon(reload, "refresh-cw");
     reload.setAttr("aria-label", tr().reloadAria);
     reload.onclick = () => void this.refresh();
+  }
+
+  // ----- 表示オプション（グループ/色分け/フィルタ）＋凡例 / view options + legend -----
+  // データに依存する（担当者一覧など）ので rerender 毎に作り直す / rebuilt each rerender (depends on data)
+  private renderOptions(): void {
+    const host = this.optionsHost;
+    host.empty();
+    const statuses = this.plugin.settings.statuses;
+    const none = tr().noneLabel;
+    // 現在のフォルダ内に実在する担当者一覧 / assignees actually present in the current folder
+    const assignees = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort();
+
+    const makeSelect = (icon: string, label: string, value: string, opts: [string, string][], on: (v: string) => void): void => {
+      const wrap = host.createDiv({ cls: "ogantt-opt" });
+      const ic = wrap.createSpan({ cls: "ogantt-opt-ico" });
+      setIcon(ic, icon);
+      ic.setAttr("aria-label", label); // アイコンの意味をツールチップで補助 / tooltip explains the icon
+      const sel = wrap.createEl("select");
+      for (const [val, text] of opts) {
+        const o = sel.createEl("option", { text, value: val });
+        if (val === value) o.selected = true;
+      }
+      sel.addEventListener("change", () => on(sel.value));
+    };
+
+    // ── 表示の組み立て（グループ化・色分け）/ layout (group + color) ──
+    // グループ化 / group by
+    makeSelect(
+      "layers",
+      tr().optGroupLabel,
+      this.groupBy,
+      [["folder", tr().optGroupFolder], ["status", tr().fieldStatus], ["assignee", tr().fieldAssignee]],
+      (v) => { this.groupBy = v as typeof this.groupBy; this.collapsed.clear(); this.rerender(); }
+    );
+    // 色分け / color by
+    makeSelect(
+      "palette",
+      tr().optColorLabel,
+      this.colorBy,
+      [["status", tr().fieldStatus], ["assignee", tr().fieldAssignee]],
+      (v) => { this.colorBy = v as typeof this.colorBy; this.rerender(); }
+    );
+
+    // ── 絞り込み（フィルタ）と視覚的に分ける区切り / divider before filters ──
+    host.createDiv({ cls: "ogantt-opt-divider" });
+
+    // ステータスで絞り込み / filter by status
+    makeSelect(
+      "filter",
+      tr().fieldStatus,
+      this.filterStatus,
+      [["", tr().filterAll], ...statuses.map((s) => [s.id, s.label] as [string, string])],
+      (v) => { this.filterStatus = v; this.rerender(); }
+    );
+    // 担当者で絞り込み / filter by assignee
+    makeSelect(
+      "user",
+      tr().fieldAssignee,
+      this.filterAssignee,
+      [["", tr().filterAll], ...assignees.map((a) => [a, a] as [string, string])],
+      (v) => { this.filterAssignee = v; this.rerender(); }
+    );
+
+    // 凡例（色分けの基準を説明）/ legend explaining the current color basis
+    const legend = host.createDiv({ cls: "ogantt-legend" });
+    if (this.colorBy === "status") {
+      for (const s of statuses) this.legendChip(legend, s.color, s.label);
+    } else {
+      for (const a of assignees) this.legendChip(legend, assigneeColor(a), a);
+      if (this.tasks.some((t) => !t.assignee)) this.legendChip(legend, FALLBACK_BAR, none);
+    }
+  }
+
+  private legendChip(parent: HTMLElement, color: string, label: string): void {
+    const chip = parent.createDiv({ cls: "ogantt-legend-chip" });
+    const sw = chip.createSpan({ cls: "ogantt-legend-swatch" });
+    sw.style.background = color;
+    chip.createSpan({ text: label });
+  }
+
+  // フィルタ→グループ再マッピングを適用したタスク列を返す / tasks after filter + group remap
+  private processTasks(): Task[] {
+    let list = this.tasks;
+    if (this.filterStatus) list = list.filter((t) => (t.status ?? "") === this.filterStatus);
+    if (this.filterAssignee) list = list.filter((t) => (t.assignee ?? "") === this.filterAssignee);
+    if (this.groupBy === "folder") return list;
+    // groups を単一の合成グループへ差し替えて既存の buildRows を再利用 / remap groups to reuse buildRows
+    const statusLabel = new Map(this.plugin.settings.statuses.map((s) => [s.id, s.label]));
+    const none = tr().noneLabel;
+    return list.map((t) => {
+      const key =
+        this.groupBy === "status"
+          ? t.status ? statusLabel.get(t.status) ?? t.status : none
+          : t.assignee || none;
+      return { ...t, groups: [key] };
+    });
+  }
+
+  // 今日の線が中央に来るよう横スクロール / scroll horizontally so the today marker is centered
+  private scrollToToday(): void {
+    const main = this.gridHost.querySelector(".ogantt-main") as HTMLElement | null;
+    const todayLine = main?.querySelector(".ogantt-today") as SVGElement | null;
+    if (!main || !todayLine) return; // 今日が範囲外＝線が無い / no marker when today is out of range
+    const mb = main.getBoundingClientRect();
+    const tb = todayLine.getBoundingClientRect();
+    main.scrollLeft += tb.left - mb.left - main.clientWidth / 2;
   }
 
   // ----- 取り消し（Undo）-----
@@ -362,7 +495,10 @@ export class GanttView extends ItemView {
       const y = i * ROW_H + BAR_PAD;
       const h = ROW_H - BAR_PAD * 2;
       const x = this.xOf(aStart);
-      const color = (t.status && statusColor.get(t.status)) || "#7c8db5";
+      const color =
+        this.colorBy === "assignee"
+          ? t.assignee ? assigneeColor(t.assignee) : FALLBACK_BAR
+          : (t.status && statusColor.get(t.status)) || FALLBACK_BAR;
 
       const g = this.svgEl("g", { class: "ogantt-bar-g", "data-path": t.path }) as SVGGElement;
       const cyMid = i * ROW_H + ROW_H / 2;
@@ -785,8 +921,22 @@ export class GanttView extends ItemView {
     });
   }
 
+  // ----- 新規タスク作成 / create a new task -----
+  // 今のフォルダに 1 日タスク（開始=終了=今日）を作り、詳細パネルを開いて命名を促す
+  // create a 1-day task (start = end = today) in the current folder, then open the panel to name it
+  private async createNewTask(): Promise<void> {
+    const file = await createTask(this.app, this.folder, tr().newTaskName);
+    if (!file) return;
+    const k = this.plugin.settings.keys;
+    const today = dayToStr(todayIndex());
+    await writeField(this.app, file.path, k.start, today);
+    await writeField(this.app, file.path, k.end, today);
+    await this.refresh();
+    await this.openDetail(file.path, true);
+  }
+
   // ----- 詳細パネル（編集モード）/ editable detail slide-over -----
-  private async openDetail(path: string): Promise<void> {
+  private async openDetail(path: string, focusTitle = false): Promise<void> {
     this.selectedPath = path;
     const t = this.tasks.find((x) => x.path === path);
     if (!t) return;
@@ -813,6 +963,8 @@ export class GanttView extends ItemView {
       if (np) this.selectedPath = np;
       await this.refresh();
     });
+    // 新規作成直後は名前を選択状態にして即リネームできるように / select the name right after creation
+    if (focusTitle) window.setTimeout(() => { titleInput.focus(); titleInput.select(); }, 0);
     const openBtn = header.createEl("button", { cls: "clickable-icon" });
     setIcon(openBtn, "external-link");
     openBtn.setAttr("aria-label", tr().openAsNote);
@@ -845,6 +997,25 @@ export class GanttView extends ItemView {
     const asgIn = fieldRow(tr().fieldAssignee).createEl("input", { type: "text" });
     asgIn.value = t.assignee ?? "";
     asgIn.addEventListener("change", () => void this.saveField(k.assignee, asgIn.value));
+
+    // 進捗 / progress（スライダー＋%表示。ドラッグ中は表示のみ更新、離したら保存＝バーに反映）
+    // progress slider + % label; updates the label while dragging, saves on release (reflected in the bar)
+    const progField = fieldRow(tr().fieldProgress);
+    progField.addClass("ogantt-progress-field");
+    const progRange = progField.createEl("input", { type: "range" });
+    progRange.min = "0";
+    progRange.max = "100";
+    progRange.step = "5";
+    progRange.value = String(t.progress ?? 0);
+    const progVal = progField.createSpan({ cls: "ogantt-progress-val", text: `${t.progress ?? 0}%` });
+    progRange.addEventListener("input", () => progVal.setText(`${progRange.value}%`));
+    progRange.addEventListener("change", async () => {
+      if (!this.selectedPath) return;
+      // 0% は未設定として削除、それ以外は数値で保存 / drop at 0% (unset), otherwise store the number
+      const n = Number(progRange.value);
+      await writeField(this.app, this.selectedPath, k.progress, n > 0 ? n : undefined);
+      await this.refresh();
+    });
 
     // 本文 / body（テキストエリア、フォーカスを外したら保存）/ body textarea, saved on blur
     d.createEl("div", { cls: "ogantt-detail-label", text: tr().fieldBody });

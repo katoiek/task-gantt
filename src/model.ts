@@ -221,6 +221,19 @@ export async function writeBody(app: App, path: string, body: string): Promise<v
   });
 }
 
+// 新規タスク（空フロントマター .md）をフォルダ直下に作成。名前が衝突したら連番を付ける
+// create a new task (.md with empty frontmatter) in the folder; de-duplicate the name with a counter
+export async function createTask(app: App, folderPath: string, baseName: string): Promise<TFile | null> {
+  const dir = normalizePath(folderPath || "/");
+  const prefix = dir === "/" ? "" : dir + "/";
+  let name = baseName;
+  let i = 1;
+  while (app.vault.getAbstractFileByPath(`${prefix}${name}.md`)) name = `${baseName} ${++i}`;
+  // 開始/終了は呼び出し側（view）が今日で埋める / caller fills start/end
+  const file = await app.vault.create(`${prefix}${name}.md`, "---\n---\n");
+  return file instanceof TFile ? file : null;
+}
+
 // タスク（ファイル）をリネーム。リンクも更新される / rename the task file (updates links)
 export async function renameTask(app: App, path: string, newName: string): Promise<string | null> {
   const file = app.vault.getAbstractFileByPath(path);

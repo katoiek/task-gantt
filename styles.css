@@ -26,9 +26,74 @@
   background: var(--interactive-accent);
   color: var(--text-on-accent);
 }
+/* 新規タスク追加ボタン / add-task button */
+.ogantt-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .ogantt-empty {
   padding: 24px;
   color: var(--text-muted);
+}
+
+/* 表示オプション行（グループ/色分け/フィルタ＋凡例）/ view options row + legend */
+.ogantt-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: 0.85em;
+}
+.ogantt-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ogantt-opt-label {
+  color: var(--text-muted);
+}
+/* オプションのアイコン（意味はツールチップで補助）/ option icon (meaning via tooltip) */
+.ogantt-opt-ico {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+.ogantt-opt-ico svg {
+  width: 16px;
+  height: 16px;
+}
+/* 表示構成と絞り込みを分ける縦の区切り / vertical divider between layout and filters */
+.ogantt-opt-divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 18px;
+  margin: 0 4px;
+  background: var(--background-modifier-border);
+}
+.ogantt-opt select {
+  font-size: 0.95em;
+}
+.ogantt-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-left: auto;
+  color: var(--text-muted);
+}
+.ogantt-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ogantt-legend-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
 }
 
 /* 単一スクロール内の CSS グリッド。sticky で表ヘッダ・日付軸・左列を固定し行を揃える */
@@ -383,6 +448,23 @@
 .ogantt-detail-field input,
 .ogantt-detail-field select {
   width: 100%;
+}
+/* 進捗：スライダーを伸ばし、右端に % 表示 / progress: stretch slider, % label on the right */
+.ogantt-progress-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ogantt-progress-field input[type="range"] {
+  flex: 1;
+  width: auto;
+}
+.ogantt-progress-val {
+  flex: none;
+  width: 40px;
+  text-align: right;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 /* 日付チップ：開始・終了を横並び、クリックでカレンダー、×で個別クリア / date chips */
 .ogantt-date-chips {

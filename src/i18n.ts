@@ -28,6 +28,14 @@ interface Strings {
   // ツールバー / toolbar
   undoAria: string;
   reloadAria: string;
+  newTaskAria: string;
+  today: string;
+  // 表示オプション / view options
+  optGroupLabel: string;
+  optGroupFolder: string;
+  optColorLabel: string;
+  filterAll: string;
+  noneLabel: string;
   // 取り消し / undo
   nothingToUndo: string;
   undone: (label: string) => string;
@@ -51,7 +59,10 @@ interface Strings {
   fieldDue: string;
   fieldStatus: string;
   fieldAssignee: string;
+  fieldProgress: string;
   fieldBody: string;
+  // 新規タスク / new task
+  newTaskName: string;
   // コマンド・メニュー / commands & menus
   ribbonOpen: string;
   commandOpen: string;
@@ -77,6 +88,13 @@ const STRINGS: Record<Lang, Strings> = {
     colDue: "期限",
     undoAria: "取り消し (Ctrl+Z)",
     reloadAria: "再読み込み",
+    newTaskAria: "タスクを追加",
+    today: "今日",
+    optGroupLabel: "グループ",
+    optGroupFolder: "フォルダ",
+    optColorLabel: "色分け",
+    filterAll: "すべて",
+    noneLabel: "（なし）",
     nothingToUndo: "取り消す操作がありません",
     undone: (label) => `取り消しました: ${label}`,
     undoReschedule: (name) => `「${name}」の日程変更`,
@@ -95,7 +113,9 @@ const STRINGS: Record<Lang, Strings> = {
     fieldDue: "期限",
     fieldStatus: "ステータス",
     fieldAssignee: "担当者",
+    fieldProgress: "進捗",
     fieldBody: "本文",
+    newTaskName: "新規タスク",
     ribbonOpen: "Gantt を開く",
     commandOpen: "Gantt を開く（現在のフォルダ）",
     menuOpen: "Gantt で開く",
@@ -118,6 +138,13 @@ const STRINGS: Record<Lang, Strings> = {
     colDue: "Due",
     undoAria: "Undo (Ctrl+Z)",
     reloadAria: "Reload",
+    newTaskAria: "Add task",
+    today: "Today",
+    optGroupLabel: "Group",
+    optGroupFolder: "Folder",
+    optColorLabel: "Color",
+    filterAll: "All",
+    noneLabel: "(none)",
     nothingToUndo: "Nothing to undo",
     undone: (label) => `Undone: ${label}`,
     undoReschedule: (name) => `Reschedule "${name}"`,
@@ -136,7 +163,9 @@ const STRINGS: Record<Lang, Strings> = {
     fieldDue: "Due",
     fieldStatus: "Status",
     fieldAssignee: "Assignee",
+    fieldProgress: "Progress",
     fieldBody: "Body",
+    newTaskName: "New task",
     ribbonOpen: "Open Gantt",
     commandOpen: "Open Gantt for the current folder",
     menuOpen: "Open as Gantt",
