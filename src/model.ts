@@ -77,8 +77,12 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
     if (start && !end) end = start;
 
     rawAfter.set(file.path, toArray(fm[k.after]));
-    const pv = fm[k.parent];
-    if (pv != null && pv !== "") rawParent.set(file.path, Array.isArray(pv) ? String(pv[0]) : String(pv));
+    // parent は any を直接受けず unknown 経由で安全に文字列化 / coerce parent via unknown (avoid unsafe any)
+    const pv: unknown = fm[k.parent];
+    if (pv != null && pv !== "") {
+      const link = Array.isArray(pv) ? (pv as unknown[])[0] : pv;
+      rawParent.set(file.path, String(link));
+    }
     return {
       path: file.path,
       name: file.basename,
