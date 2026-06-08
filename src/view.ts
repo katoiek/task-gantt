@@ -400,7 +400,7 @@ export class GanttView extends ItemView {
 
     // 列の表示/非表示（歯車）＝オプション行の一番左 / column visibility (gear) — leftmost of the options row
     const colBtn = host.createEl("button", { cls: "ogantt-opt-gear clickable-icon" });
-    setIcon(colBtn, "settings-2");
+    setIcon(colBtn, "settings");
     colBtn.setAttr("aria-label", tr().optColumns);
     colBtn.onclick = () => this.openColumnMenu(colBtn);
 
