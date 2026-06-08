@@ -155,7 +155,16 @@ function spanOf(tasks: Task[]): { start: string; end: string } | undefined {
 
 // フォルダ階層を入れ子の表示行へ展開（collapsed のフォルダは子を省く）
 // flatten the folder tree into nested rows (collapsed folders hide their children)
-export function buildRows(tasks: Task[], collapsed: Set<string> = new Set(), folders: string[][] = []): Row[] {
+// 既定のタスク比較＝開始日昇順（呼び出し側が指定しなければこれ）/ default task order = start ascending
+const defaultTaskCompare = (a: Task, b: Task): number =>
+  (anchorStart(a) ?? "9999").localeCompare(anchorStart(b) ?? "9999");
+
+export function buildRows(
+  tasks: Task[],
+  collapsed: Set<string> = new Set(),
+  folders: string[][] = [],
+  taskCompare: (a: Task, b: Task) => number = defaultTaskCompare
+): Row[] {
   const root: TreeNode = { name: "", folders: new Map(), tasks: [] };
   // 先に（空かもしれない）フォルダのノードを作る＝タスクが無くても行が出る
   // seed nodes for (possibly empty) folders first, so a folder shows even with no tasks
@@ -185,8 +194,8 @@ export function buildRows(tasks: Task[], collapsed: Set<string> = new Set(), fol
       rows.push({ kind: "group", group: name, depth, key, span: spanOf(descendantTasks(child)) });
       if (!collapsed.has(key)) walk(child, depth + 1, key);
     }
-    // 直下タスクを開始日順に / direct tasks, sorted by start
-    const list = node.tasks.slice().sort((a, b) => (anchorStart(a) ?? "9999").localeCompare(anchorStart(b) ?? "9999"));
+    // 直下タスクを指定の比較関数で並べる（既定は開始日昇順）/ sort direct tasks by the given comparator (default: start asc)
+    const list = node.tasks.slice().sort(taskCompare);
     for (const task of list) rows.push({ kind: "task", group: node.name, depth, task });
   };
   walk(root, 0, "");

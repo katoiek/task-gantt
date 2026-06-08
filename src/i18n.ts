@@ -35,6 +35,8 @@ interface Strings {
   optGroupFolder: string;
   optColorLabel: string;
   optShowEmpty: string;
+  optColumns: string;
+  optFlat: string;
   filterAll: string;
   noneLabel: string;
   // 取り消し / undo
@@ -98,6 +100,8 @@ const STRINGS: Record<Lang, Strings> = {
     optGroupFolder: "フォルダ",
     optColorLabel: "色分け",
     optShowEmpty: "空フォルダを表示",
+    optColumns: "列の表示",
+    optFlat: "フラット表示",
     filterAll: "すべて",
     noneLabel: "（なし）",
     nothingToUndo: "取り消す操作がありません",
@@ -152,6 +156,8 @@ const STRINGS: Record<Lang, Strings> = {
     optGroupFolder: "Folder",
     optColorLabel: "Color",
     optShowEmpty: "Show empty folders",
+    optColumns: "Columns",
+    optFlat: "Flat",
     filterAll: "All",
     noneLabel: "(none)",
     nothingToUndo: "Nothing to undo",

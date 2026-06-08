@@ -68,6 +68,56 @@
   margin: 0;
   cursor: pointer;
 }
+/* 列の出し分け（歯車ボタン）/ column visibility gear button */
+.ogantt-opt-gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+.ogantt-opt-gear svg {
+  width: 16px;
+  height: 16px;
+}
+/* 列メニュー（ポップオーバー）/ column-visibility popover */
+.ogantt-colmenu {
+  position: fixed;
+  z-index: var(--layer-menu, 50);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-s);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ogantt-colmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ogantt-colmenu-item:hover {
+  background: var(--background-modifier-hover);
+}
+.ogantt-colmenu-item input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+/* ステータス列の色ドット / status column color dot */
+.ogantt-status-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 6px;
+  flex: none;
+  vertical-align: middle;
+}
 /* オプションのアイコン（意味はツールチップで補助）/ option icon (meaning via tooltip) */
 .ogantt-opt-ico {
   display: inline-flex;
@@ -149,6 +199,23 @@
 .ogantt-th-name {
   flex: 1;
   width: auto;
+}
+/* クリックでソートできる列ヘッダ / sortable column header */
+.ogantt-th-sortable {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+}
+.ogantt-th-sortable:hover {
+  color: var(--text-normal);
+}
+.ogantt-sort-arrow {
+  flex: none;
+  color: var(--text-accent);
+  font-size: 0.9em;
 }
 .ogantt-tbody {
   position: sticky;

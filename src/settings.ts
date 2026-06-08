@@ -11,6 +11,9 @@ export interface GanttSettings {
   defaultZoom: ZoomMode;
   dateFormat: DateFormat; // 表示用の日付フォーマット / display-only date format
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
+  visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
+  sortBy: string; // ソート列 id（name/start/end/assignee/status）/ sort column id
+  sortDir: "asc" | "desc"; // ソート方向 / sort direction
   // フロントマターのキー名（プロジェクトに合わせて変更可）/ frontmatter key names
   keys: {
     start: string;
@@ -35,6 +38,9 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   defaultZoom: "Week",
   dateFormat: "YYYY/MM/DD",
   detailWidth: 380,
+  visibleColumns: ["start", "end"],
+  sortBy: "start",
+  sortDir: "asc",
   keys: {
     start: "start",
     end: "end",
