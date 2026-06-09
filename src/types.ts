@@ -29,6 +29,7 @@ export interface Task {
   progress?: number; // 0-100
   milestone: boolean;
   parent?: string; // 親タスクのパス（解決済み）/ resolved parent task path
+  tags: string[]; // タグ（# 抜き・本文/フロントマター両方を統合）/ tags (without #, frontmatter + inline)
 }
 
 // グループ（フォルダ）見出し or タスク、を一列に並べた表示行 / a display row

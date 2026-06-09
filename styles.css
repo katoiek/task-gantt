@@ -309,6 +309,35 @@
   border-radius: 999px;
   background: var(--background-secondary);
 }
+/* タグチップ（テーブル列・詳細パネル共通。色は JS でインライン指定）/ tag chips (color set inline in JS) */
+.ogantt-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+.ogantt-td-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+.ogantt-tags-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.ogantt-tag-add {
+  flex: 1;
+  min-width: 80px;
+}
 /* ダブルクリックで日付編集できるセル / date cell editable via double-click */
 .ogantt-td-editable {
   cursor: pointer;

@@ -74,6 +74,9 @@ export default class GanttPlugin extends Plugin {
     const data = (await this.loadData()) as Partial<GanttSettings> | null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     this.settings.keys = Object.assign({}, DEFAULT_SETTINGS.keys, this.settings.keys);
+    // 既定の空配列を共有参照しないよう複製（push でモジュール既定を汚さない）/ clone so we don't mutate the shared DEFAULT arrays
+    this.settings.tagColors = (this.settings.tagColors ?? []).map((c) => ({ ...c }));
+    this.settings.folderColors = (this.settings.folderColors ?? []).map((c) => ({ ...c }));
   }
 
   async saveSettings(): Promise<void> {

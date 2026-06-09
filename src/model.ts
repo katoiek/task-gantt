@@ -1,4 +1,4 @@
-import { App, TFile, TFolder, normalizePath } from "obsidian";
+import { App, TFile, TFolder, getAllTags, normalizePath } from "obsidian";
 import { GanttSettings } from "./settings";
 import { Task, Row, Dep, DepType } from "./types";
 
@@ -32,6 +32,14 @@ function toArray(v: unknown): string[] {
   return [String(v)];
 }
 
+// フロントマターの tags 値を文字列配列へ正規化（配列/カンマ/空白区切り・# 抜き）
+// normalize a frontmatter `tags` value into a string array (array / comma / space separated, # stripped)
+function normalizeTags(v: unknown): string[] {
+  if (v == null) return [];
+  const raw = Array.isArray(v) ? v.map((x) => String(x)) : String(v).split(/[,\s]+/);
+  return raw.map((x) => x.replace(/^#/, "").trim()).filter(Boolean);
+}
+
 // wikilink / Markdown リンク / 生パスから実ファイルを解決 / resolve a wikilink, markdown link, or raw path
 function resolveLink(app: App, raw: string, sourcePath: string): TFile | null {
   let inner = raw.trim();
@@ -63,7 +71,10 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
   const rawAfter = new Map<string, string[]>(); // path -> 生の after / raw after entries
   const rawParent = new Map<string, string>(); // path -> 生の parent リンク / raw parent link
   const tasks: Task[] = files.map((file) => {
-    const fm = app.metadataCache.getFileCache(file)?.frontmatter ?? {};
+    const cache = app.metadataCache.getFileCache(file);
+    const fm = cache?.frontmatter ?? {};
+    // タグはフロントマター＋本文 #tag を統合し # を外す（重複排除）/ merge frontmatter + inline tags, strip #, dedupe
+    const tags = cache ? [...new Set((getAllTags(cache) ?? []).map((x) => x.replace(/^#/, "")))] : [];
     // スコープから見たフォルダ階層（ファイル名は除く）/ folder chain relative to the scope (without filename)
     const rel = isVaultRoot ? file.path : file.path.slice(rootPath.length + 1);
     const segs = rel.split("/");
@@ -95,6 +106,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       progress: fm[k.progress] != null ? Number(fm[k.progress]) : undefined,
       milestone,
       parent: undefined,
+      tags,
     };
   });
 
@@ -349,6 +361,36 @@ export async function deleteTask(app: App, path: string): Promise<boolean> {
   if (!(file instanceof TFile)) return false;
   await app.fileManager.trashFile(file);
   return true;
+}
+
+// タグを追加（フロントマター tags へ・重複排除）/ add a tag to frontmatter `tags` (deduped)
+export async function addTag(app: App, path: string, tag: string): Promise<boolean> {
+  const file = app.vault.getAbstractFileByPath(path);
+  if (!(file instanceof TFile)) return false;
+  const clean = tag.replace(/^#/, "").trim();
+  if (!clean) return false;
+  let changed = false;
+  await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+    const cur = normalizeTags(fm.tags);
+    if (!cur.includes(clean)) {
+      cur.push(clean);
+      fm.tags = cur;
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+// タグを削除（フロントマター tags のみ・本文 #tag は対象外）/ remove a tag from frontmatter `tags` (inline #tags are not touched)
+export async function removeTag(app: App, path: string, tag: string): Promise<void> {
+  const file = app.vault.getAbstractFileByPath(path);
+  if (!(file instanceof TFile)) return;
+  const clean = tag.replace(/^#/, "").trim();
+  await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+    const cur = normalizeTags(fm.tags).filter((x) => x !== clean);
+    if (cur.length) fm.tags = cur;
+    else delete fm.tags;
+  });
 }
 
 // 指定タスクのサブツリー（自分＋子孫）のパス一覧 / paths of a task's subtree (self + descendants)

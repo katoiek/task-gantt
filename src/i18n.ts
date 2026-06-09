@@ -55,6 +55,7 @@ interface Strings {
   undoMove: (name: string) => string;
   undoSubtask: (name: string) => string;
   undoDetach: (name: string) => string;
+  undoAddTag: (name: string, tag: string) => string;
   cycleBlocked: string;
   undoAddDep: (type: string) => string;
   undoRemoveDep: (type: string) => string;
@@ -76,9 +77,14 @@ interface Strings {
   fieldAssignee: string;
   fieldProgress: string;
   fieldParent: string;
+  fieldTags: string;
+  addTagPlaceholder: string;
   fieldBody: string;
   // 削除 / delete
   menuDelete: string;
+  // 色（右クリック）/ color (context menu)
+  menuChangeColor: string;
+  menuResetColor: string;
   confirmDeleteTitle: string;
   confirmDeleteBody: (name: string) => string;
   confirmDeleteChildren: string;
@@ -104,6 +110,10 @@ interface Strings {
   setStatusId: string;
   setStatusLabel: string;
   setStatusColor: string;
+  setTagColorsHeading: string;
+  setAddTagColor: string;
+  setColorName: string;
+  setNoColorsYet: string;
   setKeysHeading: string;
 }
 
@@ -131,6 +141,7 @@ const STRINGS: Record<Lang, Strings> = {
     undoMove: (name) => `「${name}」の移動`,
     undoSubtask: (name) => `「${name}」をサブタスク化`,
     undoDetach: (name) => `「${name}」の親を解除`,
+    undoAddTag: (name, tag) => `「${name}」にタグ #${tag} を追加`,
     cycleBlocked: "循環するためサブタスクにできません",
     undoAddDep: (type) => `依存の作成 (${type})`,
     undoRemoveDep: (type) => `依存の切断 (${type})`,
@@ -148,6 +159,8 @@ const STRINGS: Record<Lang, Strings> = {
     fieldAssignee: "担当者",
     fieldProgress: "進捗",
     fieldParent: "親タスク",
+    fieldTags: "タグ",
+    addTagPlaceholder: "タグを追加…",
     fieldBody: "本文",
     menuDelete: "削除",
     confirmDeleteTitle: "タスクを削除",
@@ -155,6 +168,8 @@ const STRINGS: Record<Lang, Strings> = {
     confirmDeleteChildren: "サブタスクはトップレベルへ移動します。",
     cancel: "キャンセル",
     deletedNotice: (name) => `「${name}」を削除しました`,
+    menuChangeColor: "色を変更…",
+    menuResetColor: "色をリセット（自動）",
     newTaskName: "新規タスク",
     ribbonOpen: "Gantt を開く",
     commandOpen: "Gantt を開く（現在のフォルダ）",
@@ -173,6 +188,10 @@ const STRINGS: Record<Lang, Strings> = {
     setStatusId: "ID",
     setStatusLabel: "ラベル",
     setStatusColor: "色",
+    setTagColorsHeading: "タグの色",
+    setAddTagColor: "タグの色を追加",
+    setColorName: "名前",
+    setNoColorsYet: "まだ登録がありません（表で右クリックして色を設定）",
     setKeysHeading: "フロントマターのキー名",
   },
   en: {
@@ -198,6 +217,7 @@ const STRINGS: Record<Lang, Strings> = {
     undoMove: (name) => `Move "${name}"`,
     undoSubtask: (name) => `Make "${name}" a subtask`,
     undoDetach: (name) => `Detach "${name}"`,
+    undoAddTag: (name, tag) => `Tag "${name}" with #${tag}`,
     cycleBlocked: "Can't make a subtask: that would create a cycle",
     undoAddDep: (type) => `Add dependency (${type})`,
     undoRemoveDep: (type) => `Remove dependency (${type})`,
@@ -215,6 +235,8 @@ const STRINGS: Record<Lang, Strings> = {
     fieldAssignee: "Assignee",
     fieldProgress: "Progress",
     fieldParent: "Parent",
+    fieldTags: "Tags",
+    addTagPlaceholder: "Add a tag…",
     fieldBody: "Body",
     menuDelete: "Delete",
     confirmDeleteTitle: "Delete task",
@@ -222,6 +244,8 @@ const STRINGS: Record<Lang, Strings> = {
     confirmDeleteChildren: "Its subtasks will move to the top level.",
     cancel: "Cancel",
     deletedNotice: (name) => `Deleted "${name}"`,
+    menuChangeColor: "Change color…",
+    menuResetColor: "Reset color (auto)",
     newTaskName: "New task",
     ribbonOpen: "Open Gantt",
     commandOpen: "Open Gantt for the current folder",
@@ -240,6 +264,10 @@ const STRINGS: Record<Lang, Strings> = {
     setStatusId: "ID",
     setStatusLabel: "Label",
     setStatusColor: "Color",
+    setTagColorsHeading: "Tag colors",
+    setAddTagColor: "Add a tag color",
+    setColorName: "Name",
+    setNoColorsYet: "None yet (right-click in the table to set a color)",
     setKeysHeading: "Frontmatter keys",
   },
   zh: {
@@ -265,6 +293,7 @@ const STRINGS: Record<Lang, Strings> = {
     undoMove: (name) => `移动“${name}”`,
     undoSubtask: (name) => `将“${name}”设为子任务`,
     undoDetach: (name) => `分离“${name}”`,
+    undoAddTag: (name, tag) => `为“${name}”添加标签 #${tag}`,
     cycleBlocked: "无法设为子任务：会形成循环",
     undoAddDep: (type) => `添加依赖（${type}）`,
     undoRemoveDep: (type) => `移除依赖（${type}）`,
@@ -282,6 +311,8 @@ const STRINGS: Record<Lang, Strings> = {
     fieldAssignee: "负责人",
     fieldProgress: "进度",
     fieldParent: "父任务",
+    fieldTags: "标签",
+    addTagPlaceholder: "添加标签…",
     fieldBody: "正文",
     menuDelete: "删除",
     confirmDeleteTitle: "删除任务",
@@ -289,6 +320,8 @@ const STRINGS: Record<Lang, Strings> = {
     confirmDeleteChildren: "其子任务将移动到顶层。",
     cancel: "取消",
     deletedNotice: (name) => `已删除“${name}”`,
+    menuChangeColor: "更改颜色…",
+    menuResetColor: "重置颜色（自动）",
     newTaskName: "新任务",
     ribbonOpen: "打开 Gantt",
     commandOpen: "为当前文件夹打开 Gantt",
@@ -307,6 +340,10 @@ const STRINGS: Record<Lang, Strings> = {
     setStatusId: "ID",
     setStatusLabel: "标签",
     setStatusColor: "颜色",
+    setTagColorsHeading: "标签颜色",
+    setAddTagColor: "添加标签颜色",
+    setColorName: "名称",
+    setNoColorsYet: "暂无（在表格中右键设置颜色）",
     setKeysHeading: "Frontmatter 键名",
   },
   "zh-tw": {
@@ -332,6 +369,7 @@ const STRINGS: Record<Lang, Strings> = {
     undoMove: (name) => `移動「${name}」`,
     undoSubtask: (name) => `將「${name}」設為子任務`,
     undoDetach: (name) => `分離「${name}」`,
+    undoAddTag: (name, tag) => `為「${name}」加上標籤 #${tag}`,
     cycleBlocked: "無法設為子任務：會造成循環",
     undoAddDep: (type) => `新增相依（${type}）`,
     undoRemoveDep: (type) => `移除相依（${type}）`,
@@ -349,6 +387,8 @@ const STRINGS: Record<Lang, Strings> = {
     fieldAssignee: "負責人",
     fieldProgress: "進度",
     fieldParent: "父任務",
+    fieldTags: "標籤",
+    addTagPlaceholder: "新增標籤…",
     fieldBody: "內文",
     menuDelete: "刪除",
     confirmDeleteTitle: "刪除任務",
@@ -356,6 +396,8 @@ const STRINGS: Record<Lang, Strings> = {
     confirmDeleteChildren: "其子任務將移動到頂層。",
     cancel: "取消",
     deletedNotice: (name) => `已刪除「${name}」`,
+    menuChangeColor: "變更顏色…",
+    menuResetColor: "重設顏色（自動）",
     newTaskName: "新任務",
     ribbonOpen: "開啟 Gantt",
     commandOpen: "為目前資料夾開啟 Gantt",
@@ -374,6 +416,10 @@ const STRINGS: Record<Lang, Strings> = {
     setStatusId: "ID",
     setStatusLabel: "標籤",
     setStatusColor: "顏色",
+    setTagColorsHeading: "標籤顏色",
+    setAddTagColor: "新增標籤顏色",
+    setColorName: "名稱",
+    setNoColorsYet: "尚無（在表格中右鍵設定顏色）",
     setKeysHeading: "Frontmatter 鍵名",
   },
   ko: {
@@ -399,6 +445,7 @@ const STRINGS: Record<Lang, Strings> = {
     undoMove: (name) => `"${name}" 이동`,
     undoSubtask: (name) => `"${name}"을(를) 하위 작업으로`,
     undoDetach: (name) => `"${name}" 분리`,
+    undoAddTag: (name, tag) => `"${name}"에 #${tag} 태그 추가`,
     cycleBlocked: "하위 작업으로 만들 수 없습니다: 순환이 발생합니다",
     undoAddDep: (type) => `종속성 추가 (${type})`,
     undoRemoveDep: (type) => `종속성 제거 (${type})`,
@@ -416,6 +463,8 @@ const STRINGS: Record<Lang, Strings> = {
     fieldAssignee: "담당자",
     fieldProgress: "진행률",
     fieldParent: "상위 작업",
+    fieldTags: "태그",
+    addTagPlaceholder: "태그 추가…",
     fieldBody: "본문",
     menuDelete: "삭제",
     confirmDeleteTitle: "작업 삭제",
@@ -423,6 +472,8 @@ const STRINGS: Record<Lang, Strings> = {
     confirmDeleteChildren: "하위 작업은 최상위로 이동합니다.",
     cancel: "취소",
     deletedNotice: (name) => `"${name}"을(를) 삭제했습니다`,
+    menuChangeColor: "색상 변경…",
+    menuResetColor: "색상 초기화(자동)",
     newTaskName: "새 작업",
     ribbonOpen: "Gantt 열기",
     commandOpen: "현재 폴더의 Gantt 열기",
@@ -441,6 +492,10 @@ const STRINGS: Record<Lang, Strings> = {
     setStatusId: "ID",
     setStatusLabel: "레이블",
     setStatusColor: "색상",
+    setTagColorsHeading: "태그 색상",
+    setAddTagColor: "태그 색상 추가",
+    setColorName: "이름",
+    setNoColorsYet: "아직 없음(표에서 우클릭하여 색상 설정)",
     setKeysHeading: "Frontmatter 키 이름",
   },
   fr: {
@@ -466,6 +521,7 @@ const STRINGS: Record<Lang, Strings> = {
     undoMove: (name) => `Déplacer « ${name} »`,
     undoSubtask: (name) => `Faire de « ${name} » une sous-tâche`,
     undoDetach: (name) => `Détacher « ${name} »`,
+    undoAddTag: (name, tag) => `Étiqueter « ${name} » avec #${tag}`,
     cycleBlocked: "Impossible de créer une sous-tâche : cela créerait un cycle",
     undoAddDep: (type) => `Ajouter une dépendance (${type})`,
     undoRemoveDep: (type) => `Supprimer la dépendance (${type})`,
@@ -483,6 +539,8 @@ const STRINGS: Record<Lang, Strings> = {
     fieldAssignee: "Responsable",
     fieldProgress: "Progression",
     fieldParent: "Parent",
+    fieldTags: "Étiquettes",
+    addTagPlaceholder: "Ajouter une étiquette…",
     fieldBody: "Contenu",
     menuDelete: "Supprimer",
     confirmDeleteTitle: "Supprimer la tâche",
@@ -490,6 +548,8 @@ const STRINGS: Record<Lang, Strings> = {
     confirmDeleteChildren: "Ses sous-tâches passeront au niveau supérieur.",
     cancel: "Annuler",
     deletedNotice: (name) => `« ${name} » supprimée`,
+    menuChangeColor: "Changer la couleur…",
+    menuResetColor: "Réinitialiser la couleur (auto)",
     newTaskName: "Nouvelle tâche",
     ribbonOpen: "Ouvrir Gantt",
     commandOpen: "Ouvrir Gantt pour le dossier actuel",
@@ -508,6 +568,10 @@ const STRINGS: Record<Lang, Strings> = {
     setStatusId: "ID",
     setStatusLabel: "Libellé",
     setStatusColor: "Couleur",
+    setTagColorsHeading: "Couleurs des étiquettes",
+    setAddTagColor: "Ajouter une couleur d'étiquette",
+    setColorName: "Nom",
+    setNoColorsYet: "Aucune (clic droit dans le tableau pour définir une couleur)",
     setKeysHeading: "Clés du frontmatter",
   },
   es: {
@@ -533,6 +597,7 @@ const STRINGS: Record<Lang, Strings> = {
     undoMove: (name) => `Mover «${name}»`,
     undoSubtask: (name) => `Convertir «${name}» en subtarea`,
     undoDetach: (name) => `Separar «${name}»`,
+    undoAddTag: (name, tag) => `Etiquetar «${name}» con #${tag}`,
     cycleBlocked: "No se puede crear la subtarea: generaría un ciclo",
     undoAddDep: (type) => `Añadir dependencia (${type})`,
     undoRemoveDep: (type) => `Quitar dependencia (${type})`,
@@ -550,6 +615,8 @@ const STRINGS: Record<Lang, Strings> = {
     fieldAssignee: "Responsable",
     fieldProgress: "Progreso",
     fieldParent: "Padre",
+    fieldTags: "Etiquetas",
+    addTagPlaceholder: "Añadir una etiqueta…",
     fieldBody: "Cuerpo",
     menuDelete: "Eliminar",
     confirmDeleteTitle: "Eliminar tarea",
@@ -557,6 +624,8 @@ const STRINGS: Record<Lang, Strings> = {
     confirmDeleteChildren: "Sus subtareas pasarán al nivel superior.",
     cancel: "Cancelar",
     deletedNotice: (name) => `«${name}» eliminada`,
+    menuChangeColor: "Cambiar color…",
+    menuResetColor: "Restablecer color (auto)",
     newTaskName: "Nueva tarea",
     ribbonOpen: "Abrir Gantt",
     commandOpen: "Abrir Gantt para la carpeta actual",
@@ -575,6 +644,10 @@ const STRINGS: Record<Lang, Strings> = {
     setStatusId: "ID",
     setStatusLabel: "Etiqueta",
     setStatusColor: "Color",
+    setTagColorsHeading: "Colores de etiquetas",
+    setAddTagColor: "Añadir color de etiqueta",
+    setColorName: "Nombre",
+    setNoColorsYet: "Ninguno aún (clic derecho en la tabla para definir un color)",
     setKeysHeading: "Claves del frontmatter",
   },
   ru: {
@@ -600,6 +673,7 @@ const STRINGS: Record<Lang, Strings> = {
     undoMove: (name) => `Переместить «${name}»`,
     undoSubtask: (name) => `Сделать «${name}» подзадачей`,
     undoDetach: (name) => `Открепить «${name}»`,
+    undoAddTag: (name, tag) => `Добавить тег #${tag} к «${name}»`,
     cycleBlocked: "Нельзя сделать подзадачей: возникнет цикл",
     undoAddDep: (type) => `Добавить зависимость (${type})`,
     undoRemoveDep: (type) => `Удалить зависимость (${type})`,
@@ -617,6 +691,8 @@ const STRINGS: Record<Lang, Strings> = {
     fieldAssignee: "Исполнитель",
     fieldProgress: "Прогресс",
     fieldParent: "Родитель",
+    fieldTags: "Теги",
+    addTagPlaceholder: "Добавить тег…",
     fieldBody: "Текст",
     menuDelete: "Удалить",
     confirmDeleteTitle: "Удалить задачу",
@@ -624,6 +700,8 @@ const STRINGS: Record<Lang, Strings> = {
     confirmDeleteChildren: "Её подзадачи переместятся на верхний уровень.",
     cancel: "Отмена",
     deletedNotice: (name) => `«${name}» удалена`,
+    menuChangeColor: "Изменить цвет…",
+    menuResetColor: "Сбросить цвет (авто)",
     newTaskName: "Новая задача",
     ribbonOpen: "Открыть Gantt",
     commandOpen: "Открыть Gantt для текущей папки",
@@ -642,6 +720,10 @@ const STRINGS: Record<Lang, Strings> = {
     setStatusId: "ID",
     setStatusLabel: "Метка",
     setStatusColor: "Цвет",
+    setTagColorsHeading: "Цвета тегов",
+    setAddTagColor: "Добавить цвет тега",
+    setColorName: "Имя",
+    setNoColorsYet: "Пока нет (правый клик в таблице, чтобы задать цвет)",
     setKeysHeading: "Ключи frontmatter",
   },
 };
