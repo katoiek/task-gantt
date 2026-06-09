@@ -540,6 +540,12 @@
   stroke-width: 2.5;
 }
 
+/* ネイティブ color ピッカー起動用の隠し input（画面外）/ hidden input used to trigger the native color picker (off-screen) */
+.ogantt-hidden-color-input {
+  position: fixed;
+  left: -9999px;
+}
+
 /* ---- 詳細パネル（右からスライドイン）/ detail slide-over ---- */
 .ogantt-detail {
   position: absolute;

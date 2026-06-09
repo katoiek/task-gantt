@@ -549,10 +549,8 @@ export class GanttView extends ItemView {
     const m = new Menu();
     m.addItem((i) => i.setTitle(tr().menuChangeColor).setIcon("palette").onClick(() => {
       // 隠し input[type=color] を生成してネイティブピッカーを開く / spawn a hidden color input to open the native picker
-      const picker = activeDocument.body.createEl("input", { type: "color" });
+      const picker = activeDocument.body.createEl("input", { type: "color", cls: "ogantt-hidden-color-input" });
       picker.value = /^#[0-9a-fA-F]{6}$/.test(current) ? current : "#888888";
-      picker.style.position = "fixed";
-      picker.style.left = "-9999px";
       picker.addEventListener("change", () => {
         this.setColorOverride(kind, name, picker.value);
         picker.remove();
