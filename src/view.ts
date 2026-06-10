@@ -175,6 +175,18 @@ export class GanttView extends ItemView {
     this.optionsHost = root.createDiv({ cls: "ogantt-options" }); // 中身は rerender で差し替え / repopulated on rerender
     this.gridHost = root.createDiv({ cls: "ogantt-host" });
     this.detailEl = root.createDiv({ cls: "ogantt-detail" });
+    // 詳細パネルの外側（ビュー内のどこか）をクリックしたら閉じる。行クリック等で開く操作は
+    // openDetail が後から is-open を付け直すので、新しいタスクの詳細に切り替わる。
+    // カレンダー等のポップオーバーは body 直下にあり root を経由しないため閉じない。
+    // clicking anywhere in the view outside the detail panel closes it. Open-actions (row click etc.)
+    // re-add is-open via openDetail afterwards, so they switch the panel instead.
+    // popovers (calendar etc.) live under body, never bubble through root, so they don't close it.
+    root.addEventListener("click", (ev) => {
+      if (!this.detailEl?.hasClass("is-open")) return;
+      const el = ev.target as Element;
+      if (el.closest(".ogantt-detail")) return;
+      this.detailEl.removeClass("is-open");
+    });
   }
 
   private refreshTimer: number | null = null;

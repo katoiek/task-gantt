@@ -1,6 +1,6 @@
 {
   "name": "task-gantt",
-  "version": "1.6.6",
+  "version": "1.6.7",
   "description": "Manage tasks on an interactive Gantt timeline where each note is a single task (file-per-task).",
   "main": "main.js",
   "scripts": {
