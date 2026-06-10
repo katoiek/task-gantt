@@ -1,5 +1,4 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import type { SettingDefinitionItem } from "obsidian";
 import type GanttPlugin from "./main";
 import { StatusDef, ZoomMode, DateFormat } from "./types";
 import { t as tr } from "./i18n";
@@ -127,58 +126,13 @@ export class GanttSettingTab extends PluginSettingTab {
     setting.addText((t) => t.setValue(s.keys[k]).onChange((v) => { s.keys[k] = v.trim() || k; this.save(); }));
   }
 
-  // ===== 推奨: 宣言的設定（@since 1.13.0）。実機 1.13.0+ のランタイムで使用される =====
-  // ===== Preferred: declarative settings (@since 1.13.0); used on 1.13.0+ runtimes =====
-  // 動的リスト(statuses/tagColors)は type:"list" の add/delete アフォーダンス＋update() で再構築。
-  // dynamic lists use the type:"list" add/delete affordances and rebuild via update().
-  getSettingDefinitions(): SettingDefinitionItem[] {
-    const s = this.plugin.settings;
-    return [
-      { name: tr().setDefaultFolderName, desc: tr().setDefaultFolderDesc, render: (setting: Setting) => this.ctlRootFolder(setting) },
-      { name: tr().setRecurseName, desc: tr().setRecurseDesc, render: (setting: Setting) => this.ctlRecurse(setting) },
-      { name: tr().setDefaultZoomName, render: (setting: Setting) => this.ctlZoom(setting) },
-      { name: tr().setDateFormatName, render: (setting: Setting) => this.ctlDateFormat(setting) },
-      {
-        type: "list",
-        heading: tr().setStatusesHeading,
-        onDelete: (i: number) => { s.statuses.splice(i, 1); this.save(); this.update(); },
-        addItem: {
-          name: tr().setAddStatus,
-          action: () => { s.statuses.push({ id: "new", label: "New", color: "#888888" }); this.save(); this.update(); },
-        },
-        items: s.statuses.map((st) => ({
-          name: st.label || st.id,
-          render: (setting: Setting) => this.ctlStatusRow(setting, st),
-        })),
-      },
-      {
-        type: "list",
-        heading: tr().setTagColorsHeading,
-        emptyState: tr().setNoColorsYet,
-        onDelete: (i: number) => { s.tagColors.splice(i, 1); this.save(); this.update(); },
-        addItem: {
-          name: tr().setAddTagColor,
-          action: () => { s.tagColors.push({ name: "", color: "#888888" }); this.save(); this.update(); },
-        },
-        items: s.tagColors.map((tc) => ({
-          name: tc.name || tr().setColorName,
-          render: (setting: Setting) => this.ctlTagColorRow(setting, tc),
-        })),
-      },
-      {
-        type: "group",
-        heading: tr().setKeysHeading,
-        items: (Object.keys(s.keys) as (keyof GanttSettings["keys"])[]).map((k) => ({
-          name: k,
-          render: (setting: Setting) => this.ctlKeyRow(setting, k),
-        })),
-      },
-    ];
-  }
-
-  // ===== フォールバック: display()（@deprecated 1.13.0）。getSettingDefinitions 非対応の旧ランタイム(例: 1.12.x)で使われる。 =====
+  // ===== display()（@deprecated 1.13.0 だが現状維持が唯一の解）=====
+  // 後継の getSettingDefinitions / update は @since 1.13.0 で、minAppVersion 1.7.2 と両立しない
+  // （使うと no-unsupported-api エラー、minAppVersion を 1.13.0 に上げると 1.12.x ユーザーを締め出す）。
   // 非推奨 API の「呼び出し」を避けるため、再描画は this.draw() に委譲し this.display() は内部から呼ばない。
-  // ===== Fallback: display() (@deprecated 1.13.0) for runtimes that lack getSettingDefinitions (e.g. 1.12.x). =====
+  // ===== display() (@deprecated 1.13.0, but keeping it is the only viable option) =====
+  // Its successor getSettingDefinitions/update is @since 1.13.0 and incompatible with minAppVersion 1.7.2
+  // (using it trips no-unsupported-api; raising minAppVersion to 1.13.0 locks out 1.12.x users).
   // To avoid invoking the deprecated API, redraws go via this.draw(); we never call this.display() ourselves.
   display(): void {
     this.draw();
