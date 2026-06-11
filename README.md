@@ -97,7 +97,7 @@ The body is the task description (shown in the detail panel).
 
 | Frontmatter | Meaning |
 |-------------|---------|
-| `start` / `end` | Start / end date `YYYY-MM-DD` (bar position and length). |
+| `start` / `end` | Start / end date `YYYY-MM-DD` (bar position and length). A time of day can be added as `YYYY-MM-DDTHH:mm+09:00` (edit via the detail panel; the offset follows the **Timezone** setting). |
 | `status` | Status ID (defined in settings, reflected in bar color). |
 | `assignee` | Assignee (label shown next to the bar). |
 | `progress` | Progress 0–100 (fill inside the bar; editable with the detail-panel slider). |
@@ -118,11 +118,28 @@ Drag from a bar's round handle to another bar to create a dependency. The connec
 
 Open **Settings → Task Gantt** to configure the default folder, subfolder recursion, default zoom, and the **date display format** (`YYYY/MM/DD`, `DD/MM/YYYY`, or `MM/DD/YYYY`; stored dates always stay ISO `YYYY-MM-DD`).
 
+The **Timezone** setting (system or a fixed GMT offset, listed with representative cities) controls how times of day are displayed and saved. Changing it re-displays stored times in the new offset.
+
+![Timezone setting with representative cities](docs/images/timezone-en.png)
+
 **Statuses are fully customizable** — add, edit, or delete them. Each status has an **id** (matches the `status` frontmatter value), a **label**, and a **color** reflected in the bar.
 
 You can also rename the **frontmatter keys** the plugin reads (start, end, status, assignee, after, progress, milestone) to match your own vault conventions.
 
 ![Task Gantt settings: customizable statuses and frontmatter keys](docs/images/settings-en.png)
+
+## Notifications (optional)
+
+Task Gantt can post reminders for tasks that have a **time of day** to **Discord** and/or **Slack** via incoming webhooks. In **Settings → Task Gantt → Notifications**, set the webhook URLs, choose the targets (start / due), and pick the lead times (1 week / 1 day / 1 hour / 10 minutes before, or at the exact time). Use **Send a test message** to verify the webhook instantly.
+
+![Notification settings](docs/images/notification_en.png)
+
+![Notification messages in Discord](docs/images/notification_discord.png)
+
+- **Network use**: when enabled, the plugin sends HTTP POST requests containing only the task name and its date/time to the webhook URLs you configured — nothing else is sent, and nowhere else. Leaving both URLs empty (the default) disables all network access.
+- Notifications fire only while Obsidian is running. Triggers that passed while Obsidian was closed are skipped, and each trigger is sent at most once.
+- Date-only tasks (without a time of day) are never notified.
+- The whole vault is scanned — no folder configuration needed; any task with a time of day qualifies.
 
 ## Development
 
@@ -248,7 +265,7 @@ after:
 
 | フロントマター | 意味 |
 |----------------|------|
-| `start` / `end` | 開始 / 終了日 `YYYY-MM-DD`（バーの位置と長さ） |
+| `start` / `end` | 開始 / 終了日 `YYYY-MM-DD`（バーの位置と長さ）。`YYYY-MM-DDTHH:mm+09:00` 形式で時刻も設定可（詳細パネルで編集。オフセットは**タイムゾーン**設定に従う） |
 | `status` | ステータス ID（設定で定義、バー色に反映） |
 | `assignee` | 担当者（バー脇にラベル表示） |
 | `progress` | 進捗 0–100（バー内の塗り。詳細パネルのスライダーで編集） |
@@ -269,11 +286,28 @@ after:
 
 **設定 → Task Gantt** から、既定フォルダ・サブフォルダの再帰・既定ズーム・**日付の表示フォーマット**（`YYYY/MM/DD`／`DD/MM/YYYY`／`MM/DD/YYYY`。保存値は常に ISO `YYYY-MM-DD`）を設定できます。
 
+**タイムゾーン**設定（システム / 固定GMTオフセット・代表都市付き一覧）で時刻の表示・保存に使うタイムゾーンを選べます。変更すると保存済みの時刻が新しいオフセットに換算されて表示されます。
+
+![代表都市付きのタイムゾーン設定](docs/images/timezone-ja.png)
+
 **ステータスは自由に追加・編集・削除**できます。各ステータスは **id**（フロントマターの `status` 値と対応）・**ラベル**・**色**（バー色に反映）を持ちます。
 
 プラグインが読む**フロントマターのキー名**（start / end / status / assignee / after / progress / milestone）も、各自の Vault の慣習に合わせて変更できます。
 
 ![Task Gantt の設定：カスタマイズ可能なステータスとフロントマターキー](docs/images/settings-ja.png)
+
+## 通知（任意）
+
+**時刻を設定した**タスクの開始・期限を、Incoming Webhook 経由で **Discord** / **Slack** に通知できます。**設定 → Task Gantt → 通知** で Webhook URL・対象（開始/期限）・通知タイミング（1週間前・1日前・1時間前・10分前・時刻ちょうど）を設定してください。**テスト送信**ボタンで Webhook の疎通をすぐ確認できます。
+
+![通知設定](docs/images/notification_ja.png)
+
+![Discord に届いた通知](docs/images/notification_discord.png)
+
+- **ネットワーク利用について**：有効にすると、設定した Webhook URL に対してタスク名と日時のみを HTTP POST で送信します。それ以外の情報は送らず、他の宛先にも送信しません。URL を両方空欄（既定）にすればネットワークアクセスは一切行いません。
+- 通知は Obsidian の起動中のみ動作します。終了中に過ぎたタイミングはスキップされ、同じ通知は二度送られません。
+- 日付のみ（時刻なし）のタスクは通知対象外です。
+- 対象は Vault 全体です。フォルダの設定は不要で、時刻を設定したタスクはすべて対象になります。
 
 ## 開発
 

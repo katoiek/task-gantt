@@ -55,6 +55,17 @@ export function parseStored(v: unknown, tz: string): { date: string; time?: stri
   return { date: disp.slice(0, 10), time: disp.slice(11, 16) };
 }
 
+// 設定タイムゾーンの壁時計（日付＋時刻）を絶対時刻(ms)へ。通知トリガーの計算に使う
+// wall-clock date + time in the configured tz → absolute epoch ms (used for notification triggers)
+export function toInstant(date: string, time: string, tz: string): number {
+  const [y, mo, d] = date.split("-").map(Number);
+  const [h, mi] = time.split(":").map(Number);
+  const naive = Date.UTC(y, mo - 1, d, h, mi);
+  const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
+  const off = m ? (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]) : -new Date(`${date}T${time}`).getTimezoneOffset();
+  return naive - off * 60000;
+}
+
 // 表示用の日付＋時刻を保存形式へ（時刻があれば設定タイムゾーンのオフセットを付与）
 // combine display date + time into the stored value (a time gets the configured tz offset appended)
 export function combineDateTime(date: string | undefined, time: string | undefined, tz: string): string | undefined {

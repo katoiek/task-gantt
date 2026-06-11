@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime } from "./model.mjs";
+import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -38,6 +38,11 @@ check("combineDateTime(日付のみ)", combineDateTime("2026-06-12", "", "+09:00
 check("combineDateTime(日付なし)=undefined", combineDateTime(undefined, "09:30", "+09:00") === undefined);
 // 往復: 書いた値を読み戻すと同じ表示になる / round-trip: write then read back yields the same display
 check("往復(書き→読み)", eq(parseStored(combineDateTime("2026-06-12", "09:30", "+09:00"), "+09:00"), "2026-06-12", "09:30"));
+
+// 絶対時刻への変換（通知トリガー用）/ wall clock → absolute instant (for notification triggers)
+check("toInstant(+09:00)", toInstant("2026-06-12", "09:00", "+09:00") === Date.UTC(2026, 5, 12, 0, 0));
+check("toInstant(GMT)", toInstant("2026-06-12", "09:00", "+00:00") === Date.UTC(2026, 5, 12, 9, 0));
+check("toInstant(-05:00)", toInstant("2026-06-12", "09:00", "-05:00") === Date.UTC(2026, 5, 12, 14, 0));
 
 // 多階層: お掃除 > 床掃除 / お風呂掃除 / multi-level nesting
 const tasks = [

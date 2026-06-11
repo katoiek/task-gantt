@@ -2,6 +2,49 @@ import { App, PluginSettingTab, Setting } from "obsidian";
 import type GanttPlugin from "./main";
 import { StatusDef, ZoomMode, DateFormat } from "./types";
 import { t as tr } from "./i18n";
+import { LEADS, leadLabel, sendTestNotification } from "./notify";
+
+// タイムゾーン一覧（実在するオフセットのみ・代表都市付き）/ timezone list (real offsets only, with representative cities)
+const TZ_CITIES: [string, string][] = [
+  ["-12:00", "Baker Island"],
+  ["-11:00", "Midway, Niue"],
+  ["-10:00", "Honolulu (Hawaii)"],
+  ["-09:30", "Marquesas Islands"],
+  ["-09:00", "Anchorage (Alaska)"],
+  ["-08:00", "Los Angeles, Vancouver"],
+  ["-07:00", "Denver, Phoenix"],
+  ["-06:00", "Chicago, Mexico City"],
+  ["-05:00", "New York, Toronto, Lima"],
+  ["-04:00", "Halifax, Santiago, La Paz"],
+  ["-03:30", "St. John's (Newfoundland)"],
+  ["-03:00", "São Paulo, Buenos Aires"],
+  ["-02:00", "South Georgia"],
+  ["-01:00", "Azores, Cape Verde"],
+  ["+00:00", "London, Lisbon, UTC"],
+  ["+01:00", "Paris, Berlin, Rome, Madrid"],
+  ["+02:00", "Cairo, Athens, Kyiv"],
+  ["+03:00", "Moscow, Istanbul, Riyadh"],
+  ["+03:30", "Tehran"],
+  ["+04:00", "Dubai, Baku, Tbilisi"],
+  ["+04:30", "Kabul"],
+  ["+05:00", "Karachi, Tashkent"],
+  ["+05:30", "New Delhi, Mumbai, Colombo"],
+  ["+05:45", "Kathmandu"],
+  ["+06:00", "Dhaka, Almaty"],
+  ["+06:30", "Yangon"],
+  ["+07:00", "Bangkok, Jakarta, Hanoi"],
+  ["+08:00", "Beijing, Singapore, Hong Kong, Taipei"],
+  ["+08:45", "Eucla"],
+  ["+09:00", "Tokyo, Osaka, Seoul"],
+  ["+09:30", "Adelaide, Darwin"],
+  ["+10:00", "Sydney, Melbourne, Guam"],
+  ["+10:30", "Lord Howe Island"],
+  ["+11:00", "Nouméa, Solomon Islands"],
+  ["+12:00", "Auckland, Fiji"],
+  ["+12:45", "Chatham Islands"],
+  ["+13:00", "Apia (Samoa), Nuku'alofa (Tonga)"],
+  ["+14:00", "Kiritimati"],
+];
 
 // プラグイン設定 / Plugin settings
 export interface GanttSettings {
@@ -21,6 +64,15 @@ export interface GanttSettings {
   // タグ/フォルダの色（手動上書き。未登録は名前ハッシュで自動生成）/ manual color overrides (unset → auto from name hash)
   tagColors: { name: string; color: string }[];
   folderColors: { name: string; color: string }[];
+  // 通知（Discord / Slack の Incoming Webhook）/ notifications via incoming webhooks
+  notify: {
+    discordWebhook: string; // 空欄で無効 / empty disables
+    slackWebhook: string;
+    notifyStart: boolean; // 開始を通知するか / notify for start
+    notifyEnd: boolean; // 期限を通知するか / notify for due
+    leads: string[]; // 有効なリードタイムID（1w/1d/1h/10m/0）/ enabled lead ids
+    sent: Record<string, number>; // 送信済みキー→送信時刻（二重通知防止）/ sent keys → timestamp (dedupe)
+  };
   // フロントマターのキー名（プロジェクトに合わせて変更可）/ frontmatter key names
   keys: {
     start: string;
@@ -53,6 +105,14 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   sortDir: "asc",
   tagColors: [],
   folderColors: [],
+  notify: {
+    discordWebhook: "",
+    slackWebhook: "",
+    notifyStart: true,
+    notifyEnd: true,
+    leads: ["1d", "1h", "10m"],
+    sent: {},
+  },
   keys: {
     start: "start",
     end: "end",
@@ -116,17 +176,11 @@ export class GanttSettingTab extends PluginSettingTab {
 
   private ctlTimezone(setting: Setting): void {
     const s = this.plugin.settings;
-    // GMT-12:00〜+14:00 を30分刻み＋ :45 帯（ネパール等）/ -12:00..+14:00 in 30-min steps plus the :45 zones
-    const mins: number[] = [];
-    for (let m = -12 * 60; m <= 14 * 60; m += 30) mins.push(m);
-    mins.push(5 * 60 + 45, 8 * 60 + 45, 12 * 60 + 45, 13 * 60 + 45);
-    mins.sort((a, b) => a - b);
     const opts: Record<string, string> = { system: tr().setTimezoneSystem };
-    for (const m of mins) {
-      const a = Math.abs(m);
-      const v = `${m < 0 ? "-" : "+"}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`;
-      opts[v] = `GMT${v}`;
-    }
+    // 代表都市付きで一覧化 / list offsets with representative cities
+    for (const [v, cities] of TZ_CITIES) opts[v] = `GMT${v} — ${cities}`;
+    // 旧バージョンで保存した一覧外のオフセットも選択肢に残す / keep a saved offset selectable even if it left the list
+    if (s.tz !== "system" && !opts[s.tz]) opts[s.tz] = `GMT${s.tz}`;
     setting.addDropdown((d) => d.addOptions(opts).setValue(s.tz).onChange((v) => { s.tz = v; this.save(); }));
   }
 
@@ -146,6 +200,26 @@ export class GanttSettingTab extends PluginSettingTab {
   private ctlKeyRow(setting: Setting, k: keyof GanttSettings["keys"]): void {
     const s = this.plugin.settings;
     setting.addText((t) => t.setValue(s.keys[k]).onChange((v) => { s.keys[k] = v.trim() || k; this.save(); }));
+  }
+
+  private ctlWebhook(setting: Setting, key: "discordWebhook" | "slackWebhook", placeholder: string): void {
+    const n = this.plugin.settings.notify;
+    setting.addText((t) => t.setPlaceholder(placeholder).setValue(n[key]).onChange((v) => { n[key] = v.trim(); this.save(); }));
+  }
+
+  private ctlNotifyToggle(setting: Setting, key: "notifyStart" | "notifyEnd"): void {
+    const n = this.plugin.settings.notify;
+    setting.addToggle((t) => t.setValue(n[key]).onChange((v) => { n[key] = v; this.save(); }));
+  }
+
+  private ctlLeadToggle(setting: Setting, id: string): void {
+    const n = this.plugin.settings.notify;
+    setting.addToggle((t) =>
+      t.setValue(n.leads.includes(id)).onChange((v) => {
+        n.leads = v ? [...new Set([...n.leads, id])] : n.leads.filter((x) => x !== id);
+        this.save();
+      })
+    );
   }
 
   // ===== display()（@deprecated 1.13.0 だが現状維持が唯一の解）=====
@@ -212,6 +286,29 @@ export class GanttSettingTab extends PluginSettingTab {
         this.draw();
       })
     );
+
+    // 通知（Discord / Slack Webhook・リードタイム）/ notifications (webhooks + lead times)
+    new Setting(containerEl).setName(tr().setNotifyHeading).setDesc(tr().setNotifyDesc).setHeading();
+    this.ctlWebhook(
+      new Setting(containerEl).setName("Discord webhook URL").setDesc(tr().setWebhookDesc),
+      "discordWebhook",
+      "https://discord.com/api/webhooks/…"
+    );
+    this.ctlWebhook(
+      new Setting(containerEl).setName("Slack webhook URL").setDesc(tr().setWebhookDesc),
+      "slackWebhook",
+      "https://hooks.slack.com/services/…"
+    );
+    // テスト送信＝Webhook 設定の即時確認 / send-a-test button for instant webhook verification
+    new Setting(containerEl).addButton((b) =>
+      b.setButtonText(tr().setNotifyTestName).onClick(() => void sendTestNotification(this.plugin))
+    );
+    this.ctlNotifyToggle(new Setting(containerEl).setName(tr().setNotifyStartName), "notifyStart");
+    this.ctlNotifyToggle(new Setting(containerEl).setName(tr().setNotifyEndName), "notifyEnd");
+    new Setting(containerEl).setName(tr().setLeadsName).setHeading();
+    for (const lead of LEADS) {
+      this.ctlLeadToggle(new Setting(containerEl).setName(leadLabel(lead.id)), lead.id);
+    }
 
     // フロントマターのキー名 / frontmatter key names
     new Setting(containerEl).setName(tr().setKeysHeading).setHeading();

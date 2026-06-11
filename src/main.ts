@@ -3,9 +3,11 @@ import { GanttSettings, DEFAULT_SETTINGS, GanttSettingTab } from "./settings";
 import { GanttView } from "./view";
 import { VIEW_TYPE_GANTT, GanttViewState } from "./types";
 import { t } from "./i18n";
+import { checkNotifications } from "./notify";
 
 export default class GanttPlugin extends Plugin {
   settings!: GanttSettings;
+  private lastNotifyCheck = 0; // 前回チェック時刻 / last notification check (epoch ms)
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -38,6 +40,22 @@ export default class GanttPlugin extends Plugin {
     );
 
     this.addSettingTab(new GanttSettingTab(this.app, this));
+
+    // 通知スケジューラ：1分間隔で「前回チェック以降に来たトリガー」を送信。
+    // Obsidian 終了中に過ぎた分は対象外（起動時に過去分をまとめて送らない）。
+    // notification scheduler: every minute, send triggers that arrived since the last check.
+    // triggers missed while Obsidian was closed are skipped (no burst on startup).
+    this.app.workspace.onLayoutReady(() => {
+      this.lastNotifyCheck = Date.now();
+      this.registerInterval(
+        window.setInterval(() => {
+          const now = Date.now();
+          const from = this.lastNotifyCheck;
+          this.lastNotifyCheck = now;
+          void checkNotifications(this, from, now);
+        }, 60_000)
+      );
+    });
   }
 
   // フォーカス中フォルダを推定 / best-effort current folder
@@ -78,6 +96,10 @@ export default class GanttPlugin extends Plugin {
     this.settings.tagColors = (this.settings.tagColors ?? []).map((c) => ({ ...c }));
     this.settings.folderColors = (this.settings.folderColors ?? []).map((c) => ({ ...c }));
     this.settings.columnWidths = { ...(this.settings.columnWidths ?? {}) };
+    // 通知設定も既定とマージ＆複製 / merge notify settings with defaults and clone containers
+    this.settings.notify = Object.assign({}, DEFAULT_SETTINGS.notify, this.settings.notify);
+    this.settings.notify.leads = [...(this.settings.notify.leads ?? [])];
+    this.settings.notify.sent = { ...(this.settings.notify.sent ?? {}) };
   }
 
   async saveSettings(): Promise<void> {
