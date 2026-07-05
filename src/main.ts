@@ -4,10 +4,12 @@ import { GanttView } from "./view";
 import { VIEW_TYPE_GANTT, GanttViewState } from "./types";
 import { t } from "./i18n";
 import { checkNotifications } from "./notify";
+import { migrateRenamedPath, schedulePush, syncGcal } from "./gcal/sync";
 
 export default class GanttPlugin extends Plugin {
   settings!: GanttSettings;
   private lastNotifyCheck = 0; // 前回チェック時刻 / last notification check (epoch ms)
+  private lastGcalPull = 0; // 前回の Google カレンダー Pull / last Google Calendar pull (epoch ms)
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -41,6 +43,30 @@ export default class GanttPlugin extends Plugin {
 
     this.addSettingTab(new GanttSettingTab(this.app, this));
 
+    this.addCommand({
+      id: "gcal-sync-now",
+      name: `${t().setGcalHeading}: ${t().setGcalSyncNow}`,
+      callback: () => void syncGcal(this, { pull: true }),
+    });
+
+    // ローカル編集を数秒デバウンスで Push（対象判定と差分検出は sync 側）
+    // debounce local edits into a push (scope and diffing are handled by the sync engine)
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (file) => {
+        if (file.extension === "md") schedulePush(this);
+      })
+    );
+    // リネーム・移動は同期状態のキーを付け替える / renames re-key the sync state
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) => {
+        if (file instanceof TFile) migrateRenamedPath(this, oldPath, file.path);
+      })
+    );
+    // 削除はイベントの孤児掃除を予約 / deletions schedule the orphan cleanup
+    this.registerEvent(
+      this.app.vault.on("delete", () => schedulePush(this))
+    );
+
     // 通知スケジューラ：1分間隔で「前回チェック以降に来たトリガー」を送信。
     // Obsidian 終了中に過ぎた分は対象外（起動時に過去分をまとめて送らない）。
     // notification scheduler: every minute, send triggers that arrived since the last check.
@@ -53,6 +79,14 @@ export default class GanttPlugin extends Plugin {
           const from = this.lastNotifyCheck;
           this.lastNotifyCheck = now;
           void checkNotifications(this, from, now);
+          // Google カレンダー：Pull は設定間隔で、Push は毎分の掃き出し（差分が無ければ何もしない）
+          // Google Calendar: pull at the configured interval, push sweeps every minute (no-op without changes)
+          const g = this.settings.gcal;
+          if (g.refreshToken && g.calendarId) {
+            const pull = g.pullEnabled && now - this.lastGcalPull >= g.pullIntervalMin * 60_000;
+            if (pull) this.lastGcalPull = now;
+            void syncGcal(this, { pull });
+          }
         }, 60_000)
       );
     });
@@ -100,6 +134,11 @@ export default class GanttPlugin extends Plugin {
     this.settings.notify = Object.assign({}, DEFAULT_SETTINGS.notify, this.settings.notify);
     this.settings.notify.leads = [...(this.settings.notify.leads ?? [])];
     this.settings.notify.sent = { ...(this.settings.notify.sent ?? {}) };
+    // Google カレンダー設定も既定とマージ＆複製 / merge Google Calendar settings with defaults and clone containers
+    this.settings.gcal = Object.assign({}, DEFAULT_SETTINGS.gcal, this.settings.gcal);
+    const st: typeof this.settings.gcal.state = {};
+    for (const [p, v] of Object.entries(this.settings.gcal.state ?? {})) st[p] = { ...v };
+    this.settings.gcal.state = st;
   }
 
   async saveSettings(): Promise<void> {

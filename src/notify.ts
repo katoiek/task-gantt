@@ -30,7 +30,7 @@ export function leadLabel(id: string): string {
 export async function checkNotifications(plugin: GanttPlugin, fromMs: number, toMs: number): Promise<void> {
   const s = plugin.settings;
   const n = s.notify;
-  if (!n.discordWebhook && !n.slackWebhook) return;
+  if (!n.discordWebhook && !n.slackWebhook && !n.teamsWebhook) return;
   if (!n.leads.length || (!n.notifyStart && !n.notifyEnd)) return;
   // 既定フォルダ設定に関係なく Vault 全体を対象にする（時刻ありタスクのみ通知されるのでノイズは出ない）
   // scan the whole vault regardless of the default-folder setting (only timed tasks notify, so no noise)
@@ -54,7 +54,7 @@ export async function checkNotifications(plugin: GanttPlugin, fromMs: number, to
         n.sent[key] = Date.now();
         dirty = true;
         const at = `${formatDate(e.date, s.dateFormat)} ${e.time}`;
-        await sendWebhooks(n.discordWebhook, n.slackWebhook, tr().notifyLine(t.name, e.kind, at, leadLabel(lead.id)));
+        await sendWebhooks(n, tr().notifyLine(t.name, e.kind, at, leadLabel(lead.id)));
       }
     }
   }
@@ -72,32 +72,52 @@ export async function checkNotifications(plugin: GanttPlugin, fromMs: number, to
 // 設定画面の「テスト送信」。結果を Notice で表示 / "send a test message" from settings; result shown as a Notice
 export async function sendTestNotification(plugin: GanttPlugin): Promise<void> {
   const n = plugin.settings.notify;
-  if (!n.discordWebhook && !n.slackWebhook) {
+  if (!n.discordWebhook && !n.slackWebhook && !n.teamsWebhook) {
     new Notice(tr().setWebhookDesc); // URL 未設定 / no webhook configured
     return;
   }
-  const ok = await sendWebhooks(n.discordWebhook, n.slackWebhook, tr().notifyTestMsg);
+  const ok = await sendWebhooks(n, tr().notifyTestMsg);
   new Notice(ok ? "✅" : "⚠️ (console)");
 }
 
-// 設定済みの Webhook へ送信。片方の失敗が他方やループを止めないように個別に握る
-// post to the configured webhooks; one failure must not block the other target or the loop
-async function sendWebhooks(discord: string, slack: string, msg: string): Promise<boolean> {
+// Teams（Power Automate Workflows）は Adaptive Card 形式の JSON を要求する
+// Teams (Power Automate Workflows) expects an Adaptive Card payload
+function teamsCard(msg: string): string {
+  return JSON.stringify({
+    type: "message",
+    attachments: [
+      {
+        contentType: "application/vnd.microsoft.card.adaptive",
+        content: {
+          $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+          type: "AdaptiveCard",
+          version: "1.4",
+          body: [{ type: "TextBlock", text: msg, wrap: true }],
+        },
+      },
+    ],
+  });
+}
+
+// 設定済みの Webhook へ送信。1つの失敗が他やループを止めないように個別に握る
+// post to the configured webhooks; one failure must not block the others or the loop
+async function sendWebhooks(
+  n: { discordWebhook: string; slackWebhook: string; teamsWebhook: string },
+  msg: string
+): Promise<boolean> {
   let ok = true;
-  if (discord) {
+  const targets: { url: string; body: string; label: string }[] = [
+    { url: n.discordWebhook, body: JSON.stringify({ content: msg }), label: "Discord" },
+    { url: n.slackWebhook, body: JSON.stringify({ text: msg }), label: "Slack" },
+    { url: n.teamsWebhook, body: teamsCard(msg), label: "Teams" },
+  ];
+  for (const t of targets) {
+    if (!t.url) continue;
     try {
-      await requestUrl({ url: discord, method: "POST", contentType: "application/json", body: JSON.stringify({ content: msg }) });
+      await requestUrl({ url: t.url, method: "POST", contentType: "application/json", body: t.body });
     } catch (e) {
       ok = false;
-      console.error("Task Gantt: Discord notification failed", e);
-    }
-  }
-  if (slack) {
-    try {
-      await requestUrl({ url: slack, method: "POST", contentType: "application/json", body: JSON.stringify({ text: msg }) });
-    } catch (e) {
-      ok = false;
-      console.error("Task Gantt: Slack notification failed", e);
+      console.error(`Task Gantt: ${t.label} notification failed`, e);
     }
   }
   return ok;

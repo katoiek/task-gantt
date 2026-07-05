@@ -1,12 +1,12 @@
 {
   "name": "task-gantt",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Manage tasks on an interactive Gantt timeline where each note is a single task (file-per-task).",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "test": "esbuild src/model.ts --bundle --format=esm --outfile=test/model.mjs --alias:obsidian=./test/obsidian-stub.mjs --log-level=warning && node test/model.test.mjs"
+    "test": "esbuild src/model.ts --bundle --format=esm --outfile=test/model.mjs --alias:obsidian=./test/obsidian-stub.mjs --log-level=warning && esbuild src/gcal/map.ts --bundle --format=esm --outfile=test/gcal-map.mjs --alias:obsidian=./test/obsidian-stub.mjs --log-level=warning && node test/model.test.mjs && node test/gcal.test.mjs"
   },
   "keywords": ["obsidian", "gantt", "project-management", "timeline"],
   "license": "MIT",

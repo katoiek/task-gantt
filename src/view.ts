@@ -33,6 +33,7 @@ import {
   formatDate,
 } from "./timeline";
 import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
+import { schedulePush } from "./gcal/sync";
 
 const ROW_H = 30; // 行の高さ（表とタイムラインで共通）/ shared row height
 const HEAD_H = 40; // ヘッダー高さ / header height
@@ -1623,6 +1624,30 @@ export class GanttView extends ItemView {
       await writeField(this.app, this.selectedPath, k.progress, n > 0 ? n : undefined);
       await this.refresh();
     })());
+
+    // Google カレンダー同期（接続済みのときのみ表示）/ Google Calendar sync (shown only while connected)
+    const g = this.plugin.settings.gcal;
+    if (g.refreshToken && g.calendarId) {
+      const gf = fieldRow(tr().fieldGcal);
+      const box = gf.createEl("input", { type: "checkbox" });
+      const file = this.app.vault.getAbstractFileByPath(t.path);
+      const fm = file instanceof TFile
+        ? (this.app.metadataCache.getFileCache(file)?.frontmatter as Record<string, unknown> | undefined)
+        : undefined;
+      const flag = fm?.[k.gcal];
+      box.checked = !g.optInOnly || flag === true || flag === "true";
+      box.disabled = !g.optInOnly; // 全タスク同期モードでは個別選択なし / no per-task choice when everything syncs
+      box.addEventListener("change", () => void (async () => {
+        if (!this.selectedPath) return;
+        await writeField(this.app, this.selectedPath, k.gcal, box.checked ? true : undefined);
+        schedulePush(this.plugin); // 反映（またはオプトアウトのイベント削除）を予約 / schedule the push (or the opt-out cleanup)
+      })());
+      const link = g.state[t.path]?.link;
+      if (link) {
+        const a = gf.createEl("a", { text: tr().gcalOpenEvent, href: link });
+        a.setAttr("target", "_blank");
+      }
+    }
 
     // 本文 / body（テキストエリア、フォーカスを外したら保存）/ body textarea, saved on blur
     d.createEl("div", { cls: "ogantt-detail-label", text: tr().fieldBody });

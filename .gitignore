@@ -4,6 +4,10 @@ main.js.map
 *.log
 .DS_Store
 test/model.mjs
+test/gcal-map.mjs
+
+# テスト用 Vault（リポジトリ直下・コミットしない）/ local dev vault, never committed
+Obsidian-Dev/
 
 # 参照用スクショ（本体ではない）はコミットしない / keep reference screenshots local
 examples/*.png

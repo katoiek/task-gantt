@@ -103,6 +103,8 @@ The body is the task description (shown in the detail panel).
 | `progress` | Progress 0–100 (fill inside the bar; editable with the detail-panel slider). |
 | `after` | Array of wikilinks to predecessors (dependency arrows; violations turn red). |
 | `milestone` | `true` for a diamond (zero duration). |
+| `gcal` | `true` opts the task into [Google Calendar sync](#google-calendar-sync-optional-desktop-only) (only used when **Sync flagged tasks only** is on). |
+| `gcalId` | Set automatically once the task is pushed to Google Calendar — the linked event's ID. Don't edit by hand. |
 
 **Milestones:** a task that has only an `end` date (no `start`) is automatically treated as a milestone and drawn as a diamond. Setting `milestone: true` does the same. To turn a milestone back into a ranged task, give it a `start` date.
 
@@ -130,7 +132,9 @@ You can also rename the **frontmatter keys** the plugin reads (start, end, statu
 
 ## Notifications (optional)
 
-Task Gantt can post reminders for tasks that have a **time of day** to **Discord** and/or **Slack** via incoming webhooks. In **Settings → Task Gantt → Notifications**, set the webhook URLs, choose the targets (start / due), and pick the lead times (1 week / 1 day / 1 hour / 10 minutes before, or at the exact time). Use **Send a test message** to verify the webhook instantly.
+Task Gantt can post reminders for tasks that have a **time of day** to **Discord**, **Slack**, and/or **Microsoft Teams** via incoming webhooks. In **Settings → Task Gantt → Notifications**, set the webhook URLs, choose the targets (start / due), and pick the lead times (1 week / 1 day / 1 hour / 10 minutes before, or at the exact time). Use **Send a test message** to verify the webhooks instantly.
+
+For **Teams**, create a channel Workflow (channel **…** menu → **Workflows** → template *"Post to a channel when a webhook request is received"*) and paste the generated URL. The retired Office 365 connector URLs are not supported; this uses the current Power Automate webhook, and messages are posted as Adaptive Cards.
 
 ![Notification settings](docs/images/notification_en.png)
 
@@ -140,6 +144,41 @@ Task Gantt can post reminders for tasks that have a **time of day** to **Discord
 - Notifications fire only while Obsidian is running. Triggers that passed while Obsidian was closed are skipped, and each trigger is sent at most once.
 - Date-only tasks (without a time of day) are never notified.
 - The whole vault is scanned — no folder configuration needed; any task with a time of day qualifies.
+
+## Google Calendar sync (optional, desktop only)
+
+Task Gantt can keep tasks and a Google calendar in **two-way sync**: task changes (create / reschedule / delete) are pushed as events, and moving or deleting those events in Google Calendar flows back into the task's frontmatter. Each direction can be toggled independently in **Settings → Task Gantt → Google Calendar**.
+
+### Setup
+
+The plugin has no server, so it uses **your own Google Cloud project**:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable the **Google Calendar API**.
+2. Configure the OAuth consent screen (External is fine) and add your own Google account as a **test user**. Because the app is yours and unverified, Google shows an "unverified app" warning during consent — expected, just continue.
+3. Create an **OAuth client ID** of type **Desktop app**, and paste the client ID and secret into the plugin settings.
+4. Press **Connect** — your browser opens Google's consent screen, and the plugin receives the authorization on `127.0.0.1` (loopback). Then pick the **calendar to sync** (a dedicated calendar is recommended).
+
+![Google Calendar settings](docs/images/gcal-settings-en.png)
+
+### How it syncs
+
+- **Pull only ever touches events that Task Gantt itself created.** Creating an event directly in Google Calendar does **not** create a task, and editing or deleting a foreign (non-plugin) event is ignored — the plugin only reads back changes to events it pushed. Anything already on your calendar is left untouched.
+- By default only tasks with the **`gcal: true`** flag in their frontmatter sync (**opt-in**; toggle it per task in the detail panel — which also shows an **Open in Google Calendar** link once synced). Turn off **Sync flagged tasks only** to sync every dated task in the scope folder instead.
+- Date-only tasks become **all-day events**; tasks with a time of day on both ends become timed events (using the plugin's **Timezone** setting); milestones become one-day events. The linked event's ID is stored in the task's `gcalId` frontmatter key (set automatically — don't edit it by hand).
+- Local edits push within seconds; remote changes are pulled at the configured interval (default 5 minutes). Titles sync one way only (task → event): renaming the event in Google Calendar is reverted on the next push, since renaming files from outside is risky.
+- If both sides changed since the last sync, the **newer edit wins** and a notice tells you which side was kept.
+- Deleting a task deletes its event (configurable). Deleting the event in Google Calendar just **unlinks** the task by default (optionally also clearing its dates) — files are never deleted.
+- Recurring events are not supported (skipped by both directions).
+
+**Example** — `Test1` and `Test2` carry `gcal: true` and pushed through as events; `Test3 (no flag)` stayed local only. The `Test3 from GC` event and the `七夕` holiday were created directly in Google Calendar and never became tasks:
+
+![Obsidian board next to the synced Google Calendar](docs/images/gcal-compare.png)
+
+### Disclosure
+
+- **Network use**: when connected, the plugin talks to Google's OAuth and Calendar APIs only, sending the synced tasks' name, dates, and a body excerpt (first 500 characters) with a link back to the note. Leaving the feature unconfigured (the default) makes no network requests.
+- **Account & credentials**: requires a Google account and your own Google Cloud OAuth client. The plugin requests only the `calendar.events` and `calendar.calendarlist.readonly` scopes. The OAuth **refresh token, client ID, and secret are stored in plain text** in the plugin's `data.json` inside your vault — treat that file accordingly (be careful when the vault itself is synced or shared).
+- Mobile is not supported (the OAuth loopback needs a desktop); other features work on mobile as usual.
 
 ## Development
 
@@ -271,6 +310,8 @@ after:
 | `progress` | 進捗 0–100（バー内の塗り。詳細パネルのスライダーで編集） |
 | `after` | 先行タスクへの wikilink 配列（依存＝矢印、違反は赤） |
 | `milestone` | `true` で菱形（期間ゼロ） |
+| `gcal` | `true` で **Google カレンダー同期**（後述）の対象にする（**フラグ付きタスクのみ同期**がオンのときだけ判定に使用） |
+| `gcalId` | タスクを Google カレンダーへ Push すると自動で入る、紐付け先イベントの ID。手動編集不可 |
 
 **マイルストーン：** `end`（終了日）だけがあり `start`（開始日）が無いタスクは、自動的にマイルストーンと判定され菱形で描画されます。`milestone: true` でも同じです。通常タスクに戻すには `start`（開始日）を与えてください。
 
@@ -298,7 +339,9 @@ after:
 
 ## 通知（任意）
 
-**時刻を設定した**タスクの開始・期限を、Incoming Webhook 経由で **Discord** / **Slack** に通知できます。**設定 → Task Gantt → 通知** で Webhook URL・対象（開始/期限）・通知タイミング（1週間前・1日前・1時間前・10分前・時刻ちょうど）を設定してください。**テスト送信**ボタンで Webhook の疎通をすぐ確認できます。
+**時刻を設定した**タスクの開始・期限を、Incoming Webhook 経由で **Discord** / **Slack** / **Microsoft Teams** に通知できます。**設定 → Task Gantt → 通知** で Webhook URL・対象（開始/期限）・通知タイミング（1週間前・1日前・1時間前・10分前・時刻ちょうど）を設定してください。**テスト送信**ボタンで Webhook の疎通をすぐ確認できます。
+
+**Teams** はチャネルのワークフローを使います（チャネルの **…** メニュー → **ワークフロー** → テンプレート「**Webhook 要求を受信したらチャネルに投稿する**」→ 発行された URL を貼り付け）。廃止済みの Office 365 コネクタ URL には対応していません。現行の Power Automate Webhook を使い、メッセージは Adaptive Card として投稿されます。
 
 ![通知設定](docs/images/notification_ja.png)
 
@@ -308,6 +351,41 @@ after:
 - 通知は Obsidian の起動中のみ動作します。終了中に過ぎたタイミングはスキップされ、同じ通知は二度送られません。
 - 日付のみ（時刻なし）のタスクは通知対象外です。
 - 対象は Vault 全体です。フォルダの設定は不要で、時刻を設定したタスクはすべて対象になります。
+
+## Google カレンダー同期（任意・デスクトップ専用）
+
+タスクと Google カレンダーを**双方向で同期**できます。タスクの作成・日程変更・削除はイベントとして反映され、Google カレンダー側でのイベント移動・削除はタスクのフロントマターへ書き戻されます。**設定 → Task Gantt → Google カレンダー** で方向ごと（Push / Pull）に ON/OFF できます。
+
+### セットアップ
+
+プラグインにはサーバーがないため、**ユーザー自身の Google Cloud プロジェクト**を使います。
+
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成し、**Google Calendar API** を有効化する。
+2. OAuth 同意画面を設定（External で可）し、自分の Google アカウントを**テストユーザー**に追加する。アプリは自分専用の未確認アプリなので、同意時に「確認されていないアプリ」の警告が出ますが想定どおりです（そのまま続行してください）。
+3. **OAuth クライアント ID**（種類：**デスクトップアプリ**）を作成し、クライアント ID とシークレットをプラグイン設定に貼り付ける。
+4. **接続**を押すとブラウザで Google の同意画面が開き、`127.0.0.1`（ループバック）で認可を受け取ります。その後**同期先カレンダー**を選択してください（専用カレンダーの利用を推奨）。
+
+![Google カレンダーの設定画面](docs/images/gcal-settings-ja.png)
+
+### 同期の仕組み
+
+- **Pull（Google カレンダー→タスク）が対象にするのは、Task Gantt 自身が作成したイベントのみです。** Google カレンダー側で直接イベントを新規作成しても、それがタスクとして取り込まれることは**ありません**。また、プラグインが関与していない既存イベントの編集・削除も無視されます — Pull は自分がPushしたイベントへの変更を読み戻すだけで、カレンダーに元からある予定には一切手を付けません。
+- 既定ではフロントマターに **`gcal: true`** フラグを付けたタスクだけが同期されます（**オプトイン**。詳細パネルのトグルで切替でき、同期済みタスクには **Google カレンダーで開く** リンクも表示されます）。**フラグ付きタスクのみ同期**をオフにすると、対象フォルダ内の日付付きタスク全てが対象になります。
+- 日付のみのタスクは**終日イベント**、両端に時刻のあるタスクは時刻付きイベント（プラグインの**タイムゾーン**設定を使用）、マイルストーンは1日のイベントになります。紐付け先イベントの ID はタスクの `gcalId` キーに自動で保存されます（手動編集は不可）。
+- ローカルの編集は数秒で Push され、Google カレンダー側の変更は設定間隔（既定5分）で Pull されます。タイトルの同期はタスク→イベントの一方向のみで、イベント名を Google カレンダー側で変更しても次の Push でタスク名に戻ります（外部からのファイルリネームは危険なため）。
+- 前回同期以降に両側が変更されていた場合は**新しい方の編集が勝ち**、どちらを採用したかを通知します。
+- タスクを削除するとイベントも削除されます（設定で変更可）。Google カレンダー側でイベントを削除した場合、既定ではタスクの**紐付けを解除するだけ**です（日付もクリアする設定あり）。ファイルが削除されることはありません。
+- 繰り返しイベントは Push / Pull とも対象外です。
+
+**例**：`Test1` と `Test2` は `gcal: true` を付けて Push され、イベントとして反映されています。`Test3 (no flag)` はフラグが無いためローカルのみに留まっています。一方 `Test3 from GC` と祝日「七夕」は Google カレンダー側で直接作られたもので、タスクとしては取り込まれていません：
+
+![Obsidian のボードと同期後の Google カレンダーの比較](docs/images/gcal-compare.png)
+
+### 開示事項
+
+- **ネットワーク利用について**：接続すると Google の OAuth / Calendar API とのみ通信し、同期対象タスクの名前・日付・本文抜粋（先頭500文字）とノートへ戻るリンクを送信します。未設定（既定）の場合、ネットワークアクセスは一切行いません。
+- **アカウントと認証情報**：Google アカウントと自身の Google Cloud OAuth クライアントが必要です。要求スコープは `calendar.events` と `calendar.calendarlist.readonly` のみです。OAuth の**リフレッシュトークン・クライアント ID・シークレットは Vault 内の `data.json` に平文保存**されます。Vault 自体を同期・共有している場合はご注意ください。
+- モバイルは非対応です（OAuth のループバック受信にデスクトップが必要）。他の機能は従来どおりモバイルでも動作します。
 
 ## 開発
 

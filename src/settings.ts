@@ -1,8 +1,11 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import type GanttPlugin from "./main";
 import { StatusDef, ZoomMode, DateFormat } from "./types";
 import { t as tr } from "./i18n";
 import { LEADS, leadLabel, sendTestNotification } from "./notify";
+import { connectGoogle, disconnectGoogle, isConnected } from "./gcal/auth";
+import { listCalendars } from "./gcal/api";
+import { syncGcal } from "./gcal/sync";
 
 // タイムゾーン一覧（実在するオフセットのみ・代表都市付き）/ timezone list (real offsets only, with representative cities)
 const TZ_CITIES: [string, string][] = [
@@ -68,10 +71,30 @@ export interface GanttSettings {
   notify: {
     discordWebhook: string; // 空欄で無効 / empty disables
     slackWebhook: string;
+    teamsWebhook: string; // Power Automate Workflows の Webhook / Power Automate Workflows webhook
     notifyStart: boolean; // 開始を通知するか / notify for start
     notifyEnd: boolean; // 期限を通知するか / notify for due
     leads: string[]; // 有効なリードタイムID（1w/1d/1h/10m/0）/ enabled lead ids
     sent: Record<string, number>; // 送信済みキー→送信時刻（二重通知防止）/ sent keys → timestamp (dedupe)
+  };
+  // Google カレンダー双方向同期 / Google Calendar two-way sync
+  gcal: {
+    clientId: string; // ユーザー自身の GCP OAuth クライアント / the user's own GCP OAuth client
+    clientSecret: string;
+    refreshToken: string; // 空=未接続。data.json に平文保存（README で開示）/ empty = not connected; stored in plain text
+    calendarId: string; // 同期先カレンダー / target calendar
+    calendarName: string; // 表示用 / display only
+    pushEnabled: boolean; // タスク → GCal / task → GCal
+    pullEnabled: boolean; // GCal → タスク / GCal → task
+    optInOnly: boolean; // true=フロントマターにフラグのあるタスクのみ / only tasks carrying the opt-in flag
+    scopeFolder: string; // 空=既定フォルダに従う / empty = follow the default folder
+    pullIntervalMin: number; // Pull の間隔（分）/ pull interval in minutes
+    deleteEventOnTaskDelete: boolean;
+    onEventDeleted: "unlink" | "clearDates"; // GCal 側で削除されたときの挙動 / behavior when the event is deleted remotely
+    syncToken: string; // 増分 Pull 用 / incremental pull token
+    lastSync: number; // 最終成功時刻 (epoch ms) / last successful sync
+    lastError: string; // 直近のエラー（設定画面に表示）/ latest error, shown in settings
+    state: Record<string, GcalSyncState>; // パス → 同期スナップショット / path → sync snapshot
   };
   // フロントマターのキー名（プロジェクトに合わせて変更可）/ frontmatter key names
   keys: {
@@ -83,7 +106,19 @@ export interface GanttSettings {
     progress: string;
     milestone: string;
     parent: string;
+    gcalId: string; // イベント ID の保存先 / where the event id is stored
+    gcal: string; // オプトインフラグ / the opt-in flag
   };
+}
+
+// タスク1件分の同期スナップショット（ループ防止と差分検出に使う）
+// per-task sync snapshot (drives loop prevention and change detection)
+export interface GcalSyncState {
+  id: string; // イベント ID / event id
+  hash: string; // 最終同期時のローカル内容ハッシュ / local fingerprint at last sync
+  etag: string; // 最終同期時のイベント etag（エコー判定）/ event etag at last sync (echo detection)
+  at: number; // 同期時刻 / synced at (epoch ms)
+  link?: string; // イベントの htmlLink / the event's htmlLink
 }
 
 export const DEFAULT_SETTINGS: GanttSettings = {
@@ -108,10 +143,29 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   notify: {
     discordWebhook: "",
     slackWebhook: "",
+    teamsWebhook: "",
     notifyStart: true,
     notifyEnd: true,
     leads: ["1d", "1h", "10m"],
     sent: {},
+  },
+  gcal: {
+    clientId: "",
+    clientSecret: "",
+    refreshToken: "",
+    calendarId: "",
+    calendarName: "",
+    pushEnabled: true,
+    pullEnabled: true,
+    optInOnly: true,
+    scopeFolder: "",
+    pullIntervalMin: 5,
+    deleteEventOnTaskDelete: true,
+    onEventDeleted: "unlink",
+    syncToken: "",
+    lastSync: 0,
+    lastError: "",
+    state: {},
   },
   keys: {
     start: "start",
@@ -122,6 +176,8 @@ export const DEFAULT_SETTINGS: GanttSettings = {
     progress: "progress",
     milestone: "milestone",
     parent: "parent",
+    gcalId: "gcalId",
+    gcal: "gcal",
   },
 };
 
@@ -202,7 +258,7 @@ export class GanttSettingTab extends PluginSettingTab {
     setting.addText((t) => t.setValue(s.keys[k]).onChange((v) => { s.keys[k] = v.trim() || k; this.save(); }));
   }
 
-  private ctlWebhook(setting: Setting, key: "discordWebhook" | "slackWebhook", placeholder: string): void {
+  private ctlWebhook(setting: Setting, key: "discordWebhook" | "slackWebhook" | "teamsWebhook", placeholder: string): void {
     const n = this.plugin.settings.notify;
     setting.addText((t) => t.setPlaceholder(placeholder).setValue(n[key]).onChange((v) => { n[key] = v.trim(); this.save(); }));
   }
@@ -219,6 +275,119 @@ export class GanttSettingTab extends PluginSettingTab {
         n.leads = v ? [...new Set([...n.leads, id])] : n.leads.filter((x) => x !== id);
         this.save();
       })
+    );
+  }
+
+  // ===== Google カレンダー同期のセクション / the Google Calendar sync section =====
+  private drawGcal(containerEl: HTMLElement): void {
+    const g = this.plugin.settings.gcal;
+    const connected = isConnected(this.plugin);
+
+    new Setting(containerEl).setName(tr().setGcalHeading).setDesc(tr().setGcalDesc).setHeading();
+
+    // モバイルでは案内のみ表示（ループバック認証が使えない）/ mobile gets a note only (no loopback auth)
+    if (!Platform.isDesktop) {
+      new Setting(containerEl).setDesc(tr().gcalDesktopOnly);
+      return;
+    }
+
+    // 認証情報（シークレットは伏せ字入力）/ credentials (the secret uses a password input)
+    new Setting(containerEl).setName(tr().setGcalClientIdName).setDesc(tr().setGcalCredsDesc).addText((t) =>
+      t.setValue(g.clientId).onChange((v) => { g.clientId = v.trim(); this.save(); })
+    );
+    new Setting(containerEl).setName(tr().setGcalClientSecretName).addText((t) => {
+      t.inputEl.type = "password";
+      t.setValue(g.clientSecret).onChange((v) => { g.clientSecret = v.trim(); this.save(); });
+    });
+
+    // 接続 / 切断（接続状態を説明欄に表示）/ connect / disconnect with the status in the description
+    new Setting(containerEl)
+      .setName(tr().setGcalAccountName)
+      .setDesc(connected ? tr().gcalStatusConnected : tr().gcalStatusNotConnected)
+      .addButton((b) => {
+        if (connected) {
+          b.setButtonText(tr().setGcalDisconnect).setWarning().onClick(() => void (async () => {
+            await disconnectGoogle(this.plugin);
+            this.draw();
+          })());
+        } else {
+          b.setButtonText(tr().setGcalConnect).setCta().onClick(() => void (async () => {
+            const ok = await connectGoogle(this.plugin);
+            if (ok) this.draw();
+          })());
+        }
+      });
+
+    if (!connected) return; // 以降の項目は接続後のみ / the rest only makes sense once connected
+
+    // 同期先カレンダー（一覧は非同期で取得して差し込む）/ target calendar (the list loads asynchronously)
+    new Setting(containerEl).setName(tr().setGcalCalendarName).addDropdown((d) => {
+      if (g.calendarId) d.addOption(g.calendarId, g.calendarName || g.calendarId);
+      else d.addOption("", "—");
+      d.setValue(g.calendarId);
+      void listCalendars(this.plugin)
+        .then((cals) => {
+          d.selectEl.empty();
+          if (!g.calendarId) d.addOption("", "—");
+          for (const c of cals) d.addOption(c.id, c.summary + (c.primary ? " ★" : ""));
+          d.setValue(g.calendarId);
+          d.onChange((v) => {
+            g.calendarId = v;
+            g.calendarName = cals.find((c) => c.id === v)?.summary ?? v;
+            // カレンダーを替えたら同期状態はリセット / switching calendars resets the sync state
+            g.syncToken = "";
+            g.state = {};
+            this.save();
+          });
+        })
+        .catch((e) => console.error("Task Gantt: calendar list failed", e));
+    });
+
+    // 方向・範囲 / directions & scope
+    new Setting(containerEl).setName(tr().setGcalPushName).addToggle((t) =>
+      t.setValue(g.pushEnabled).onChange((v) => { g.pushEnabled = v; this.save(); })
+    );
+    new Setting(containerEl).setName(tr().setGcalPullName).addToggle((t) =>
+      t.setValue(g.pullEnabled).onChange((v) => { g.pullEnabled = v; this.save(); })
+    );
+    new Setting(containerEl)
+      .setName(tr().setGcalOptInName)
+      .setDesc(tr().setGcalOptInDesc(this.plugin.settings.keys.gcal))
+      .addToggle((t) => t.setValue(g.optInOnly).onChange((v) => { g.optInOnly = v; this.save(); }));
+    new Setting(containerEl).setName(tr().setGcalScopeName).setDesc(tr().setGcalScopeDesc).addText((t) =>
+      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(g.scopeFolder).onChange((v) => {
+        g.scopeFolder = v.trim();
+        this.save();
+      })
+    );
+
+    // 間隔・削除ポリシー / interval & deletion policies
+    new Setting(containerEl).setName(tr().setGcalPullIntervalName).addDropdown((d) => {
+      for (const m of [1, 5, 10, 30, 60]) d.addOption(String(m), String(m));
+      d.setValue(String(g.pullIntervalMin)).onChange((v) => { g.pullIntervalMin = Number(v); this.save(); });
+    });
+    new Setting(containerEl).setName(tr().setGcalDeleteEventName).addToggle((t) =>
+      t.setValue(g.deleteEventOnTaskDelete).onChange((v) => { g.deleteEventOnTaskDelete = v; this.save(); })
+    );
+    new Setting(containerEl).setName(tr().setGcalOnEventDeletedName).addDropdown((d) =>
+      d
+        .addOptions({ unlink: tr().gcalUnlinkOption, clearDates: tr().gcalClearDatesOption })
+        .setValue(g.onEventDeleted)
+        .onChange((v) => { g.onEventDeleted = v as "unlink" | "clearDates"; this.save(); })
+    );
+
+    // 今すぐ同期＋最終同期・エラー表示 / sync-now with the last-sync time and any error
+    const status = g.lastError
+      ? `⚠️ ${g.lastError}`
+      : g.lastSync
+        ? tr().gcalLastSync(new Date(g.lastSync).toLocaleString())
+        : "";
+    new Setting(containerEl).setName(tr().setGcalSyncNow).setDesc(status).addButton((b) =>
+      b.setButtonText(tr().setGcalSyncNow).onClick(() => void (async () => {
+        const ok = await syncGcal(this.plugin, { pull: true });
+        new Notice(ok ? tr().gcalSyncDone : `⚠️ ${g.lastError || "(console)"}`);
+        this.draw();
+      })())
     );
   }
 
@@ -299,6 +468,11 @@ export class GanttSettingTab extends PluginSettingTab {
       "slackWebhook",
       "https://hooks.slack.com/services/…"
     );
+    this.ctlWebhook(
+      new Setting(containerEl).setName("Microsoft Teams webhook URL (Workflows)").setDesc(tr().setWebhookDesc),
+      "teamsWebhook",
+      "https://….logic.azure.com/workflows/…"
+    );
     // テスト送信＝Webhook 設定の即時確認 / send-a-test button for instant webhook verification
     new Setting(containerEl).addButton((b) =>
       b.setButtonText(tr().setNotifyTestName).onClick(() => void sendTestNotification(this.plugin))
@@ -309,6 +483,9 @@ export class GanttSettingTab extends PluginSettingTab {
     for (const lead of LEADS) {
       this.ctlLeadToggle(new Setting(containerEl).setName(leadLabel(lead.id)), lead.id);
     }
+
+    // Google カレンダー同期 / Google Calendar sync
+    this.drawGcal(containerEl);
 
     // フロントマターのキー名 / frontmatter key names
     new Setting(containerEl).setName(tr().setKeysHeading).setHeading();
