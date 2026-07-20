@@ -188,6 +188,11 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   },
 };
 
+// getSettingDefinitions() は Obsidian 1.13.0（現在 Early Access）専用。採用すると安定版 1.12.x で
+// 設定タブが表示されなくなるため、1.13.0 が正式版になるまで従来の display() を維持する。
+// getSettingDefinitions() needs Obsidian 1.13.0 (currently Early Access); adopting it would blank
+// the settings tab on the stable 1.12.x line, so we keep display() until 1.13.0 is GA.
+// eslint-disable-next-line obsidianmd/settings-tab/prefer-setting-definitions
 export class GanttSettingTab extends PluginSettingTab {
   plugin: GanttPlugin;
 
