@@ -2554,9 +2554,9 @@ export class GanttView extends ItemView {
     });
   }
 
-  // SVG 要素生成ヘルパー / SVG element helper
-  private svgEl(tag: string, attrs: Record<string, string | number>): SVGElement {
-    const el = activeDocument.createElementNS("http://www.w3.org/2000/svg", tag);
+  // SVG 要素生成ヘルパー（Obsidian の createSvg を使用）/ SVG element helper (uses Obsidian's createSvg)
+  private svgEl<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>): SVGElementTagNameMap[K] {
+    const el = createSvg(tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
     return el;
   }

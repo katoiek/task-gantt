@@ -313,11 +313,9 @@ export class GanttSettingTab extends PluginSettingTab {
       .setDesc(connected ? tr().gcalStatusConnected : tr().gcalStatusNotConnected)
       .addButton((b) => {
         if (connected) {
-          // setDestructive() は @since 1.13.0 で minAppVersion 1.7.2 と両立しない（no-unsupported-api エラー）。
-          // setWarning() は @deprecated だが「非推奨」は Recommendation（非ブロッキング）に留まるため、こちらを使う。
-          // setDestructive() requires @since 1.13.0, incompatible with minAppVersion 1.7.2 (trips no-unsupported-api).
-          // setWarning() is @deprecated but only a non-blocking Recommendation, so it's kept here instead.
-          b.setButtonText(tr().setGcalDisconnect).setWarning().onClick(() => void (async () => {
+          // 破壊的操作（連携解除）なので setDestructive()。minAppVersion 1.13.0 で利用可能。
+          // destructive action (disconnect) → setDestructive(); available at minAppVersion 1.13.0.
+          b.setButtonText(tr().setGcalDisconnect).setDestructive().onClick(() => void (async () => {
             await disconnectGoogle(this.plugin);
             this.draw();
           })());
@@ -402,14 +400,14 @@ export class GanttSettingTab extends PluginSettingTab {
     );
   }
 
-  // ===== display()（@deprecated 1.13.0 だが現状維持が唯一の解）=====
-  // 後継の getSettingDefinitions / update は @since 1.13.0 で、minAppVersion 1.7.2 と両立しない
-  // （使うと no-unsupported-api エラー、minAppVersion を 1.13.0 に上げると 1.12.x ユーザーを締め出す）。
-  // 非推奨 API の「呼び出し」を避けるため、再描画は this.draw() に委譲し this.display() は内部から呼ばない。
-  // ===== display() (@deprecated 1.13.0, but keeping it is the only viable option) =====
-  // Its successor getSettingDefinitions/update is @since 1.13.0 and incompatible with minAppVersion 1.7.2
-  // (using it trips no-unsupported-api; raising minAppVersion to 1.13.0 locks out 1.12.x users).
-  // To avoid invoking the deprecated API, redraws go via this.draw(); we never call this.display() ourselves.
+  // ===== display()（@deprecated 1.13.0 だが現状維持が妥当）=====
+  // 後継の宣言的 API（getSettingDefinitions）は、ステータス行・Google 認証・タグ色一覧など
+  // 独自/動的な UI を表現しきれないため採用しない。非推奨 API の「呼び出し」を避けるため、
+  // 再描画は this.draw() に委譲し this.display() は内部から呼ばない。
+  // ===== display() (@deprecated 1.13.0, but keeping it is the pragmatic choice) =====
+  // Its successor getSettingDefinitions is declarative and can't express this tab's custom/dynamic
+  // UI (status rows, Google auth, tag-color list), so we don't adopt it. To avoid invoking the
+  // deprecated API, redraws go via this.draw(); we never call this.display() ourselves.
   display(): void {
     this.draw();
   }
