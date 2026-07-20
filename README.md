@@ -4,7 +4,7 @@
 
 An interactive project-management Gantt for Obsidian. **One Markdown file = one task**; a configured folder is shown and edited as a "table + timeline" Gantt — drag bars to reschedule, link dependencies, set milestones, sort and filter, and move tasks between folders by dragging.
 
-> Requires **Obsidian 1.13.0 or later**.
+> Requires **Obsidian 1.7.2 or later**.
 
 ## Screenshots
 
@@ -227,7 +227,7 @@ MIT — see [`LICENSE`](./LICENSE).
 
 プロジェクト管理ツールのようなタスク管理 UI を Obsidian で実現するプラグインです。**1 ファイル = 1 タスク**とし、指定フォルダ配下を **「表＋タイムライン」ガント**で表示・編集します。バーのドラッグで日程変更、依存の作成、マイルストーン、ソート・フィルタ、ドラッグでのフォルダ移動などができます。
 
-> **Obsidian 1.13.0 以降**が必要です。
+> **Obsidian 1.7.2 以降**が必要です。
 
 ## スクリーンショット
 
