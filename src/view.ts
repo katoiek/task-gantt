@@ -1386,7 +1386,7 @@ export class GanttView extends ItemView {
           this.colorBy === "assignee"
             ? t.assignee ? hashColor(t.assignee) : FALLBACK_BAR
             : (t.status && statusColor.get(t.status)) || FALLBACK_BAR;
-        const rg = this.svgEl("g", { class: "ogantt-bar-g ogantt-rollup-g", "data-path": t.path }) as SVGGElement;
+        const rg = this.svgEl("g", { class: "ogantt-bar-g ogantt-rollup-g", "data-path": t.path });
         rg.appendChild(this.svgEl("rect", { x: sx, y: yy, width: sw, height: hh, rx: 4, class: "ogantt-bar ogantt-rollup-bar", fill: c }));
         const lbl = this.svgEl("text", { x: sx + sw + 6, y: i * ROW_H + ROW_H / 2 + 4, class: "ogantt-bar-label" });
         lbl.textContent = t.name;
@@ -1405,7 +1405,7 @@ export class GanttView extends ItemView {
           ? t.assignee ? hashColor(t.assignee) : FALLBACK_BAR
           : (t.status && statusColor.get(t.status)) || FALLBACK_BAR;
 
-      const g = this.svgEl("g", { class: "ogantt-bar-g", "data-path": t.path }) as SVGGElement;
+      const g = this.svgEl("g", { class: "ogantt-bar-g", "data-path": t.path });
       const cyMid = i * ROW_H + ROW_H / 2;
       let lx = x; // 左端ハンドル位置 / left handle x
       let rx = x; // 右端ハンドル位置 / right handle x
@@ -1703,7 +1703,7 @@ export class GanttView extends ItemView {
         const succPath = t.path;
         const predPath = dep.path;
         const depType = dep.type;
-        const depG = this.svgEl("g", { class: "ogantt-dep-g" }) as SVGGElement;
+        const depG = this.svgEl("g", { class: "ogantt-dep-g" });
 
         const hit = this.svgEl("path", { d, class: "ogantt-dep-hit" });
         const tip = this.svgEl("title", {});
@@ -1724,7 +1724,7 @@ export class GanttView extends ItemView {
         }
 
         // ホバーで出る × 目印 / X marker shown on hover
-        const xg = this.svgEl("g", { class: "ogantt-dep-x" }) as SVGGElement;
+        const xg = this.svgEl("g", { class: "ogantt-dep-x" });
         xg.appendChild(this.svgEl("circle", { cx: mxX, cy: mxY, r: 8, class: "ogantt-dep-x-bg" }));
         xg.appendChild(this.svgEl("path", {
           d: `M ${mxX - 3} ${mxY - 3} L ${mxX + 3} ${mxY + 3} M ${mxX + 3} ${mxY - 3} L ${mxX - 3} ${mxY + 3}`,
@@ -2090,7 +2090,7 @@ export class GanttView extends ItemView {
 
     // 本文 / body（既定は Obsidian と同じレンダリング表示。クリックで編集、フォーカスを外すと保存して表示に戻る）
     // body: rendered like Obsidian's reading view by default; click to edit, blur saves and returns to the rendered view
-    d.createEl("div", { cls: "ogantt-detail-label", text: tr().fieldBody });
+    d.createDiv({ cls: "ogantt-detail-label", text: tr().fieldBody });
     const bodyWrap = d.createDiv({ cls: "ogantt-detail-body" });
     const preview = bodyWrap.createDiv({ cls: "ogantt-detail-body-preview markdown-rendered" });
     const bodyArea = bodyWrap.createEl("textarea", { cls: "ogantt-detail-body-edit" });
