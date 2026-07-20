@@ -1,4 +1,4 @@
-import { ZoomMode, Task, DateFormat } from "./types";
+import { ZoomMode, Task, DateFormat, DateValue, DateOp } from "./types";
 
 const MS_PER_DAY = 86400000;
 
@@ -51,6 +51,55 @@ export function parseDate(text: string, fmt: DateFormat): string | null {
   const dt = new Date(`${iso}T00:00:00Z`);
   if (isNaN(dt.getTime()) || dt.getUTCMonth() + 1 !== mi || dt.getUTCDate() !== di) return null;
   return iso;
+}
+
+// ── 日付フィルタの解決・判定 / date-filter resolution & matching ──
+
+// DateValue を「今日（today）基準」で通日番号へ解決する。相対値・preset は
+// today に依存するため、描画のたびに再評価すれば日付変化に自動追従する。
+// resolve a DateValue to day index(es), relative to `today`; recomputing each
+// render makes relative/preset values follow the current date automatically.
+export function resolveDateValue(v: DateValue, today: number = todayIndex()): { from: number; to?: number } {
+  switch (v.kind) {
+    case "preset": {
+      const off = v.preset === "yesterday" ? -1 : v.preset === "tomorrow" ? 1 : 0;
+      return { from: today + off };
+    }
+    case "specific":
+      return { from: dayIndex(v.date) };
+    case "relative": {
+      const n = (v.dir === "ago" ? -1 : 1) * v.amount;
+      if (v.unit === "day") return { from: today + n };
+      if (v.unit === "week") return { from: today + n * 7 };
+      // month は暦月で加減算（Date.UTC が桁上げを処理）/ month uses calendar arithmetic
+      const d = new Date(today * MS_PER_DAY);
+      return { from: Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, d.getUTCDate()) / MS_PER_DAY) };
+    }
+    case "range":
+      return { from: dayIndex(v.from), to: dayIndex(v.to) };
+  }
+}
+
+// タスクの日付（通日番号 or 未設定）が 1 件の日付フィルタに合致するか。
+// 未設定日は empty 以外の演算子では除外する。値が未完成のフィルタは素通し。
+// does a task's date (day index or undefined) satisfy one date filter?
+// tasks without the date are excluded for every operator except `empty`;
+// an incomplete filter (missing value) is treated as no constraint.
+export function matchDate(dayIdx: number | undefined, f: { op: DateOp; value?: DateValue }, today: number = todayIndex()): boolean {
+  if (f.op === "empty") return dayIdx === undefined;
+  if (f.op === "notEmpty") return dayIdx !== undefined;
+  if (!f.value) return true; // 未完成のフィルタは無効 / incomplete filter = no effect
+  if (dayIdx === undefined) return false; // 日付なしは除外 / exclude tasks lacking the date
+  const r = resolveDateValue(f.value, today);
+  if (f.value.kind === "range") return r.to !== undefined && dayIdx >= r.from && dayIdx <= r.to;
+  switch (f.op) {
+    case "is": return dayIdx === r.from;
+    case "before": return dayIdx < r.from;
+    case "after": return dayIdx > r.from;
+    case "onOrBefore": return dayIdx <= r.from;
+    case "onOrAfter": return dayIdx >= r.from;
+    default: return true;
+  }
 }
 
 // ズームごとの 1 日あたりピクセル / pixels per day per zoom

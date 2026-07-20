@@ -1,6 +1,6 @@
 import { App, ItemView, Menu, MarkdownRenderer, Modal, WorkspaceLeaf, setIcon, Notice, TFile, ViewStateResult, moment } from "obsidian";
 import type GanttPlugin from "./main";
-import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT } from "./types";
+import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, DateValue, DateOp, DateField, DateUnit, DateDir } from "./types";
 import {
   collectTasks,
   collectFolders,
@@ -31,6 +31,7 @@ import {
   buildTicks,
   todayIndex,
   formatDate,
+  matchDate,
 } from "./timeline";
 import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
@@ -86,14 +87,12 @@ export class GanttView extends ItemView {
   // 表示オプション（ビューを開いている間だけ保持）/ view options (kept while the view is open)
   private colorBy: "status" | "assignee" = "status";
   private groupBy: "folder" | "status" | "assignee" | "tag" = "folder";
-  private filterStatus = ""; // "" = すべて / all
-  private filterAssignee = ""; // "" = すべて / all
-  private filterTag = ""; // "" = すべて / all
   private showEmptyFolders = true; // 空フォルダも行として表示（既定ON）/ show empty folders as rows (default on)
   private flat = false; // フラット表示（フォルダ/親子を無視し全タスク一覧）/ flat list ignoring folders & nesting
   private rollup = false; // 親タスクのバーを子孫の集約で描く（既定OFF）/ draw parent bars as a rollup of descendants (default off)
   private allFolders: string[][] = []; // スコープ配下の全フォルダ（相対セグメント）/ all folders under scope
-  private optionsHost!: HTMLElement; // フィルタ/グループ/凡例の差し替え先 / options + legend container
+  private optionsHost!: HTMLElement; // グループ/色分け/表示切替/凡例の差し替え先 / layout options + legend container
+  private filterHost!: HTMLElement; // 統合フィルタ行の差し替え先 / unified filter bar container
 
   // 取り消し履歴：操作前のファイル内容スナップショットと/またはファイル移動(from→to の配列)
   // undo history: a pre-op content snapshot and/or file moves (array of from → to)
@@ -183,6 +182,7 @@ export class GanttView extends ItemView {
     root.addClass("ogantt-board");
     this.renderToolbar(root);
     this.optionsHost = root.createDiv({ cls: "ogantt-options" }); // 中身は rerender で差し替え / repopulated on rerender
+    this.filterHost = root.createDiv({ cls: "ogantt-filterbar" }); // 統合フィルタ行（オプション行の下）/ filter row below options
     this.gridHost = root.createDiv({ cls: "ogantt-host" });
     this.detailEl = root.createDiv({ cls: "ogantt-detail" });
     // 詳細パネルの外側（ビュー内のどこか）をクリックしたら閉じる。キャプチャ段階で閉じることで、
@@ -219,7 +219,7 @@ export class GanttView extends ItemView {
       window.clearTimeout(this.fitTimer);
       this.fitTimer = null;
     }
-    activeDocument.querySelectorAll(".ogantt-cal, .ogantt-colmenu, .ogantt-timepick").forEach((e) => e.remove()); // 開いたままのポップオーバーを掃除 / drop any open popover
+    activeDocument.querySelectorAll(".ogantt-cal, .ogantt-colmenu, .ogantt-timepick, .ogantt-datemenu").forEach((e) => e.remove()); // 開いたままのポップオーバーを掃除 / drop any open popover
   }
 
   // ディスクから集計し直して再描画 / re-collect from disk, then render
@@ -234,7 +234,8 @@ export class GanttView extends ItemView {
   // ドラッグや整列の直後、metadataCache 更新前に正しい位置を即表示するため / shows correct positions before metadataCache updates
   rerender(): void {
     if (!this.gridHost) this.buildSkeleton();
-    this.renderOptions(); // フィルタ/グループ/凡例を最新データで更新 / refresh options + legend
+    this.renderOptions(); // グループ/色分け/凡例を最新データで更新 / refresh layout options + legend
+    this.renderFilterBar(); // 統合フィルタ行を最新データで更新 / refresh the unified filter row
     const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
     const compare = this.taskComparator();
     if (this.flat) {
@@ -369,20 +370,13 @@ export class GanttView extends ItemView {
     this.rerender();
   }
 
-  // 列の出し分けポップオーバー（チェックボックス）/ column-visibility popover (checkboxes)
-  private openColumnMenu(anchor: HTMLElement): void {
-    activeDocument.querySelectorAll(".ogantt-colmenu").forEach((e) => e.remove());
-    const menu = activeDocument.body.createDiv({ cls: "ogantt-colmenu" });
-    for (const id of OPTIONAL_COLUMNS) {
-      const item = menu.createEl("label", { cls: "ogantt-colmenu-item" });
-      const cb = item.createEl("input", { type: "checkbox" });
-      cb.checked = (this.plugin.settings.visibleColumns ?? []).includes(id);
-      item.createSpan({ text: this.colLabel(id) });
-      cb.addEventListener("change", () => this.setColumnVisible(id, cb.checked));
-    }
-    const r = anchor.getBoundingClientRect();
-    menu.style.top = `${r.bottom + 4}px`;
-    menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))}px`;
+  // 汎用ポップオーバー：anchor の直下に開き、外側クリック/Esc で閉じる。中身は build が構築する。
+  // 同じ cls の既存ポップオーバーは開く前に閉じる（同時に1つ）。リスナは close で必ず解除。
+  // generic popover under `anchor`, closed on outside-click/Esc; `build` fills it and receives `close`.
+  // any existing popover with the same cls is removed first (one at a time); listeners are always released in close.
+  private openPopover(anchor: HTMLElement, cls: string, build: (menu: HTMLElement, close: () => void) => void): void {
+    activeDocument.querySelectorAll(`.${cls}`).forEach((e) => e.remove());
+    const menu = activeDocument.body.createDiv({ cls });
     const close = () => {
       menu.remove();
       activeDocument.removeEventListener("pointerdown", onOutside, true);
@@ -395,8 +389,442 @@ export class GanttView extends ItemView {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); close(); }
     };
+    build(menu, close);
+    // 中身を作ってから幅を測って位置決め / measure width after building, then position
+    const r = anchor.getBoundingClientRect();
+    menu.style.top = `${r.bottom + 4}px`;
+    menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))}px`;
     activeDocument.addEventListener("pointerdown", onOutside, true);
     activeDocument.addEventListener("keydown", onKey, true);
+  }
+
+  // 列の出し分けポップオーバー（チェックボックス）/ column-visibility popover (checkboxes)
+  private openColumnMenu(anchor: HTMLElement): void {
+    this.openPopover(anchor, "ogantt-colmenu", (menu) => {
+      for (const id of OPTIONAL_COLUMNS) {
+        const item = menu.createEl("label", { cls: "ogantt-colmenu-item" });
+        const cb = item.createEl("input", { type: "checkbox" });
+        cb.checked = (this.plugin.settings.visibleColumns ?? []).includes(id);
+        item.createSpan({ text: this.colLabel(id) });
+        cb.addEventListener("change", () => this.setColumnVisible(id, cb.checked));
+      }
+    });
+  }
+
+  // ----- 統合フィルタ（ステータス/担当者/タグ/開始日/期限日）/ unified filter -----
+
+  // 保存＋盤面再描画（ポップオーバーは body 上なので残る）/ save + redraw board (popovers survive on body)
+  private commitFilters(): void {
+    void this.plugin.saveData(this.plugin.settings);
+    this.rerender();
+  }
+
+  // 日付演算子ラベル / date operator label
+  private dateOpLabel(op: DateOp): string {
+    const s = tr();
+    switch (op) {
+      case "is": return s.dfOpIs;
+      case "before": return s.dfOpBefore;
+      case "after": return s.dfOpAfter;
+      case "onOrBefore": return s.dfOpOnOrBefore;
+      case "onOrAfter": return s.dfOpOnOrAfter;
+      case "empty": return s.dfOpEmpty;
+      case "notEmpty": return s.dfOpNotEmpty;
+    }
+  }
+  // カテゴリ演算子ラベル / category operator label
+  private catOpLabel(op: CategoryOp): string {
+    const s = tr();
+    switch (op) {
+      case "is": return s.dfOpIs;
+      case "isNot": return s.dfOpIsNot;
+      case "empty": return s.dfOpEmpty;
+      case "notEmpty": return s.dfOpNotEmpty;
+    }
+  }
+  // 単位ラベル / relative unit label
+  private dateUnitLabel(u: DateUnit): string {
+    return u === "day" ? tr().dfDay : u === "week" ? tr().dfWeek : tr().dfMonth;
+  }
+  // テキスト（名前）演算子ラベル / text (name) operator label
+  private textOpLabel(op: TextOp): string {
+    const s = tr();
+    switch (op) {
+      case "is": return s.dfOpIs;
+      case "isNot": return s.dfOpIsNot;
+      case "contains": return s.textOpContains;
+      case "notContains": return s.textOpNotContains;
+      case "startsWith": return s.textOpStartsWith;
+      case "endsWith": return s.textOpEndsWith;
+    }
+  }
+  // フィルタのフィールド名 / a filter's field label
+  private filterFieldLabel(f: Filter): string {
+    if (f.kind === "date") return f.field === "start" ? tr().fieldStart : tr().fieldDue;
+    if (f.kind === "text") return tr().fieldName;
+    return f.field === "status" ? tr().fieldStatus : f.field === "assignee" ? tr().fieldAssignee : tr().fieldTags;
+  }
+  // チップ/メニューのアイコン / chip & menu icon
+  private filterIcon(f: Filter): string {
+    if (f.kind === "date") return "calendar";
+    if (f.kind === "text") return "type";
+    return f.field === "status" ? "filter" : f.field === "assignee" ? "user" : "tag";
+  }
+  // カテゴリ値のラベル（""＝未設定、ステータスは id→ラベル）/ a category value's label ("" = unset; status maps id→label)
+  private catValueLabel(field: CategoryField, value: string): string {
+    if (value === "") return tr().noneLabel; // 未設定 / unset
+    if (field === "status") return this.plugin.settings.statuses.find((s) => s.id === value)?.label ?? value;
+    return value;
+  }
+  // カテゴリの選択肢＋末尾に「未設定(")」/ available category values, plus an "unset" ("") entry at the end
+  private filterFieldValues(field: CategoryField): [string, string][] {
+    let base: [string, string][];
+    if (field === "status") base = this.plugin.settings.statuses.map((s) => [s.id, s.label] as [string, string]);
+    else if (field === "assignee") base = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort().map((a) => [a, a] as [string, string]);
+    else base = [...new Set(this.tasks.flatMap((t) => t.tags))].sort().map((tg) => [tg, tg] as [string, string]);
+    return [...base, ["", tr().noneLabel]]; // 「未設定」を選べるように / allow filtering by "unset"
+  }
+
+  // チップに出す 1 行サマリー / one-line chip summary
+  private filterSummary(f: Filter): string {
+    const field = this.filterFieldLabel(f);
+    if (f.kind === "date") {
+      const op = this.dateOpLabel(f.op);
+      const v = f.value;
+      let val = "";
+      if (v) {
+        const fmt = this.plugin.settings.dateFormat;
+        if (v.kind === "preset") val = v.preset === "today" ? tr().today : v.preset === "yesterday" ? tr().dfYesterday : tr().dfTomorrow;
+        else if (v.kind === "specific") val = formatDate(v.date, fmt);
+        else if (v.kind === "relative") val = `${v.amount} ${this.dateUnitLabel(v.unit)} ${v.dir === "ago" ? tr().dfAgo : tr().dfFromNow}`;
+        else val = `${formatDate(v.from, fmt)} ${tr().dfRangeTo} ${formatDate(v.to, fmt)}`;
+      }
+      return val ? `${field}: ${op} ${val}` : `${field}: ${op}`;
+    }
+    if (f.kind === "text") {
+      const q = f.value.trim();
+      return q ? `${field}: ${this.textOpLabel(f.op)} "${q}"` : `${field}: ${this.textOpLabel(f.op)}`;
+    }
+    if (f.op === "empty" || f.op === "notEmpty") return `${field}: ${this.catOpLabel(f.op)}`;
+    const shown = f.values.length ? f.values.map((v) => this.catValueLabel(f.field, v)).join(", ") : "…";
+    return f.op === "isNot" ? `${field}: ${this.catOpLabel("isNot")} ${shown}` : `${field}: ${shown}`;
+  }
+
+  // 統合フィルタ行：追加ボタン＋チップ＋一致条件トグル / the filter row: add button + chips + match toggle
+  private renderFilterBar(): void {
+    const host = this.filterHost;
+    host.empty();
+    const s = this.plugin.settings;
+    const filters = s.filters;
+    // 行頭のラベル（フィルタ行だと分かる見出し）/ a leading label so the row reads as "Filters"
+    setIcon(host.createSpan({ cls: "ogantt-filterbar-ico" }), "filter");
+    host.createSpan({ cls: "ogantt-filterbar-label", text: tr().dfLabel });
+    // プリセット（左・枠の外）/ presets (left, outside the frame)
+    const presetBtn = host.createEl("button", { cls: "ogantt-preset-btn clickable-icon" });
+    setIcon(presetBtn.createSpan({ cls: "ogantt-opt-ico" }), "bookmark");
+    presetBtn.createSpan({ text: tr().presetLabel });
+    setIcon(presetBtn.createSpan({ cls: "ogantt-preset-caret" }), "chevron-down");
+    presetBtn.onclick = () => this.openPresetMenu(presetBtn);
+    // 絞り込み本体を枠で囲む（Wrike 風）：追加ボタン＋チップ / a bordered group holding add-button + chips
+    const group = host.createDiv({ cls: "ogantt-filter-group" });
+    // フィルタ追加 / add a filter
+    const add = group.createEl("button", { cls: "ogantt-filter-add clickable-icon" });
+    setIcon(add.createSpan({ cls: "ogantt-opt-ico" }), "list-filter");
+    add.createSpan({ text: tr().dfAdd });
+    add.onclick = () => this.openAddFilterMenu(add);
+    // 適用中フィルタのチップ（クリックで編集／×で削除）/ active-filter chips (click to edit, × to remove)
+    filters.forEach((f, i) => {
+      const chip = group.createDiv({ cls: "ogantt-filter-chip" });
+      setIcon(chip.createSpan({ cls: "ogantt-filter-chip-ico" }), this.filterIcon(f));
+      chip.createSpan({ text: this.filterSummary(f) });
+      const x = chip.createSpan({ cls: "ogantt-filter-chip-x" });
+      setIcon(x, "x");
+      x.setAttr("aria-label", tr().dfRemove);
+      chip.onclick = (e) => { if (x.contains(e.target as Node)) return; this.openFilterEditor(chip, i); };
+      x.onclick = (e) => { e.stopPropagation(); filters.splice(i, 1); this.commitFilters(); };
+    });
+    // 2 件以上のとき、右端に AND/OR トグル / with 2+ filters, a match-all/any toggle on the right
+    if (filters.length >= 2) {
+      const match = host.createDiv({ cls: "ogantt-filter-match" });
+      match.createSpan({ cls: "ogantt-filter-match-label", text: tr().dfMatchLabel });
+      const sel = match.createEl("select");
+      for (const [val, text] of [["all", tr().dfMatchAll], ["any", tr().dfMatchAny]] as [FilterMatch, string][]) {
+        const o = sel.createEl("option", { text, value: val });
+        if (val === s.filterMatch) o.selected = true;
+      }
+      sel.onchange = () => { s.filterMatch = sel.value as FilterMatch; this.commitFilters(); };
+    }
+  }
+
+  // 「フィルタを追加」→ 項目選択メニュー / "Add filter" → field picker
+  private openAddFilterMenu(anchor: HTMLElement): void {
+    const m = new Menu();
+    // 名前（テキスト）/ name (text)
+    m.addItem((i) => i.setTitle(tr().fieldName).setIcon("type").onClick(() => {
+      this.plugin.settings.filters.push({ kind: "text", field: "name", op: "contains", value: "" });
+      this.commitFilters();
+      this.openLastFilterEditor();
+    }));
+    const addCat = (field: CategoryField, label: string, icon: string) => {
+      m.addItem((i) => i.setTitle(label).setIcon(icon).onClick(() => {
+        this.plugin.settings.filters.push({ kind: "category", field, op: "is", values: [] });
+        this.commitFilters();
+        this.openLastFilterEditor();
+      }));
+    };
+    addCat("status", tr().fieldStatus, "filter");
+    addCat("assignee", tr().fieldAssignee, "user");
+    if (this.tasks.some((t) => t.tags.length > 0)) addCat("tag", tr().fieldTags, "tag");
+    const addDate = (field: DateField, label: string) => {
+      m.addItem((i) => i.setTitle(label).setIcon("calendar").onClick(() => {
+        this.plugin.settings.filters.push({ kind: "date", field, op: "onOrAfter", value: { kind: "preset", preset: "today" } });
+        this.commitFilters();
+        this.openLastFilterEditor();
+      }));
+    };
+    addDate("start", tr().fieldStart);
+    addDate("end", tr().fieldDue);
+    const r = anchor.getBoundingClientRect();
+    m.showAtPosition({ x: r.left, y: r.bottom + 4 });
+  }
+
+  // 追加直後、最後のフィルタのエディタを開く / open the just-added filter's editor
+  private openLastFilterEditor(): void {
+    const chips = this.filterHost.querySelectorAll(".ogantt-filter-chip");
+    const last = chips[chips.length - 1] as HTMLElement | undefined;
+    if (last) this.openFilterEditor(last, this.plugin.settings.filters.length - 1);
+  }
+
+  // 組み込みプリセット（コード内蔵・削除不可・名前は表示言語で都度生成）/ built-in presets (not deletable)
+  private builtinPresets(): FilterPreset[] {
+    const today: DateValue = { kind: "preset", preset: "today" };
+    return [
+      // 日付なし＝開始も期限も未設定（＝ガントバーが出ない）/ no start and no end → no bar
+      { name: tr().presetNoDates, filterMatch: "all", filters: [
+        { kind: "date", field: "start", op: "empty" },
+        { kind: "date", field: "end", op: "empty" },
+      ] },
+      // 日付あり＝開始 or 期限がある / has a start or an end
+      { name: tr().presetHasDates, filterMatch: "any", filters: [
+        { kind: "date", field: "start", op: "notEmpty" },
+        { kind: "date", field: "end", op: "notEmpty" },
+      ] },
+      // 期限切れ＝期限が今日より前 / due before today
+      { name: tr().presetOverdue, filterMatch: "all", filters: [
+        { kind: "date", field: "end", op: "before", value: today },
+      ] },
+      // 未割り当て＝担当者なし / no assignee
+      { name: tr().presetUnassigned, filterMatch: "all", filters: [
+        { kind: "category", field: "assignee", op: "empty", values: [] },
+      ] },
+    ];
+  }
+
+  // プリセットを適用（現在の filters/一致条件を丸ごと差し替え）/ apply a preset (replaces filters + match)
+  private applyPreset(p: FilterPreset): void {
+    const clone = JSON.parse(JSON.stringify(p)) as FilterPreset; // 参照共有を避ける / avoid sharing references
+    this.plugin.settings.filters = clone.filters;
+    this.plugin.settings.filterMatch = clone.filterMatch;
+    this.commitFilters();
+  }
+
+  // 現在のフィルタ構成をプリセットとして保存 / save the current filter config as a preset
+  private savePreset(name: string): void {
+    const s = this.plugin.settings;
+    s.filterPresets.push({ name, filterMatch: s.filterMatch, filters: JSON.parse(JSON.stringify(s.filters)) as Filter[] });
+    this.commitFilters();
+  }
+
+  // プリセットのポップオーバー（組み込み＋マイプリセット＋保存/クリア）/ presets popover
+  private openPresetMenu(anchor: HTMLElement): void {
+    const s = this.plugin.settings;
+    this.openPopover(anchor, "ogantt-datemenu", (menu, close) => {
+      menu.addClass("ogantt-presetmenu");
+      const renderBody = () => {
+        menu.empty();
+        // 組み込み / built-in
+        menu.createDiv({ cls: "ogantt-preset-heading", text: tr().presetBuiltinHeading });
+        for (const p of this.builtinPresets()) {
+          const item = menu.createDiv({ cls: "ogantt-preset-item" });
+          item.createSpan({ text: p.name });
+          item.onclick = () => { this.applyPreset(p); close(); };
+        }
+        // マイプリセット（クリックで適用／ゴミ箱で削除）/ user presets (apply on click, trash to delete)
+        if (s.filterPresets.length > 0) {
+          menu.createDiv({ cls: "ogantt-preset-heading", text: tr().presetUserHeading });
+          s.filterPresets.forEach((p, i) => {
+            const item = menu.createDiv({ cls: "ogantt-preset-item" });
+            item.createSpan({ text: p.name });
+            const del = item.createSpan({ cls: "ogantt-preset-del" });
+            setIcon(del, "trash-2");
+            del.setAttr("aria-label", tr().presetDelete);
+            item.onclick = (e) => { if (del.contains(e.target as Node)) return; this.applyPreset(p); close(); };
+            del.onclick = (e) => { e.stopPropagation(); s.filterPresets.splice(i, 1); this.commitFilters(); renderBody(); };
+          });
+        }
+        // 現在フィルタがあるとき：保存フォーム＋クリア / when filters exist: save form + clear
+        if (s.filters.length > 0) {
+          menu.createDiv({ cls: "ogantt-preset-sep" });
+          const save = menu.createDiv({ cls: "ogantt-preset-save" });
+          const input = save.createEl("input", { type: "text", cls: "ogantt-preset-name" });
+          input.placeholder = tr().presetNamePlaceholder;
+          const btn = save.createEl("button", { cls: "ogantt-preset-savebtn", text: tr().presetSave });
+          const doSave = () => { const name = input.value.trim(); if (!name) { input.focus(); return; } this.savePreset(name); renderBody(); };
+          btn.onclick = doSave;
+          input.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); doSave(); } };
+          const clear = menu.createDiv({ cls: "ogantt-preset-item ogantt-preset-clear" });
+          setIcon(clear.createSpan({ cls: "ogantt-preset-item-ico" }), "x");
+          clear.createSpan({ text: tr().presetClear });
+          clear.onclick = () => { s.filters = []; s.filterMatch = "all"; this.commitFilters(); close(); };
+        }
+      };
+      renderBody();
+    });
+  }
+
+  // フィルタ 1 件の編集ポップオーバー / editor popover for one filter
+  private openFilterEditor(anchor: HTMLElement, index: number): void {
+    const f = this.plugin.settings.filters[index];
+    if (!f) return;
+    this.openPopover(anchor, "ogantt-datemenu", (menu, close) => {
+      const commit = () => this.commitFilters();
+      const renderBody = () => {
+        menu.empty();
+        // 見出し：フィールド名＋削除 / header: field name + remove
+        const head = menu.createDiv({ cls: "ogantt-datemenu-head" });
+        setIcon(head.createSpan({ cls: "ogantt-datemenu-field-ico" }), this.filterIcon(f));
+        head.createSpan({ cls: "ogantt-datemenu-field", text: this.filterFieldLabel(f) });
+        const del = head.createEl("button", { cls: "ogantt-datemenu-del clickable-icon" });
+        setIcon(del, "trash-2");
+        del.setAttr("aria-label", tr().dfRemove);
+        del.onclick = () => { this.plugin.settings.filters.splice(index, 1); commit(); close(); };
+
+        if (f.kind === "category") this.renderCategoryEditor(menu, f, commit, renderBody);
+        else if (f.kind === "text") this.renderTextEditor(menu, f, commit);
+        else this.renderDateEditor(menu, f, commit, renderBody);
+      };
+      renderBody();
+    });
+  }
+
+  // カテゴリ（ステータス/担当者/タグ）のエディタ本体 / category editor body
+  private renderCategoryEditor(menu: HTMLElement, f: CategoryFilter, commit: () => void, rebuild: () => void): void {
+    const opRow = menu.createDiv({ cls: "ogantt-datemenu-val" });
+    const opSel = opRow.createEl("select");
+    for (const op of ["is", "isNot", "empty", "notEmpty"] as CategoryOp[]) {
+      const o = opSel.createEl("option", { text: this.catOpLabel(op), value: op });
+      if (op === f.op) o.selected = true;
+    }
+    opSel.onchange = () => { f.op = opSel.value as CategoryOp; commit(); rebuild(); };
+    // is/isNot のとき値のチェックリスト（フィールド内は OR）/ value checklist for is/isNot (OR within field)
+    if (f.op === "is" || f.op === "isNot") {
+      const listEl = menu.createDiv({ cls: "ogantt-datemenu-checklist" });
+      const values = this.filterFieldValues(f.field);
+      if (values.length === 0) { listEl.createDiv({ cls: "ogantt-datemenu-empty", text: tr().noneLabel }); return; }
+      for (const [val, label] of values) {
+        const item = listEl.createEl("label", { cls: "ogantt-datemenu-check" });
+        const cb = item.createEl("input", { type: "checkbox" });
+        cb.checked = f.values.includes(val);
+        item.createSpan({ text: label });
+        cb.onchange = () => {
+          if (cb.checked) { if (!f.values.includes(val)) f.values.push(val); }
+          else f.values = f.values.filter((x) => x !== val);
+          commit(); // チェック状態はローカルに残るので rebuild 不要 / no rebuild: checkbox keeps its own state
+        };
+      }
+    }
+  }
+
+  // テキスト（タスク名）のエディタ本体 / text (task name) editor body
+  private renderTextEditor(menu: HTMLElement, f: TextFilter, commit: () => void): void {
+    const opRow = menu.createDiv({ cls: "ogantt-datemenu-val" });
+    const opSel = opRow.createEl("select");
+    for (const op of ["is", "isNot", "contains", "notContains", "startsWith", "endsWith"] as TextOp[]) {
+      const o = opSel.createEl("option", { text: this.textOpLabel(op), value: op });
+      if (op === f.op) o.selected = true;
+    }
+    opSel.onchange = () => { f.op = opSel.value as TextOp; commit(); };
+    const body = menu.createDiv({ cls: "ogantt-datemenu-val" });
+    const input = body.createEl("input", { type: "text", cls: "ogantt-datemenu-text" });
+    input.value = f.value;
+    input.oninput = () => { f.value = input.value; commit(); }; // 入力ごとに絞り込み / filter live as you type
+  }
+
+  // 日付（開始日/期限日）のエディタ本体 / date editor body
+  private renderDateEditor(menu: HTMLElement, f: DateFilterItem, commit: () => void, rebuild: () => void): void {
+    const todayISO = dayToStr(todayIndex());
+    // モード（プリセット名 or 種類）→ 既定の DateValue / a mode (preset name or kind) → a default DateValue
+    const valueForMode = (mode: string): DateValue => {
+      switch (mode) {
+        case "yesterday": case "today": case "tomorrow": return { kind: "preset", preset: mode };
+        case "specific": return { kind: "specific", date: todayISO };
+        case "relative": return { kind: "relative", amount: 1, unit: "day", dir: "fromNow" };
+        case "range": return { kind: "range", from: todayISO, to: todayISO };
+        default: return { kind: "preset", preset: "today" };
+      }
+    };
+    const opRow = menu.createDiv({ cls: "ogantt-datemenu-val" });
+    const opSel = opRow.createEl("select");
+    for (const op of ["is", "before", "after", "onOrBefore", "onOrAfter", "empty", "notEmpty"] as DateOp[]) {
+      const o = opSel.createEl("option", { text: this.dateOpLabel(op), value: op });
+      if (op === f.op) o.selected = true;
+    }
+    opSel.onchange = () => {
+      const op = opSel.value as DateOp;
+      f.op = op;
+      if (op === "empty" || op === "notEmpty") f.value = undefined;
+      else if (!f.value) f.value = valueForMode("today");
+      else if (f.value.kind === "range" && op !== "is") f.value = valueForMode("today"); // range は「is」専用 / range is "is"-only
+      commit();
+      rebuild();
+    };
+    if (f.op === "empty" || f.op === "notEmpty") return;
+
+    const body = menu.createDiv({ cls: "ogantt-datemenu-val" });
+    const modeSel = body.createEl("select");
+    const modes: [string, string][] = [
+      ["today", tr().today], ["yesterday", tr().dfYesterday], ["tomorrow", tr().dfTomorrow],
+      ["specific", tr().dfKindSpecific], ["relative", tr().dfKindRelative],
+    ];
+    if (f.op === "is") modes.push(["range", tr().dfKindRange]); // 期間は「is」のみ / range only for "is"
+    const curMode = !f.value ? "today" : f.value.kind === "preset" ? f.value.preset : f.value.kind;
+    for (const [val, text] of modes) {
+      const o = modeSel.createEl("option", { text, value: val });
+      if (val === curMode) o.selected = true;
+    }
+    modeSel.onchange = () => { f.value = valueForMode(modeSel.value); commit(); rebuild(); };
+
+    const v = f.value;
+    if (v?.kind === "specific") {
+      const inp = body.createEl("input", { type: "date" });
+      inp.value = v.date;
+      inp.onchange = () => { if (inp.value) { v.date = inp.value; commit(); } };
+    } else if (v?.kind === "relative") {
+      const num = body.createEl("input", { type: "number", cls: "ogantt-datemenu-num" });
+      num.min = "1";
+      num.value = String(v.amount);
+      num.onchange = () => { const n = Math.max(1, Math.floor(+num.value || 1)); v.amount = n; num.value = String(n); commit(); };
+      const unitSel = body.createEl("select");
+      for (const [u, text] of [["day", tr().dfDay], ["week", tr().dfWeek], ["month", tr().dfMonth]] as [DateUnit, string][]) {
+        const o = unitSel.createEl("option", { text, value: u });
+        if (u === v.unit) o.selected = true;
+      }
+      unitSel.onchange = () => { v.unit = unitSel.value as DateUnit; commit(); };
+      const dirSel = body.createEl("select");
+      for (const [d, text] of [["fromNow", tr().dfFromNow], ["ago", tr().dfAgo]] as [DateDir, string][]) {
+        const o = dirSel.createEl("option", { text, value: d });
+        if (d === v.dir) o.selected = true;
+      }
+      dirSel.onchange = () => { v.dir = dirSel.value as DateDir; commit(); };
+    } else if (v?.kind === "range") {
+      const from = body.createEl("input", { type: "date" });
+      from.value = v.from;
+      from.onchange = () => { if (from.value) { v.from = from.value; commit(); } };
+      body.createSpan({ cls: "ogantt-datemenu-sep", text: tr().dfRangeTo });
+      const to = body.createEl("input", { type: "date" });
+      to.value = v.to;
+      to.onchange = () => { if (to.value) { v.to = to.value; commit(); } };
+    }
   }
 
   // ----- ツールバー / toolbar -----
@@ -448,10 +876,8 @@ export class GanttView extends ItemView {
     host.empty();
     const statuses = this.plugin.settings.statuses;
     const none = tr().noneLabel;
-    // 現在のフォルダ内に実在する担当者一覧 / assignees actually present in the current folder
+    // 現在のフォルダ内に実在する担当者一覧（凡例で使用）/ assignees present in the folder (used by the legend)
     const assignees = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort();
-    // 現在のフォルダ内に実在するタグ一覧 / tags actually present in the current folder
-    const tags = [...new Set(this.tasks.flatMap((t) => t.tags))].sort();
 
     const makeSelect = (icon: string, label: string, value: string, opts: [string, string][], on: (v: string) => void): void => {
       const wrap = host.createDiv({ cls: "ogantt-opt" });
@@ -501,35 +927,9 @@ export class GanttView extends ItemView {
       (v) => { this.colorBy = v as typeof this.colorBy; this.rerender(); }
     );
 
-    // ── 絞り込み（フィルタ）と視覚的に分ける区切り / divider before filters ──
+    // ── 表示切替（絞り込みは下の統合フィルタ行へ集約）/ display toggles (filtering lives in the filter row below) ──
     host.createDiv({ cls: "ogantt-opt-divider" });
 
-    // ステータスで絞り込み / filter by status
-    makeSelect(
-      "filter",
-      tr().fieldStatus,
-      this.filterStatus,
-      [["", tr().filterAll], ...statuses.map((s) => [s.id, s.label] as [string, string])],
-      (v) => { this.filterStatus = v; this.rerender(); }
-    );
-    // 担当者で絞り込み / filter by assignee
-    makeSelect(
-      "user",
-      tr().fieldAssignee,
-      this.filterAssignee,
-      [["", tr().filterAll], ...assignees.map((a) => [a, a] as [string, string])],
-      (v) => { this.filterAssignee = v; this.rerender(); }
-    );
-    // タグで絞り込み（タグが1つも無ければ非表示）/ filter by tag (hidden when no tags exist)
-    if (tags.length > 0) {
-      makeSelect(
-        "tag",
-        tr().fieldTags,
-        this.filterTag,
-        [["", tr().filterAll], ...tags.map((tg) => [tg, tg] as [string, string])],
-        (v) => { this.filterTag = v; this.rerender(); }
-      );
-    }
     // 空フォルダ表示の切替（フォルダグループ化時のみ・フラットでは無効）/ show-empty-folders (folder grouping only; off in flat)
     if (this.groupBy === "folder" && !this.flat) {
       makeCheckbox("folder", tr().optShowEmpty, this.showEmptyFolders, (v) => {
@@ -615,12 +1015,51 @@ export class GanttView extends ItemView {
     m.showAtMouseEvent(e);
   }
 
+  // 統合フィルタ 1 件がタスクに合致するか / does one unified filter match a task
+  private matchFilter(t: Task, f: Filter, today: number): boolean {
+    if (f.kind === "date") {
+      const iso = f.field === "start" ? anchorStart(t) : anchorEnd(t);
+      return matchDate(iso ? dayIndex(iso) : undefined, f, today);
+    }
+    // テキスト（タスク名）：大文字小文字を無視。空の入力は素通し / text (name): case-insensitive; empty query = no effect
+    if (f.kind === "text") {
+      const q = f.value.trim().toLowerCase();
+      if (q === "") return true;
+      const name = t.name.toLowerCase();
+      switch (f.op) {
+        case "is": return name === q;
+        case "isNot": return name !== q;
+        case "contains": return name.includes(q);
+        case "notContains": return !name.includes(q);
+        case "startsWith": return name.startsWith(q);
+        case "endsWith": return name.endsWith(q);
+      }
+    }
+    // カテゴリ（ステータス/担当者/タグ）：タスクの該当値集合を作って判定 / category: build the task's value set
+    const vals = f.field === "status" ? (t.status ? [t.status] : [])
+      : f.field === "assignee" ? (t.assignee ? [t.assignee] : [])
+        : t.tags;
+    if (f.op === "empty") return vals.length === 0;
+    if (f.op === "notEmpty") return vals.length > 0;
+    // 値 "" は「未設定」を表すセンチネル。フィールド内は OR / "" is the "unset" sentinel; OR within the field
+    const hit = f.values.some((v) => (v === "" ? vals.length === 0 : vals.includes(v)));
+    return f.op === "isNot" ? !hit : hit;
+  }
+
   // フィルタ→グループ再マッピングを適用したタスク列を返す / tasks after filter + group remap
   private processTasks(): Task[] {
     let list = this.tasks;
-    if (this.filterStatus) list = list.filter((t) => (t.status ?? "") === this.filterStatus);
-    if (this.filterAssignee) list = list.filter((t) => (t.assignee ?? "") === this.filterAssignee);
-    if (this.filterTag) list = list.filter((t) => t.tags.includes(this.filterTag));
+    // 統合フィルタを filterMatch（all=AND / any=OR）で結合。today は 1 回だけ評価して共有
+    // combine unified filters by filterMatch; evaluate `today` once and share it
+    const { filters, filterMatch } = this.plugin.settings;
+    if (filters.length > 0) {
+      const today = todayIndex();
+      list = list.filter((t) =>
+        filterMatch === "any"
+          ? filters.some((f) => this.matchFilter(t, f, today))
+          : filters.every((f) => this.matchFilter(t, f, today))
+      );
+    }
     // フラットはグループを無視＝再マッピング不要（タグ複製で重複行が出るのも防ぐ）/ flat ignores groups: skip remap (also avoids tag-duplicated rows)
     if (this.groupBy === "folder" || this.flat) return list;
     const none = tr().noneLabel;

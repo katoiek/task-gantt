@@ -5,6 +5,7 @@ main.js.map
 .DS_Store
 test/model.mjs
 test/gcal-map.mjs
+test/timeline.mjs
 
 # テスト用 Vault（リポジトリ直下・コミットしない）/ local dev vault, never committed
 Obsidian-Dev/

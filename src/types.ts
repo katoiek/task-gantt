@@ -36,6 +36,68 @@ export interface Task {
   tags: string[]; // タグ（# 抜き・本文/フロントマター両方を統合）/ tags (without #, frontmatter + inline)
 }
 
+// ── 日付フィルタ（Wrike 風の 開始日/期限日 絞り込み）/ date filter (Wrike-style start/due filtering) ──
+// 対象フィールド（開始日 / 期限日）/ target field (start date / due date)
+export type DateField = "start" | "end";
+// 演算子（画像7の7種）/ operators (the 7 shown in the Wrike UI)
+export type DateOp =
+  | "is" // 一致 / equals
+  | "before" // より前 / strictly before
+  | "after" // より後 / strictly after
+  | "onOrBefore" // 以前 / on or before
+  | "onOrAfter" // 以後 / on or after
+  | "empty" // 未設定 / no date
+  | "notEmpty"; // 設定あり / has a date
+// 相対日の単位・方向 / relative-date unit & direction
+export type DateUnit = "day" | "week" | "month";
+export type DateDir = "ago" | "fromNow";
+// 値（演算子により選べる種類が変わる）/ the value (which kinds are allowed depends on the operator)
+export type DateValue =
+  | { kind: "preset"; preset: "yesterday" | "today" | "tomorrow" } // クイック / quick presets
+  | { kind: "specific"; date: string } // 具体日（ISO YYYY-MM-DD）/ a fixed calendar date
+  | { kind: "relative"; amount: number; unit: DateUnit; dir: DateDir } // 相対日（今日基準・毎回再計算）/ relative to today, recomputed each render
+  | { kind: "range"; from: string; to: string }; // 期間（op="is" のみ・ISO 両端）/ a date range (op "is" only)
+// 日付フィルタ 1 件 / one date filter (start/due)
+export interface DateFilterItem {
+  kind: "date";
+  field: DateField;
+  op: DateOp;
+  value?: DateValue; // empty/notEmpty では未使用 / unused for empty/notEmpty
+}
+
+// ── カテゴリ系フィルタ（ステータス/担当者/タグ）/ category filter (status/assignee/tag) ──
+export type CategoryField = "status" | "assignee" | "tag";
+// と一致 / 以外 / 未設定 / 設定あり / is / is not / is empty / is not empty
+export type CategoryOp = "is" | "isNot" | "empty" | "notEmpty";
+export interface CategoryFilter {
+  kind: "category";
+  field: CategoryField;
+  op: CategoryOp;
+  values: string[]; // is/isNot の対象値（フィールド内は OR）。ステータスは id を格納 / selected values (OR within field); status stores ids
+}
+
+// ── テキスト系フィルタ（タスク名）/ text filter (task name) ──
+export type TextField = "name";
+// と一致 / 以外 / を含む / を含まない / で始まる / で終わる
+export type TextOp = "is" | "isNot" | "contains" | "notContains" | "startsWith" | "endsWith";
+export interface TextFilter {
+  kind: "text";
+  field: TextField;
+  op: TextOp;
+  value: string; // 空文字は素通し（絞り込まない）/ empty string = no effect
+}
+
+// 統合フィルタ（カテゴリ or 日付 or テキスト）と結合方法 / a unified filter + how multiple filters combine
+export type Filter = CategoryFilter | DateFilterItem | TextFilter;
+export type FilterMatch = "all" | "any"; // all=AND / any=OR
+
+// フィルタ構成のプリセット（filters＋一致条件をひとまとめに）/ a saved filter configuration
+export interface FilterPreset {
+  name: string;
+  filters: Filter[];
+  filterMatch: FilterMatch;
+}
+
 // グループ（フォルダ）見出し or タスク、を一列に並べた表示行 / a display row
 export interface Row {
   kind: "group" | "task";

@@ -1,6 +1,6 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import type GanttPlugin from "./main";
-import { StatusDef, ZoomMode, DateFormat } from "./types";
+import { StatusDef, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset } from "./types";
 import { t as tr } from "./i18n";
 import { LEADS, leadLabel, sendTestNotification } from "./notify";
 import { connectGoogle, disconnectGoogle, isConnected } from "./gcal/auth";
@@ -64,6 +64,10 @@ export interface GanttSettings {
   columnWidths: Record<string, number>; // 列幅の上書き(px)。未設定列は既定幅 / per-column width overrides (px); unset = default
   sortBy: string; // ソート列 id（name/start/end/assignee/status）/ sort column id
   sortDir: "asc" | "desc"; // ソート方向 / sort direction
+  // 統合フィルタ（ステータス/担当者/タグ/開始日/期限日）と結合方法 / unified filters + combine mode
+  filters: Filter[];
+  filterMatch: FilterMatch; // all=すべてに一致(AND) / any=いずれかに一致(OR)
+  filterPresets: FilterPreset[]; // ユーザー定義のフィルタプリセット / user-defined filter presets
   // タグ/フォルダの色（手動上書き。未登録は名前ハッシュで自動生成）/ manual color overrides (unset → auto from name hash)
   tagColors: { name: string; color: string }[];
   folderColors: { name: string; color: string }[];
@@ -138,6 +142,9 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   columnWidths: {},
   sortBy: "start",
   sortDir: "asc",
+  filters: [],
+  filterMatch: "all",
+  filterPresets: [],
   tagColors: [],
   folderColors: [],
   notify: {
