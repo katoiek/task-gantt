@@ -25,7 +25,7 @@ Click a task to open the detail panel and edit its dates, status, assignee, prog
 1. In **Settings → Task Gantt**, set the **target folder** (e.g. `Projects/Cleanup`).
 2. Open the view from the **"Open Gantt" ribbon icon** in the left column (or the command **"Open Gantt"**). The ribbon opens the Gantt for the folder of the currently open note — or the folder selected in the file explorer — and falls back to the default folder in settings (the **vault root** when none is set). You can also right-click any folder → **Open as Gantt**.
 3. Direct subfolders become **groups**, and the `.md` files inside them become **tasks**.
-4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter. You can also **double-click a Start/Due cell** in the table to pick a date from a calendar.
+4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter. You can also **double-click a Start/Due cell** in the table to pick a date from a calendar, or **double-click a Progress cell** to type a percentage (0–100; blank or 0 clears it).
 5. Click a task in the table — or **double-click its bar** — to slide in a **detail panel** (dates, status, assignee, progress, body) from the right.
 6. Use the **＋ New task** button to create a one-day task in the current folder and name it on the spot, and **Today** to scroll the timeline to the current date.
 7. Use the **Day / Week / Month / Fit** buttons to change the timeline scale. **Fit** auto-scales to the pane width and re-fits when you resize.
@@ -44,13 +44,15 @@ An options row above the table shapes how the board is displayed.
 
 ![Click a column header to sort, with an ↑/↓ indicator](docs/images/sort-en.png)
 
-**Choose columns** with the gear button — show or hide Start, Due, Assignee, and Status. The column layout and sort are remembered across sessions:
+**Choose columns** with the gear button — show or hide Start, Due, Progress, Assignee, Status, and Tags. The column layout and sort are remembered across sessions:
 
 ![Show or hide table columns from the gear menu](docs/images/column_en.png)
 
 **Flat view** lists every task in one sorted list, ignoring folders and nesting:
 
 ![Flat view: all tasks in a single sorted list](docs/images/flatview-en.png)
+
+**Progress line** draws a jagged line down the board from today, bending to each task's achieved progress: **left of today means behind schedule, right means ahead**. Per row, the line sits at the point on the bar matching the task's `progress` — so a task due last week but only 40% done pulls the line back to its 40% mark. Tasks at 100% and tasks that haven't started yet (and aren't due to) stay on the today line, as do folder rows and rolled-up parent bars. A task past its start date with no progress pulls the line back to its start date. Its color is configurable in **Settings → Task Gantt → Progress line color**.
 
 ## Filters
 
@@ -92,7 +94,7 @@ Tags and folders get an automatic color from their name, and you can override it
 
 ## Creating tasks
 
-Press **＋ New task** to create a dated note in the current folder and rename it immediately. You don't have to start there, though: every note inside the target folder already appears as a row — **including notes with no dates yet** — so you can also click an existing note and set **Start** / **Due** in the detail panel to turn it into a scheduled task.
+Press **＋ New task** to create a dated note in the current folder and rename it immediately. You don't have to start there, though: every note inside the target folder already appears as a row — **including notes with no dates yet** — so you can also click an existing note and set **Start** / **Due** in the detail panel to turn it into a scheduled task. Empty Start, Due, and Progress cells are double-click editable too, so you can fill a blank value straight from the table.
 
 ## Task frontmatter
 
@@ -118,7 +120,7 @@ The body is the task description (shown in the detail panel).
 | `start` / `end` | Start / end date `YYYY-MM-DD` (bar position and length). A time of day can be added as `YYYY-MM-DDTHH:mm+09:00` (edit via the detail panel; the offset follows the **Timezone** setting). |
 | `status` | Status ID (defined in settings, reflected in bar color). |
 | `assignee` | Assignee (label shown next to the bar). |
-| `progress` | Progress 0–100 (fill inside the bar; editable with the detail-panel slider). |
+| `progress` | Progress 0–100 (fill inside the bar; editable with the detail-panel slider, or by double-clicking the **Progress** column). |
 | `after` | Array of wikilinks to predecessors (dependency arrows; violations turn red). |
 | `milestone` | `true` for a diamond (zero duration). |
 | `gcal` | `true` opts the task into [Google Calendar sync](#google-calendar-sync-optional-desktop-only) (only used when **Sync flagged tasks only** is on). |
@@ -141,6 +143,8 @@ Open **Settings → Task Gantt** to configure the default folder, subfolder recu
 The **Timezone** setting (system or a fixed GMT offset, listed with representative cities) controls how times of day are displayed and saved. Changing it re-displays stored times in the new offset.
 
 ![Timezone setting with representative cities](docs/images/timezone-en.png)
+
+The **Progress line color** setting sets the color of the jagged line drawn by the **Progress line** view option, with a button to reset it to the default amber.
 
 **Statuses are fully customizable** — add, edit, or delete them. Each status has an **id** (matches the `status` frontmatter value), a **label**, and a **color** reflected in the bar.
 
@@ -248,7 +252,7 @@ MIT — see [`LICENSE`](./LICENSE).
 1. **設定 → Task Gantt** で**対象フォルダ**を指定（例: `Projects/お掃除`）。
 2. 左列の **「Gantt を開く」リボンアイコン**（またはコマンド「Gantt を開く」）でビューを開く。リボンは、**現在開いているノートのフォルダ**（またはエクスプローラで選択中のフォルダ）を Gantt 表示し、どちらも無ければ設定の既定フォルダ（未設定なら **Vault ルート**）を開きます。フォルダを右クリック →**「Open as Gantt」**でも開けます。
 3. 直下のサブフォルダが**グループ**、その中の `.md` が**タスク**になります。
-4. バーを**ドラッグ／端をリサイズ**すると、そのファイルの `start`/`end` に書き戻します。表の**開始・期限セルをダブルクリック**すると、カレンダーから日付を選べます。
+4. バーを**ドラッグ／端をリサイズ**すると、そのファイルの `start`/`end` に書き戻します。表の**開始・期限セルをダブルクリック**するとカレンダーから日付を選べ、**進捗セルをダブルクリック**すると % を直接入力できます（0–100。空欄または 0 で未設定に戻ります）。
 5. 表のタスクをクリック、または**バーをダブルクリック**すると、右から**詳細パネル**（日付・ステータス・担当者・進捗・本文）がスライドインします。
 6. **＋ 新規タスク**ボタンで現在のフォルダに1日タスクを作ってその場で命名、**今日**ボタンでタイムラインを今日へスクロールできます。
 7. **Day / Week / Month / Fit** ボタンで時間軸の拡大率を変更。**Fit** はペイン幅に自動で収め、リサイズにも追従します。
@@ -267,13 +271,15 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![列ヘッダのクリックでソート（↑/↓ 表示）](docs/images/sort-ja.png)
 
-**列の表示**は歯車ボタンから、開始・期限・担当者・ステータスを出し分け。列レイアウトとソートはセッションをまたいで保存されます：
+**列の表示**は歯車ボタンから、開始・期限・進捗・担当者・ステータス・タグを出し分け。列レイアウトとソートはセッションをまたいで保存されます：
 
 ![歯車メニューから列を表示／非表示](docs/images/column_ja.png)
 
 **フラット表示**は、フォルダや入れ子を無視して全タスクを1本のソート済みリストで表示します：
 
 ![フラット表示：全タスクを1本のソート済みリストで](docs/images/flatview-ja.png)
+
+**稲妻線**は、今日を基準にした垂線を各タスクの実績到達点まで折り曲げた折れ線です。**今日より左に折れれば遅れ、右なら進み**を意味します。各行の点は、タスクの `progress` に対応するバー上の位置に置かれます（先週が期限なのに 40% のタスクは、線をその 40% 地点まで引き戻します）。100% のタスク、まだ開始日が来ていない未着手タスク、フォルダ行、ロールアップ中の親バーは今日線上を素通りします。開始日を過ぎているのに進捗 0% のタスクは、線を開始日まで引き戻します。線の色は**設定 → Task Gantt → 稲妻線の色**で変更できます。
 
 ## フィルタ
 
@@ -315,7 +321,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ## タスクの作成
 
-**＋ 新規タスク**で現在のフォルダに日付付きノートを作り、すぐ名前を付けられます。もちろんそこから始める必要はありません。対象フォルダ内のノートは、**まだ日付が無いものも含めて**そのまま行として表示されるので、既存ノートをクリックして詳細パネルで **開始 / 期限** を入力すれば、そのままスケジュール付きタスクになります。
+**＋ 新規タスク**で現在のフォルダに日付付きノートを作り、すぐ名前を付けられます。もちろんそこから始める必要はありません。対象フォルダ内のノートは、**まだ日付が無いものも含めて**そのまま行として表示されるので、既存ノートをクリックして詳細パネルで **開始 / 期限** を入力すれば、そのままスケジュール付きタスクになります。開始・期限・進捗のセルは**値が空のままでもダブルクリックで編集できる**ので、表から直接入力しても構いません。
 
 ## タスクの書き方
 
@@ -341,7 +347,7 @@ after:
 | `start` / `end` | 開始 / 終了日 `YYYY-MM-DD`（バーの位置と長さ）。`YYYY-MM-DDTHH:mm+09:00` 形式で時刻も設定可（詳細パネルで編集。オフセットは**タイムゾーン**設定に従う） |
 | `status` | ステータス ID（設定で定義、バー色に反映） |
 | `assignee` | 担当者（バー脇にラベル表示） |
-| `progress` | 進捗 0–100（バー内の塗り。詳細パネルのスライダーで編集） |
+| `progress` | 進捗 0–100（バー内の塗り。詳細パネルのスライダー、または**進捗**列のダブルクリックで編集） |
 | `after` | 先行タスクへの wikilink 配列（依存＝矢印、違反は赤） |
 | `milestone` | `true` で菱形（期間ゼロ） |
 | `gcal` | `true` で **Google カレンダー同期**（後述）の対象にする（**フラグ付きタスクのみ同期**がオンのときだけ判定に使用） |
@@ -364,6 +370,8 @@ after:
 **タイムゾーン**設定（システム / 固定GMTオフセット・代表都市付き一覧）で時刻の表示・保存に使うタイムゾーンを選べます。変更すると保存済みの時刻が新しいオフセットに換算されて表示されます。
 
 ![代表都市付きのタイムゾーン設定](docs/images/timezone-ja.png)
+
+**稲妻線の色**設定で、表示オプションの**稲妻線**で描かれる折れ線の色を変更できます（既定の橙に戻すボタン付き）。
 
 **ステータスは自由に追加・編集・削除**できます。各ステータスは **id**（フロントマターの `status` 値と対応）・**ラベル**・**色**（バー色に反映）を持ちます。
 

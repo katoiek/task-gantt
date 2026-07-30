@@ -1,6 +1,6 @@
-// 日付フィルタの解決・判定（resolveDateValue / matchDate）の検証
-// Tests for date-filter resolution and matching
-import { resolveDateValue, matchDate, dayIndex } from "./timeline.mjs";
+// 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
+// Tests for date-filter resolution/matching and progress-line geometry
+import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -68,6 +68,51 @@ check("空日付は onOrAfter で除外", matchDate(undefined, F("onOrAfter", to
 
 // 値未完成のフィルタは素通し / incomplete filter = no effect
 check("value なしは素通し", matchDate(TODAY, { field: "start", op: "is" }, TODAY) === true);
+
+// ── 稲妻線 / progress line ──
+// 基準日 x=100 とし、幅 100 のバーを基準日の左右に置いて判定する
+// basis at x=100, with 100px-wide bars placed around it
+const BASIS = 100;
+const px = (row) => progressLineX(row, BASIS);
+
+// 完了は逸脱なし（バー位置に関係なく基準日）/ done never deviates
+check("完了(100%)は基準日", px({ startX: 0, width: 100, progress: 100 }) === BASIS);
+check("完了(超過値)も基準日", px({ startX: 0, width: 100, progress: 120 }) === BASIS);
+
+// 進捗ありは「バー上の到達点」/ in-progress lands on the bar
+check("進捗50%はバー中央", px({ startX: 0, width: 100, progress: 50 }) === 50);
+check("進捗50%が基準日より右なら進み", px({ startX: 80, width: 100, progress: 50 }) === 130);
+check("進捗25%は遅れ側", px({ startX: 50, width: 100, progress: 25 }) === 75);
+
+// 未着手：開始日を過ぎていれば開始日まで遅れ、未来なら逸脱なし
+// not started: behind to the start date if past, no deviation if future
+check("未着手(未設定)で開始日が過去なら開始日", px({ startX: 40, width: 100 }) === 40);
+check("未着手(0%)で開始日が過去なら開始日", px({ startX: 40, width: 100, progress: 0 }) === 40);
+check("未着手で開始日が未来なら基準日", px({ startX: 160, width: 100 }) === BASIS);
+
+// バーを持たない行（グループ行・日付なし）は素通し / rows without a bar pass through
+check("バーなしは素通し", px({}) === BASIS);
+check("バーなし(進捗つき)も素通し", px({ progress: 50 }) === BASIS);
+
+// マイルストーン（幅 0）は 0%＝菱形位置 / 100%＝基準日
+// milestones (width 0): 0% sits on the diamond, 100% on the basis
+check("マイルストーン未達は菱形位置", px({ startX: 30, width: 0 }) === 30);
+check("マイルストーン達成は基準日", px({ startX: 30, width: 0, progress: 100 }) === BASIS);
+
+// 折れ線の組み立て：両端は基準日、各行は行中央 / polyline ends pinned to basis, points at row centers
+const line = buildProgressLine(
+  [{ startX: 0, width: 100, progress: 50 }, {}, { startX: 40, width: 100 }],
+  BASIS,
+  30,
+  90
+);
+check("折れ線の点数 = 行数+2", line.length === 5);
+check("折れ線の先頭は基準日の上端", line[0].x === BASIS && line[0].y === 0);
+check("折れ線の末尾は基準日の下端", line[4].x === BASIS && line[4].y === 90);
+check("1行目は行中央(y=15)で x=50", line[1].x === 50 && line[1].y === 15);
+check("2行目(バーなし)は基準日で y=45", line[2].x === BASIS && line[2].y === 45);
+check("3行目は開始日 x=40 で y=75", line[3].x === 40 && line[3].y === 75);
+check("行が空でも両端だけ返す", buildProgressLine([], BASIS, 30, 0).length === 2);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

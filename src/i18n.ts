@@ -46,6 +46,7 @@ interface Strings {
   optColumns: string;
   optFlat: string;
   optRollup: string;
+  optProgressLine: string;
   filterAll: string;
   noneLabel: string;
   // 日付フィルタ（開始日/期限日）/ date filter (start/due). 対象名は fieldStart/fieldDue、today は today を流用
@@ -111,6 +112,7 @@ interface Strings {
   // 日付入力 / date entry
   invalidDate: string;
   pickDate: string;
+  editProgress: string;
   fieldDates: string;
   fieldTime: string;
   clearDate: string;
@@ -153,6 +155,8 @@ interface Strings {
   setDateFormatName: string;
   setTimezoneName: string;
   setTimezoneDesc: string;
+  setProgressLineColorName: string;
+  setProgressLineColorDesc: string;
   setTimezoneSystem: string;
   // 通知 / notifications
   setNotifyHeading: string;
@@ -205,6 +209,7 @@ interface Strings {
   gcalOpenEvent: string;
   setStatusesHeading: string;
   setDeleteTooltip: string;
+  setResetTooltip: string;
   setAddStatus: string;
   setStatusId: string;
   setStatusLabel: string;
@@ -232,6 +237,7 @@ const STRINGS: Record<Lang, Strings> = {
     optColumns: "列の表示",
     optFlat: "フラット表示",
     optRollup: "ロールアップ",
+    optProgressLine: "稲妻線",
     filterAll: "すべて",
     noneLabel: "（なし）",
     nothingToUndo: "取り消す操作がありません",
@@ -247,6 +253,7 @@ const STRINGS: Record<Lang, Strings> = {
     sfUnsupported: "SF（開始→終了）は未対応です。",
     invalidDate: "日付の形式が正しくありません。",
     pickDate: "日付を選択",
+    editProgress: "ダブルクリックで進捗を編集",
     fieldDates: "日付",
     fieldTime: "時刻",
     clearDate: "クリア",
@@ -284,6 +291,8 @@ const STRINGS: Record<Lang, Strings> = {
     setDateFormatName: "日付フォーマット",
     setTimezoneName: "タイムゾーン",
     setTimezoneDesc: "時刻の表示と保存に使うタイムゾーン（GMTオフセット）。変更すると保存済みの時刻も換算して表示されます。",
+    setProgressLineColorName: "稲妻線の色",
+    setProgressLineColorDesc: "表示オプションの「稲妻線」で描く折れ線の色。",
     setTimezoneSystem: "システム（端末の設定）",
     setNotifyHeading: "通知（Discord / Slack / Teams）",
     setNotifyDesc: "時刻を設定したタスクの開始・期限を Webhook へ通知します（Obsidian の起動中のみ動作。Vault 全体が対象）。",
@@ -334,6 +343,7 @@ const STRINGS: Record<Lang, Strings> = {
     gcalOpenEvent: "Google カレンダーで開く",
     setStatusesHeading: "ステータス",
     setDeleteTooltip: "削除",
+    setResetTooltip: "既定に戻す",
     setAddStatus: "ステータスを追加",
     setStatusId: "ID",
     setStatusLabel: "ラベル",
@@ -402,6 +412,7 @@ const STRINGS: Record<Lang, Strings> = {
     optColumns: "Columns",
     optFlat: "Flat",
     optRollup: "Roll up",
+    optProgressLine: "Progress line",
     filterAll: "All",
     noneLabel: "(none)",
     nothingToUndo: "Nothing to undo",
@@ -417,6 +428,7 @@ const STRINGS: Record<Lang, Strings> = {
     sfUnsupported: "SF (start-to-finish) dependency is not supported.",
     invalidDate: "Invalid date format.",
     pickDate: "Pick a date",
+    editProgress: "Double-click to edit progress",
     fieldDates: "Dates",
     fieldTime: "Time",
     clearDate: "Clear",
@@ -454,6 +466,8 @@ const STRINGS: Record<Lang, Strings> = {
     setDateFormatName: "Date format",
     setTimezoneName: "Timezone",
     setTimezoneDesc: "Timezone (GMT offset) used to display and save times. Changing it converts the display of stored times.",
+    setProgressLineColorName: "Progress line color",
+    setProgressLineColorDesc: "Color of the line drawn by the Progress line view option.",
     setTimezoneSystem: "System (device setting)",
     setNotifyHeading: "Notifications (Discord / Slack / Teams)",
     setNotifyDesc: "Sends webhook notifications for the start/due of tasks that have a time of day (only while Obsidian is running; the whole vault is scanned).",
@@ -504,6 +518,7 @@ const STRINGS: Record<Lang, Strings> = {
     gcalOpenEvent: "Open in Google Calendar",
     setStatusesHeading: "Statuses",
     setDeleteTooltip: "Delete",
+    setResetTooltip: "Reset to default",
     setAddStatus: "Add status",
     setStatusId: "ID",
     setStatusLabel: "Label",
@@ -572,6 +587,7 @@ const STRINGS: Record<Lang, Strings> = {
     optColumns: "列",
     optFlat: "平铺",
     optRollup: "汇总",
+    optProgressLine: "进度线",
     filterAll: "全部",
     noneLabel: "（无）",
     nothingToUndo: "没有可撤销的操作",
@@ -587,6 +603,7 @@ const STRINGS: Record<Lang, Strings> = {
     sfUnsupported: "不支持 SF（开始到完成）依赖。",
     invalidDate: "日期格式无效。",
     pickDate: "选择日期",
+    editProgress: "双击编辑进度",
     fieldDates: "日期",
     fieldTime: "时间",
     clearDate: "清除",
@@ -624,6 +641,8 @@ const STRINGS: Record<Lang, Strings> = {
     setDateFormatName: "日期格式",
     setTimezoneName: "时区",
     setTimezoneDesc: "用于显示和保存时间的时区（GMT 偏移）。更改后已保存的时间将按新时区换算显示。",
+    setProgressLineColorName: "进度线颜色",
+    setProgressLineColorDesc: "显示选项中「进度线」所绘制折线的颜色。",
     setTimezoneSystem: "系统（设备设置）",
     setNotifyHeading: "通知（Discord / Slack / Teams）",
     setNotifyDesc: "对设置了时间的任务的开始/截止发送 Webhook 通知（仅在 Obsidian 运行时工作，扫描整个仓库）。",
@@ -674,6 +693,7 @@ const STRINGS: Record<Lang, Strings> = {
     gcalOpenEvent: "在 Google 日历中打开",
     setStatusesHeading: "状态",
     setDeleteTooltip: "删除",
+    setResetTooltip: "恢复默认",
     setAddStatus: "添加状态",
     setStatusId: "ID",
     setStatusLabel: "标签",
@@ -742,6 +762,7 @@ const STRINGS: Record<Lang, Strings> = {
     optColumns: "欄位",
     optFlat: "平面",
     optRollup: "彙總",
+    optProgressLine: "進度線",
     filterAll: "全部",
     noneLabel: "（無）",
     nothingToUndo: "沒有可復原的操作",
@@ -757,6 +778,7 @@ const STRINGS: Record<Lang, Strings> = {
     sfUnsupported: "不支援 SF（開始到完成）相依。",
     invalidDate: "日期格式無效。",
     pickDate: "選擇日期",
+    editProgress: "雙擊編輯進度",
     fieldDates: "日期",
     fieldTime: "時間",
     clearDate: "清除",
@@ -794,6 +816,8 @@ const STRINGS: Record<Lang, Strings> = {
     setDateFormatName: "日期格式",
     setTimezoneName: "時區",
     setTimezoneDesc: "用於顯示與儲存時間的時區（GMT 偏移）。變更後已儲存的時間會依新時區換算顯示。",
+    setProgressLineColorName: "進度線顏色",
+    setProgressLineColorDesc: "顯示選項中「進度線」所繪製折線的顏色。",
     setTimezoneSystem: "系統（裝置設定）",
     setNotifyHeading: "通知（Discord / Slack / Teams）",
     setNotifyDesc: "對設定了時間的任務的開始/截止發送 Webhook 通知（僅在 Obsidian 執行時運作，掃描整個儲存庫）。",
@@ -844,6 +868,7 @@ const STRINGS: Record<Lang, Strings> = {
     gcalOpenEvent: "在 Google 日曆中開啟",
     setStatusesHeading: "狀態",
     setDeleteTooltip: "刪除",
+    setResetTooltip: "還原預設",
     setAddStatus: "新增狀態",
     setStatusId: "ID",
     setStatusLabel: "標籤",
@@ -912,6 +937,7 @@ const STRINGS: Record<Lang, Strings> = {
     optColumns: "열",
     optFlat: "평면",
     optRollup: "롤업",
+    optProgressLine: "진척선",
     filterAll: "전체",
     noneLabel: "(없음)",
     nothingToUndo: "취소할 작업이 없습니다",
@@ -927,6 +953,7 @@ const STRINGS: Record<Lang, Strings> = {
     sfUnsupported: "SF(시작-완료) 종속성은 지원되지 않습니다.",
     invalidDate: "날짜 형식이 올바르지 않습니다.",
     pickDate: "날짜 선택",
+    editProgress: "두 번 클릭하여 진척 편집",
     fieldDates: "날짜",
     fieldTime: "시간",
     clearDate: "지우기",
@@ -964,6 +991,8 @@ const STRINGS: Record<Lang, Strings> = {
     setDateFormatName: "날짜 형식",
     setTimezoneName: "시간대",
     setTimezoneDesc: "시간 표시와 저장에 사용할 시간대(GMT 오프셋)입니다. 변경하면 저장된 시간이 새 시간대로 환산되어 표시됩니다.",
+    setProgressLineColorName: "진척선 색상",
+    setProgressLineColorDesc: "보기 옵션의 「진척선」이 그리는 선의 색상입니다.",
     setTimezoneSystem: "시스템(기기 설정)",
     setNotifyHeading: "알림(Discord / Slack / Teams)",
     setNotifyDesc: "시간이 설정된 작업의 시작/마감을 Webhook으로 알립니다(Obsidian 실행 중에만 동작, 전체 보관소 대상).",
@@ -1014,6 +1043,7 @@ const STRINGS: Record<Lang, Strings> = {
     gcalOpenEvent: "Google 캘린더에서 열기",
     setStatusesHeading: "상태",
     setDeleteTooltip: "삭제",
+    setResetTooltip: "기본값으로 되돌리기",
     setAddStatus: "상태 추가",
     setStatusId: "ID",
     setStatusLabel: "레이블",
@@ -1082,6 +1112,7 @@ const STRINGS: Record<Lang, Strings> = {
     optColumns: "Colonnes",
     optFlat: "À plat",
     optRollup: "Synthèse",
+    optProgressLine: "Ligne d'avancement",
     filterAll: "Tous",
     noneLabel: "(aucun)",
     nothingToUndo: "Rien à annuler",
@@ -1097,6 +1128,7 @@ const STRINGS: Record<Lang, Strings> = {
     sfUnsupported: "La dépendance SF (début-fin) n'est pas prise en charge.",
     invalidDate: "Format de date invalide.",
     pickDate: "Choisir une date",
+    editProgress: "Double-cliquer pour modifier l'avancement",
     fieldDates: "Dates",
     fieldTime: "Heure",
     clearDate: "Effacer",
@@ -1134,6 +1166,8 @@ const STRINGS: Record<Lang, Strings> = {
     setDateFormatName: "Format de date",
     setTimezoneName: "Fuseau horaire",
     setTimezoneDesc: "Fuseau horaire (décalage GMT) utilisé pour afficher et enregistrer les heures. Le modifier convertit l'affichage des heures enregistrées.",
+    setProgressLineColorName: "Couleur de la ligne d'avancement",
+    setProgressLineColorDesc: "Couleur de la ligne tracée par l'option d'affichage « Ligne d'avancement ».",
     setTimezoneSystem: "Système (appareil)",
     setNotifyHeading: "Notifications (Discord / Slack / Teams)",
     setNotifyDesc: "Envoie des notifications webhook pour le début/l'échéance des tâches ayant une heure (uniquement quand Obsidian est ouvert ; tout le coffre est analysé).",
@@ -1184,6 +1218,7 @@ const STRINGS: Record<Lang, Strings> = {
     gcalOpenEvent: "Ouvrir dans Google Agenda",
     setStatusesHeading: "Statuts",
     setDeleteTooltip: "Supprimer",
+    setResetTooltip: "Réinitialiser",
     setAddStatus: "Ajouter un statut",
     setStatusId: "ID",
     setStatusLabel: "Libellé",
@@ -1252,6 +1287,7 @@ const STRINGS: Record<Lang, Strings> = {
     optColumns: "Columnas",
     optFlat: "Plano",
     optRollup: "Resumen",
+    optProgressLine: "Línea de avance",
     filterAll: "Todos",
     noneLabel: "(ninguno)",
     nothingToUndo: "Nada que deshacer",
@@ -1267,6 +1303,7 @@ const STRINGS: Record<Lang, Strings> = {
     sfUnsupported: "La dependencia SF (inicio-fin) no es compatible.",
     invalidDate: "Formato de fecha no válido.",
     pickDate: "Elegir fecha",
+    editProgress: "Doble clic para editar el avance",
     fieldDates: "Fechas",
     fieldTime: "Hora",
     clearDate: "Borrar",
@@ -1304,6 +1341,8 @@ const STRINGS: Record<Lang, Strings> = {
     setDateFormatName: "Formato de fecha",
     setTimezoneName: "Zona horaria",
     setTimezoneDesc: "Zona horaria (desfase GMT) usada para mostrar y guardar las horas. Al cambiarla, las horas guardadas se muestran convertidas.",
+    setProgressLineColorName: "Color de la línea de avance",
+    setProgressLineColorDesc: "Color de la línea que dibuja la opción de vista «Línea de avance».",
     setTimezoneSystem: "Sistema (dispositivo)",
     setNotifyHeading: "Notificaciones (Discord / Slack / Teams)",
     setNotifyDesc: "Envía notificaciones por webhook del inicio/vencimiento de tareas con hora (solo mientras Obsidian está abierto; se analiza toda la bóveda).",
@@ -1354,6 +1393,7 @@ const STRINGS: Record<Lang, Strings> = {
     gcalOpenEvent: "Abrir en Google Calendar",
     setStatusesHeading: "Estados",
     setDeleteTooltip: "Eliminar",
+    setResetTooltip: "Restablecer",
     setAddStatus: "Añadir estado",
     setStatusId: "ID",
     setStatusLabel: "Etiqueta",
@@ -1422,6 +1462,7 @@ const STRINGS: Record<Lang, Strings> = {
     optColumns: "Столбцы",
     optFlat: "Плоский список",
     optRollup: "Сводка",
+    optProgressLine: "Линия прогресса",
     filterAll: "Все",
     noneLabel: "(нет)",
     nothingToUndo: "Нечего отменять",
@@ -1437,6 +1478,7 @@ const STRINGS: Record<Lang, Strings> = {
     sfUnsupported: "Зависимость SF (начало-конец) не поддерживается.",
     invalidDate: "Неверный формат даты.",
     pickDate: "Выбрать дату",
+    editProgress: "Двойной щелчок — изменить прогресс",
     fieldDates: "Даты",
     fieldTime: "Время",
     clearDate: "Очистить",
@@ -1474,6 +1516,8 @@ const STRINGS: Record<Lang, Strings> = {
     setDateFormatName: "Формат даты",
     setTimezoneName: "Часовой пояс",
     setTimezoneDesc: "Часовой пояс (смещение GMT) для отображения и сохранения времени. При изменении сохранённое время отображается в новом поясе.",
+    setProgressLineColorName: "Цвет линии прогресса",
+    setProgressLineColorDesc: "Цвет линии, которую рисует параметр отображения «Линия прогресса».",
     setTimezoneSystem: "Система (устройство)",
     setNotifyHeading: "Уведомления (Discord / Slack / Teams)",
     setNotifyDesc: "Отправляет webhook-уведомления о начале/сроке задач с указанным временем (только пока Obsidian запущен; сканируется всё хранилище).",
@@ -1524,6 +1568,7 @@ const STRINGS: Record<Lang, Strings> = {
     gcalOpenEvent: "Открыть в Google Календаре",
     setStatusesHeading: "Статусы",
     setDeleteTooltip: "Удалить",
+    setResetTooltip: "Сбросить",
     setAddStatus: "Добавить статус",
     setStatusId: "ID",
     setStatusLabel: "Метка",

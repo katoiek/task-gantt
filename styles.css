@@ -565,6 +565,45 @@
   color: var(--text-accent);
   font-weight: 600;
 }
+/* 進捗列：細いメーター＋% 表記（未設定は空欄）/ progress cell: thin meter + % (blank when unset) */
+.ogantt-td-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+.ogantt-meter {
+  flex: 1;
+  min-width: 24px; /* 幅の自動フィット（max-content 計測）でメーターが潰れないように / survives max-content auto-fit */
+  height: 6px;
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+.ogantt-meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--text-accent);
+}
+.ogantt-meter-num {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums; /* 桁を揃えて縦に読みやすく / align digits down the column */
+}
+/* 未設定（progress なし）は淡く見せて、値のある行と区別する / unset reads fainter than a real value */
+.ogantt-td-progress.is-empty .ogantt-meter,
+.ogantt-td-progress.is-empty .ogantt-meter-num {
+  opacity: 0.45;
+}
+/* セル内編集の数値入力（セル幅に収める）/ in-cell number input (fits the cell) */
+.ogantt-meter-input {
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 12px;
+  text-align: right;
+}
 /* 親タスク行の折りたたみシェブロン枠（常に確保して名前位置を揃える）/ fixed chevron slot (keeps names aligned) */
 .ogantt-task-chevron {
   display: inline-flex;
@@ -624,14 +663,29 @@
   flex: 1;
   min-width: 80px;
 }
-/* ダブルクリックで日付編集できるセル / date cell editable via double-click */
+/* ダブルクリックで編集できるセル（日付・進捗）/ cell editable via double-click (dates, progress) */
+/* 行が align-items:center なので、値が空だと中身の高さ 0 ＝当たり判定なしになる。
+   stretch ＋ flex で「空でも行の高さいっぱいをダブルクリックできる」状態にする。
+   the row centers its cells, so an empty cell would collapse to zero height and become unclickable;
+   stretch + flex keeps the full-row-height hit area even with no value. */
 .ogantt-td-editable {
   cursor: pointer;
   border-radius: 4px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
 }
 .ogantt-td-editable:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
+}
+/* flex 化したセル内で省略記号を維持する（テキストは直下に置かず span で包む）
+   keep ellipsis inside the flexed cell (text is wrapped in a span, not a bare text node) */
+.ogantt-td-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .ogantt-td-name {
   flex: 1;
@@ -703,6 +757,14 @@
   stroke-width: 1;
   stroke-dasharray: 3 2;
   opacity: 0.7;
+}
+/* 稲妻線（今日基準の進捗折れ線）/ progress line against today */
+.ogantt-progress-line {
+  fill: none;
+  stroke: var(--color-orange);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  pointer-events: none; /* バーのドラッグを妨げない / never intercept bar drags */
 }
 .ogantt-bar {
   cursor: grab;

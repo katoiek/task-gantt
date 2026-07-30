@@ -32,6 +32,8 @@ import {
   todayIndex,
   formatDate,
   matchDate,
+  buildProgressLine,
+  ProgressLineRow,
 } from "./timeline";
 import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
@@ -47,10 +49,10 @@ const FALLBACK_BAR = "#7c8db5"; // ステータス/担当者が未設定のと�
 // テーブル列の定義 / table column definitions
 // name は常時表示・可変幅(flex)、その他は表示/非表示を切替え・固定幅
 // `name` is always shown and flexes; the rest are toggleable with a fixed width
-type ColumnId = "name" | "start" | "end" | "assignee" | "status" | "tags";
-const COLUMN_ORDER: ColumnId[] = ["name", "start", "end", "assignee", "status", "tags"];
-const OPTIONAL_COLUMNS: ColumnId[] = ["start", "end", "assignee", "status", "tags"]; // 歯車で出し分けできる列 / toggleable columns
-const COLUMN_WIDTHS: Record<ColumnId, number> = { name: 160, start: 84, end: 84, assignee: 96, status: 96, tags: 140 };
+type ColumnId = "name" | "start" | "end" | "progress" | "assignee" | "status" | "tags";
+const COLUMN_ORDER: ColumnId[] = ["name", "start", "end", "progress", "assignee", "status", "tags"];
+const OPTIONAL_COLUMNS: ColumnId[] = ["start", "end", "progress", "assignee", "status", "tags"]; // 歯車で出し分けできる列 / toggleable columns
+const COLUMN_WIDTHS: Record<ColumnId, number> = { name: 160, start: 84, end: 84, progress: 84, assignee: 96, status: 96, tags: 140 };
 const MAX_INDENT_DEPTH = 8; // インデントの段数上限（論理ツリーは無制限）/ visual indent cap (the tree itself is unlimited)
 
 // HSL → #rrggbb（カラーピッカーの初期値に hex が要るため）/ HSL → hex (color inputs need hex)
@@ -90,6 +92,7 @@ export class GanttView extends ItemView {
   private showEmptyFolders = true; // 空フォルダも行として表示（既定ON）/ show empty folders as rows (default on)
   private flat = false; // フラット表示（フォルダ/親子を無視し全タスク一覧）/ flat list ignoring folders & nesting
   private rollup = false; // 親タスクのバーを子孫の集約で描く（既定OFF）/ draw parent bars as a rollup of descendants (default off)
+  private progressLine = false; // 稲妻線（今日基準の進捗折れ線・既定OFF）/ progress line against today (default off)
   private allFolders: string[][] = []; // スコープ配下の全フォルダ（相対セグメント）/ all folders under scope
   private optionsHost!: HTMLElement; // グループ/色分け/表示切替/凡例の差し替え先 / layout options + legend container
   private filterHost!: HTMLElement; // 統合フィルタ行の差し替え先 / unified filter bar container
@@ -318,6 +321,7 @@ export class GanttView extends ItemView {
       case "name": return tr().colTask;
       case "start": return tr().colStart;
       case "end": return tr().colDue;
+      case "progress": return tr().fieldProgress;
       case "assignee": return tr().fieldAssignee;
       case "status": return tr().fieldStatus;
       case "tags": return tr().fieldTags;
@@ -334,6 +338,7 @@ export class GanttView extends ItemView {
         case "name": return t.name.toLowerCase();
         case "start": return anchorStart(t) ?? "9999-99-99";
         case "end": return anchorEnd(t) ?? "9999-99-99";
+        case "progress": return t.progress ?? -1; // 未設定は 0% より前 / unset sorts ahead of 0%
         case "assignee": return (t.assignee ?? "").toLowerCase();
         case "status": return t.status != null ? statusOrder.get(t.status) ?? 999 : 999;
         case "tags": return t.tags.join(",").toLowerCase();
@@ -949,6 +954,11 @@ export class GanttView extends ItemView {
       this.flat = v;
       this.rerender();
     });
+    // 稲妻線の切替（今日基準の進捗折れ線）/ progress line against today
+    makeCheckbox("zap", tr().optProgressLine, this.progressLine, (v) => {
+      this.progressLine = v;
+      this.rerender();
+    });
 
     // 凡例（色分けの基準を説明）/ legend explaining the current color basis
     const legend = host.createDiv({ cls: "ogantt-legend" });
@@ -1334,6 +1344,8 @@ export class GanttView extends ItemView {
     // collect connector handles in their own layer, appended after the arrows so they stay topmost and grabbable
     const handlesLayer = this.svgEl("g", { class: "ogantt-handles-layer" });
     this.drawBars(svg, handlesLayer);
+    // 稲妻線はバーの上（隠れると意味がない）・依存矢印の下 / above the bars (it must not be hidden), below the arrows
+    if (this.progressLine) this.drawProgressLine(svg, width, bodyH);
     this.drawDependencies(svg); // バーの上に描いて矢印を隠さない / on top of bars so arrows stay visible
     svg.appendChild(handlesLayer); // 矢印の上にハンドルを重ねる / handles above arrows
   }
@@ -1357,6 +1369,40 @@ export class GanttView extends ItemView {
     if (todayX >= 0 && todayX <= width) {
       svg.appendChild(this.svgEl("line", { x1: todayX, y1: 0, x2: todayX, y2: height, class: "ogantt-today" }));
     }
+  }
+
+  // 稲妻線：今日を基準に、各行の「実績到達点」を結ぶ折れ線。左へ折れる＝遅れ / 右＝進み
+  // progress line: joins each row's achieved-progress point against today; left = behind, right = ahead
+  private drawProgressLine(svg: SVGElement, width: number, height: number): void {
+    const basisX = (todayIndex() - this.range.min) * this.ppd;
+    if (basisX < 0 || basisX > width) return; // 基準日が範囲外＝結ぶ軸がない / no basis to anchor to
+    const lineRows: ProgressLineRow[] = this.rows.map((row) => {
+      // グループ行とロールアップ行はサマリー（自分の進捗を持たない）ので素通し
+      // group and rollup rows are summaries with no progress of their own, so they pass through
+      if (row.kind === "group") return {};
+      const t = row.task!;
+      if (this.rollup && row.span) return {};
+      const aStart = anchorStart(t);
+      if (!aStart) return {};
+      const x = this.xOf(aStart);
+      if (!Number.isFinite(x)) return {}; // 不正な日付で折れ線が壊れないように / a bad date must not break the polyline
+      if (t.milestone) return { startX: x, width: 0, progress: t.progress };
+      const endStr = anchorEnd(t) ?? aStart;
+      const w = Math.max((dayIndex(endStr) - dayIndex(aStart) + 1) * this.ppd, 6);
+      return { startX: x, width: Number.isFinite(w) ? w : 0, progress: t.progress };
+    });
+    const pts = buildProgressLine(lineRows, basisX, ROW_H, height);
+    const line = this.svgEl("polyline", {
+      points: pts.map((p) => `${p.x},${p.y}`).join(" "),
+      class: "ogantt-progress-line",
+    });
+    // 色は設定から。stroke 属性は CSS 宣言に負けるので、インラインスタイルで上書きする
+    // （未設定なら何も指定せず CSS の既定色にまかせる）
+    // color from settings; a stroke *attribute* loses to the CSS rule, so set it as an inline style
+    // (leave it unset to fall back to the CSS default)
+    const color = this.plugin.settings.progressLineColor;
+    if (color) line.style.stroke = color;
+    svg.appendChild(line);
   }
 
   private drawBars(svg: SVGElement, handlesLayer: SVGElement): void {
@@ -2323,8 +2369,9 @@ export class GanttView extends ItemView {
           td.setText("◆");
           td.addClass("ogantt-td-ms");
         } else {
-          // 時刻があれば併記 / append the time of day when set
-          td.setText(formatDate(t.start, fmt) + (t.startTime ? ` ${t.startTime}` : ""));
+          // 時刻があれば併記。テキストは span に包む（セルが flex なので直下テキストでは省略記号が効かない）
+          // append the time of day when set; wrap in a span (a bare text node can't ellipsis inside a flex cell)
+          td.createSpan({ cls: "ogantt-td-text", text: formatDate(t.start, fmt) + (t.startTime ? ` ${t.startTime}` : "") });
           this.makeDateCell(td, t, "start");
         }
         break;
@@ -2332,9 +2379,15 @@ export class GanttView extends ItemView {
         if (rolled) {
           td.setText(formatDate(rolled.end, fmt));
         } else {
-          td.setText(formatDate(t.end, fmt) + (t.endTime ? ` ${t.endTime}` : ""));
+          td.createSpan({ cls: "ogantt-td-text", text: formatDate(t.end, fmt) + (t.endTime ? ` ${t.endTime}` : "") });
           this.makeDateCell(td, t, "end");
         }
+        break;
+      case "progress":
+        // 進捗はロールアップ ON でも自分の値を表示・編集する（集約する重みが無いため）
+        // progress always shows/edits the task's own value, even when rolled up (there's no weight to aggregate by)
+        this.paintProgressCell(td, t);
+        this.makeProgressCell(td, t);
         break;
       case "assignee":
         td.setText(t.assignee ?? "");
@@ -2362,6 +2415,74 @@ export class GanttView extends ItemView {
       case "name":
         break; // name は呼び出し側で処理 / handled by the caller
     }
+  }
+
+  // 進捗セルの中身（細いメーター＋%）。未設定でも空メーターと「—」を描き、
+  // 値の有無に関わらずダブルクリックできる場所だと分かるようにする
+  // paint a progress cell (thin meter + %); unset still draws an empty meter and a dash,
+  // so the cell reads as double-click editable whether or not it has a value
+  private paintProgressCell(td: HTMLElement, t: Task): void {
+    td.empty();
+    td.addClass("ogantt-td-progress");
+    const p = t.progress != null ? Math.max(0, Math.min(100, Math.round(t.progress))) : null;
+    td.toggleClass("is-empty", p == null);
+    const track = td.createDiv({ cls: "ogantt-meter" });
+    if (p != null) track.createDiv({ cls: "ogantt-meter-fill" }).style.width = `${p}%`;
+    td.createSpan({ cls: "ogantt-meter-num", text: p != null ? `${p}%` : "—" });
+  }
+
+  // 進捗セルをダブルクリックで直接編集可能にする / make a progress cell editable via double-click
+  private makeProgressCell(cell: HTMLElement, t: Task): void {
+    cell.addClass("ogantt-td-editable");
+    cell.setAttr("aria-label", tr().editProgress);
+    // セルのシングルクリックは詳細を開かない（進捗編集に専念）/ a single click here edits progress, not opens detail
+    cell.addEventListener("click", (e) => e.stopPropagation());
+    cell.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      this.editProgressCell(cell, t);
+    });
+  }
+
+  // セル内で数値入力に切り替える。Enter/フォーカス外れで保存、Esc で取消
+  // swap the cell for a number input: Enter/blur saves, Esc cancels
+  private editProgressCell(cell: HTMLElement, t: Task): void {
+    if (cell.querySelector("input")) return; // 編集中の二重起動を防ぐ / already editing
+    cell.empty();
+    const inp = cell.createEl("input", { type: "number", cls: "ogantt-meter-input" });
+    inp.min = "0";
+    inp.max = "100";
+    inp.step = "5";
+    inp.value = t.progress != null ? String(t.progress) : "";
+    inp.focus();
+    inp.select();
+    // Enter 保存後に blur が続いて二重保存にならないよう、一度きりに固定 / run exactly once (Enter is followed by blur)
+    let settled = false;
+    const cancel = (): void => {
+      if (settled) return;
+      settled = true;
+      this.paintProgressCell(cell, t);
+    };
+    const commit = (): void => {
+      if (settled) return;
+      settled = true;
+      void (async () => {
+        const raw = inp.value.trim();
+        const n = raw === "" ? 0 : Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+        // 0%・空欄は未設定として削除（詳細パネルのスライダーと同じ規則）/ 0% and blank clear the field (same rule as the panel slider)
+        const next = n > 0 ? n : undefined;
+        if (next === t.progress) {
+          this.paintProgressCell(cell, t); // 変更なしなら書き込まない / nothing changed, skip the write
+          return;
+        }
+        await writeField(this.app, t.path, this.plugin.settings.keys.progress, next);
+        await this.refresh();
+      })();
+    };
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+    });
+    inp.addEventListener("blur", () => commit());
   }
 
   // テーブルの日付セルをダブルクリックで直接編集可能にする / make a table date cell editable via double-click

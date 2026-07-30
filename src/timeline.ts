@@ -143,6 +143,42 @@ export function computeRange(tasks: Task[]): DateRange {
   return { min: Math.min(...days) - 3, max: Math.max(...days) + 7 };
 }
 
+// ── 稲妻線 / progress line ──
+
+// 稲妻線の 1 行分の入力。バーを持たない行（グループ行・日付なし）は startX を省略する
+// one row's input for the progress line; rows without a bar (group rows, no dates) omit startX
+export interface ProgressLineRow {
+  startX?: number; // バー左端の x / bar's left edge
+  width?: number; // バー幅（マイルストーンは 0）/ bar width (0 for a milestone)
+  progress?: number; // 0-100（未設定＝未着手）/ 0-100 (unset = not started)
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+// 1 行分の稲妻線の x を決める。basisX（基準日）から左へ折れる＝遅れ / 右＝進み
+// x for one row: bending left of basisX means behind schedule, right means ahead
+export function progressLineX(row: ProgressLineRow, basisX: number): number {
+  if (row.startX === undefined) return basisX; // バーなし＝素通し / no bar, pass through
+  const p = row.progress ?? 0;
+  if (p >= 100) return basisX; // 完了は逸脱なし / done = no deviation
+  // 未着手：開始日を過ぎていれば開始日まで遅れ、未来なら逸脱なし
+  // not started: behind as far as the start date if it has passed, otherwise no deviation
+  if (p <= 0) return Math.min(basisX, row.startX);
+  return row.startX + ((row.width ?? 0) * p) / 100;
+}
+
+// 稲妻線の折れ線を組む。上端・下端は基準日に戻し、各行は行中央に点を置く
+// build the polyline: pinned to basisX at both ends, one point at each row's center
+export function buildProgressLine(rows: ProgressLineRow[], basisX: number, rowH: number, height: number): Point[] {
+  const pts: Point[] = [{ x: basisX, y: 0 }];
+  rows.forEach((row, i) => pts.push({ x: progressLineX(row, basisX), y: i * rowH + rowH / 2 }));
+  pts.push({ x: basisX, y: height });
+  return pts;
+}
+
 export interface Tick {
   x: number;
   label: string;

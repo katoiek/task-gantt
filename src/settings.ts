@@ -62,12 +62,13 @@ export interface GanttSettings {
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
   visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
   columnWidths: Record<string, number>; // 列幅の上書き(px)。未設定列は既定幅 / per-column width overrides (px); unset = default
-  sortBy: string; // ソート列 id（name/start/end/assignee/status）/ sort column id
+  sortBy: string; // ソート列 id（name/start/end/progress/assignee/status/tags）/ sort column id
   sortDir: "asc" | "desc"; // ソート方向 / sort direction
   // 統合フィルタ（ステータス/担当者/タグ/開始日/期限日）と結合方法 / unified filters + combine mode
   filters: Filter[];
   filterMatch: FilterMatch; // all=すべてに一致(AND) / any=いずれかに一致(OR)
   filterPresets: FilterPreset[]; // ユーザー定義のフィルタプリセット / user-defined filter presets
+  progressLineColor: string; // 稲妻線の色 / progress line color
   // タグ/フォルダの色（手動上書き。未登録は名前ハッシュで自動生成）/ manual color overrides (unset → auto from name hash)
   tagColors: { name: string; color: string }[];
   folderColors: { name: string; color: string }[];
@@ -145,6 +146,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   filters: [],
   filterMatch: "all",
   filterPresets: [],
+  progressLineColor: "#f59e0b", // 既定はバー色と重なりにくい橙 / amber, unlikely to clash with bar colors
   tagColors: [],
   folderColors: [],
   notify: {
@@ -251,6 +253,25 @@ export class GanttSettingTab extends PluginSettingTab {
     // 旧バージョンで保存した一覧外のオフセットも選択肢に残す / keep a saved offset selectable even if it left the list
     if (s.tz !== "system" && !opts[s.tz]) opts[s.tz] = `GMT${s.tz}`;
     setting.addDropdown((d) => d.addOptions(opts).setValue(s.tz).onChange((v) => { s.tz = v; this.save(); }));
+  }
+
+  // 稲妻線の色（色ピッカー＋既定に戻すボタン）/ progress line color (picker + reset to default)
+  private ctlProgressLineColor(setting: Setting): void {
+    const s = this.plugin.settings;
+    setting
+      .addColorPicker((c) =>
+        c.setValue(s.progressLineColor || DEFAULT_SETTINGS.progressLineColor).onChange((v) => {
+          s.progressLineColor = v;
+          this.save();
+        })
+      )
+      .addExtraButton((b) =>
+        b.setIcon("rotate-ccw").setTooltip(tr().setResetTooltip).onClick(() => {
+          s.progressLineColor = DEFAULT_SETTINGS.progressLineColor;
+          this.save();
+          this.draw(); // ピッカーの表示値を戻す / refresh the picker's shown value
+        })
+      );
   }
 
   private ctlStatusRow(setting: Setting, st: StatusDef): void {
@@ -430,6 +451,9 @@ export class GanttSettingTab extends PluginSettingTab {
     this.ctlZoom(new Setting(containerEl).setName(tr().setDefaultZoomName));
     this.ctlDateFormat(new Setting(containerEl).setName(tr().setDateFormatName));
     this.ctlTimezone(new Setting(containerEl).setName(tr().setTimezoneName).setDesc(tr().setTimezoneDesc));
+    this.ctlProgressLineColor(
+      new Setting(containerEl).setName(tr().setProgressLineColorName).setDesc(tr().setProgressLineColorDesc)
+    );
 
     // ステータス一覧（id/ラベル/色＋削除、末尾に追加ボタン）/ status list (id/label/color + delete, add button at the end)
     new Setting(containerEl).setName(tr().setStatusesHeading).setHeading();
