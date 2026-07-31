@@ -88,7 +88,9 @@ Tasks use Obsidian's native `tags` (frontmatter `tags:` plus inline `#tag`), so 
 
 ## Coloring tags and folders
 
-Tags and folders get an automatic color from their name, and you can override it. **Right-click a folder heading, a tag heading, or a tag chip** to change or reset its color. Tag colors can also be set in **Settings → Task Gantt → Tag colors** (folder colors are right-click only).
+Every tag starts from a single **Default tag color** — Obsidian's own tag color unless you change it in **Settings → Task Gantt → Tag colors** — and you can override any individual tag on top of that. Folders get an automatic color from their name instead.
+
+**Right-click a folder heading, a tag heading, or a tag chip** to change or reset its color. Setting a color registers that tag under **Per-tag colors** in settings; resetting removes it again, so the list holds exactly the tags you have deliberately coloured — everything else follows the default. You can also add a tag there by picking it from your vault's tags, and removing one asks for confirmation, since the settings tab has no undo. Rows are listed alphabetically. Folder colors are right-click only.
 
 <video src="https://github.com/katoiek/task-gantt/raw/main/docs/images/coloring_folder_tag.mp4" controls width="100%"></video>
 
@@ -317,7 +319,9 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ## タグ・フォルダの色
 
-タグとフォルダは名前から自動で色が付き、上書きもできます。**フォルダの見出し・タグの見出し・タグのチップを右クリック**して、色の変更／リセットができます。タグの色は **設定 → Task Gantt → タグの色** からも指定できます（フォルダの色は右クリックのみ）。
+タグの色はすべて **タグの既定色** を土台にし、そこから個別に上書きします。既定色は **設定 → Task Gantt → タグの色** で指定でき、未設定なら Obsidian 本体のタグ色に従います。フォルダは従来どおり名前から自動で色が付きます。
+
+**フォルダの見出し・タグの見出し・タグのチップを右クリック**して、色の変更／リセットができます。色を指定すると、そのタグが設定の**個別のタグ**に登録され、リセットすると登録が外れます。つまり一覧には**自分で色を決めたタグだけ**が並び、それ以外は既定色に従います。設定側からは Vault のタグを選んで追加でき、削除には確認が入ります（設定画面には取り消しが無いため）。並びはタグ名順です（フォルダの色は右クリックのみ）。
 
 <video src="https://github.com/katoiek/task-gantt/raw/main/docs/images/coloring_folder_tag.mp4" controls width="100%"></video>
 

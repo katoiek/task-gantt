@@ -36,6 +36,8 @@ import {
   buildProgressLine,
   ProgressLineRow,
 } from "./timeline";
+import { hashColor, hslToHex, resolveTagColor } from "./colors";
+import { ConfirmModal } from "./modals";
 import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 
@@ -55,26 +57,6 @@ const COLUMN_ORDER: ColumnId[] = ["name", "start", "end", "progress", "assignee"
 const OPTIONAL_COLUMNS: ColumnId[] = ["start", "end", "progress", "assignee", "status", "tags"]; // 歯車で出し分けできる列 / toggleable columns
 const COLUMN_WIDTHS: Record<ColumnId, number> = { name: 160, start: 84, end: 84, progress: 84, assignee: 96, status: 96, tags: 140 };
 const MAX_INDENT_DEPTH = 8; // インデントの段数上限（論理ツリーは無制限）/ visual indent cap (the tree itself is unlimited)
-
-// HSL → #rrggbb（カラーピッカーの初期値に hex が要るため）/ HSL → hex (color inputs need hex)
-function hslToHex(h: number, s: number, l: number): string {
-  s /= 100;
-  l /= 100;
-  const k = (n: number) => (n + h / 30) % 12;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-    return Math.round(255 * c).toString(16).padStart(2, "0");
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-// 名前から安定した色を生成（担当者/タグ/フォルダ共通・同じ名前は常に同じ色）/ deterministic color from any name (assignee/tag/folder)
-function hashColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
-  return hslToHex(h, 55, 55);
-}
 
 export class GanttView extends ItemView {
   plugin: GanttPlugin;
@@ -987,7 +969,7 @@ export class GanttView extends ItemView {
 
   // タグ/フォルダの色（手動上書きがあればそれ、無ければ名前ハッシュで自動生成）/ tag/folder color (manual override, else auto from name)
   private tagColor(tag: string): string {
-    return this.plugin.settings.tagColors.find((c) => c.name === tag)?.color || hashColor(tag);
+    return resolveTagColor(this.plugin.settings.tagColors, this.plugin.settings.defaultTagColor, tag);
   }
   private folderColor(name: string): string {
     return this.plugin.settings.folderColors.find((c) => c.name === name)?.color || hashColor(name);
@@ -1004,14 +986,19 @@ export class GanttView extends ItemView {
   private setColorOverride(kind: "tag" | "folder", name: string, color: string | null): void {
     const arr = kind === "tag" ? this.plugin.settings.tagColors : this.plugin.settings.folderColors;
     const i = arr.findIndex((c) => c.name === name);
+    // 「一覧に載っている ⇔ 色を指定している」を不変条件にする。リセットは色指定の解除なので
+    // 行ごと消す（色が空の行は、行が無い状態と見分けがつかず情報を持たないため）。
+    // invariant: listed ⇔ has an explicit colour. A reset drops the entry outright, because a row with
+    // no colour is indistinguishable from having no row at all and carries no information.
     if (color == null) {
-      if (i >= 0) arr.splice(i, 1); // リセット＝上書きを削除 / reset = drop the override
+      if (i >= 0) arr.splice(i, 1);
     } else if (i >= 0) {
       arr[i].color = color;
     } else {
       arr.push({ name, color });
     }
     void this.plugin.saveData(this.plugin.settings);
+    this.plugin.settingTab?.refreshIfOpen(); // 開いている設定画面にも反映 / reflect it in an open settings tab
     this.rerender();
   }
 
@@ -1029,7 +1016,10 @@ export class GanttView extends ItemView {
       });
       picker.click();
     }));
-    m.addItem((i) => i.setTitle(tr().menuResetColor).setIcon("rotate-ccw").onClick(() => this.setColorOverride(kind, name, null)));
+    // タグは既定色へ、フォルダは名前から自動生成へ戻る。行き先が違うのでラベルも分ける
+    // tags fall back to the default colour, folders to their name-derived one, so the labels differ
+    const resetLabel = kind === "tag" ? tr().menuResetTagColor : tr().menuResetColor;
+    m.addItem((i) => i.setTitle(resetLabel).setIcon("rotate-ccw").onClick(() => this.setColorOverride(kind, name, null)));
     m.showAtMouseEvent(e);
   }
 
@@ -2854,37 +2844,5 @@ export class GanttView extends ItemView {
     const el = createSvg(tag);
     for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
     return el;
-  }
-}
-
-// 削除などの確認ダイアログ（破壊的操作の前に確認）/ a small confirm dialog for destructive actions
-interface ConfirmOpts {
-  title: string;
-  body: string;
-  sub?: string;
-  confirmText: string;
-  cancelText: string;
-  onConfirm: () => void;
-}
-class ConfirmModal extends Modal {
-  constructor(app: App, private opts: ConfirmOpts) {
-    super(app);
-  }
-  onOpen(): void {
-    this.titleEl.setText(this.opts.title);
-    this.contentEl.createEl("p", { text: this.opts.body });
-    if (this.opts.sub) this.contentEl.createEl("p", { cls: "ogantt-confirm-sub", text: this.opts.sub });
-    const btns = this.contentEl.createDiv({ cls: "ogantt-confirm-btns" });
-    const cancel = btns.createEl("button", { text: this.opts.cancelText });
-    cancel.onclick = () => this.close();
-    const ok = btns.createEl("button", { cls: "mod-warning", text: this.opts.confirmText });
-    ok.onclick = () => {
-      this.close();
-      this.opts.onConfirm();
-    };
-    window.setTimeout(() => ok.focus(), 0); // Enter で即確定 / Enter confirms
-  }
-  onClose(): void {
-    this.contentEl.empty();
   }
 }
