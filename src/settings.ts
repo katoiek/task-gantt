@@ -583,10 +583,11 @@ export class GanttSettingTab extends PluginSettingTab {
 
     // 描画時点の並びを固定する。onDelete が渡してくる番号はこのスナップショットに対するものなので、
     // 実データからは「番号」ではなく「その行そのもの」を探して消す（番号で消すと別の行を巻き込む）。
+    // タグ一覧は確認付きの × を行に持たせていて onDelete を使わないため、ここはステータスのみ。
     // snapshot the order used for rendering: the index onDelete hands back refers to this array, so we
     // locate the row by identity rather than deleting by index, which could take out a different row.
+    // Only statuses need this: the tag list carries its own × with a confirm and never uses onDelete.
     const statusRows = s.statuses.slice();
-    const tagRows = s.tagColors.slice();
     const dropRow = <T,>(live: T[], snapshot: T[], index: number): void => {
       const at = live.indexOf(snapshot[index]);
       if (at >= 0) live.splice(at, 1);

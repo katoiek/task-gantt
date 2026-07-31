@@ -1,4 +1,4 @@
-import { App, ItemView, Menu, MarkdownRenderer, Modal, WorkspaceLeaf, setIcon, Notice, TFile, ViewStateResult, moment } from "obsidian";
+import { ItemView, Menu, MarkdownRenderer, WorkspaceLeaf, setIcon, Notice, TFile, ViewStateResult, moment } from "obsidian";
 import type GanttPlugin from "./main";
 import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, DateValue, DateOp, DateField, DateUnit, DateDir } from "./types";
 import {
@@ -36,7 +36,7 @@ import {
   buildProgressLine,
   ProgressLineRow,
 } from "./timeline";
-import { hashColor, hslToHex, resolveTagColor } from "./colors";
+import { hashColor, resolveTagColor } from "./colors";
 import { ConfirmModal } from "./modals";
 import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
