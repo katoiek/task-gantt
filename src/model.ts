@@ -423,6 +423,24 @@ export async function deleteTask(app: App, path: string): Promise<boolean> {
   return true;
 }
 
+// Vault 内に存在する全タグ（# 抜き・使用数の多い順）。入力候補に使う。
+// Obsidian の非公開 metadataCache.getTags() は使わず、公開 API の getAllTags で集計する。
+// every tag present in the vault (without #, most-used first), for input suggestions;
+// built with the public getAllTags rather than the undocumented metadataCache.getTags()
+export function collectAllTags(app: App): string[] {
+  const count = new Map<string, number>();
+  for (const file of app.vault.getMarkdownFiles()) {
+    const cache = app.metadataCache.getFileCache(file);
+    if (!cache) continue;
+    for (const raw of getAllTags(cache) ?? []) {
+      const tag = raw.replace(/^#/, "");
+      if (tag) count.set(tag, (count.get(tag) ?? 0) + 1);
+    }
+  }
+  // よく使うタグを上に（同数は名前順）/ most-used first, ties broken by name
+  return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([tag]) => tag);
+}
+
 // タグを追加（フロントマター tags へ・重複排除）/ add a tag to frontmatter `tags` (deduped)
 export async function addTag(app: App, path: string, tag: string): Promise<boolean> {
   const file = app.vault.getAbstractFileByPath(path);

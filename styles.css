@@ -108,6 +108,33 @@
   margin: 0;
   cursor: pointer;
 }
+/* タグ編集のポップオーバー（テーブルのタグセルから開く）/ tag editor popover (opened from the Tags cell) */
+.ogantt-tagmenu {
+  position: fixed;
+  z-index: var(--layer-menu, 50);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-s);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 200px;
+  max-width: 320px;
+}
+/* 付与済みタグのチップは折り返して並べる / assigned tag chips wrap onto multiple lines */
+.ogantt-tagmenu-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ogantt-tagmenu-chips:empty {
+  display: none; /* タグ0件のときは詰める / collapse when there are no tags */
+}
+.ogantt-tagmenu .ogantt-tag-add {
+  width: 100%;
+}
 
 /* ── 統合フィルタ（ステータス/担当者/タグ/開始日/期限日）/ unified filter ── */
 /* オプション行の下のフィルタ行 / the filter row below the options row */
@@ -595,14 +622,17 @@
 .ogantt-td-progress.is-empty .ogantt-meter-num {
   opacity: 0.45;
 }
-/* セル内編集の数値入力（セル幅に収める）/ in-cell number input (fits the cell) */
-.ogantt-meter-input {
+/* セル内編集の入力欄（テキスト・数値・セレクト共通。セル幅に収める）
+   in-cell editor shared by text, number and select inputs (fits the cell) */
+.ogantt-cell-input {
   width: 100%;
   min-width: 0;
   height: 22px;
   padding: 0 4px;
   font-size: 12px;
-  text-align: right;
+}
+input.ogantt-cell-input[type="number"] {
+  text-align: right; /* 数値は右揃え / numbers align right */
 }
 /* 親タスク行の折りたたみシェブロン枠（常に確保して名前位置を揃える）/ fixed chevron slot (keeps names aligned) */
 .ogantt-task-chevron {

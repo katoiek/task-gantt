@@ -113,6 +113,10 @@ interface Strings {
   invalidDate: string;
   pickDate: string;
   editProgress: string;
+  editAssignee: string;
+  editStatus: string;
+  editTags: string;
+  removeTagAria: string;
   fieldDates: string;
   fieldTime: string;
   clearDate: string;
@@ -254,6 +258,10 @@ const STRINGS: Record<Lang, Strings> = {
     invalidDate: "日付の形式が正しくありません。",
     pickDate: "日付を選択",
     editProgress: "ダブルクリックで進捗を編集",
+    editAssignee: "ダブルクリックで担当者を編集",
+    editStatus: "ダブルクリックでステータスを編集",
+    editTags: "ダブルクリックでタグを編集",
+    removeTagAria: "タグを削除",
     fieldDates: "日付",
     fieldTime: "時刻",
     clearDate: "クリア",
@@ -429,6 +437,10 @@ const STRINGS: Record<Lang, Strings> = {
     invalidDate: "Invalid date format.",
     pickDate: "Pick a date",
     editProgress: "Double-click to edit progress",
+    editAssignee: "Double-click to edit the assignee",
+    editStatus: "Double-click to edit the status",
+    editTags: "Double-click to edit tags",
+    removeTagAria: "Remove tag",
     fieldDates: "Dates",
     fieldTime: "Time",
     clearDate: "Clear",
@@ -604,6 +616,10 @@ const STRINGS: Record<Lang, Strings> = {
     invalidDate: "日期格式无效。",
     pickDate: "选择日期",
     editProgress: "双击编辑进度",
+    editAssignee: "双击编辑负责人",
+    editStatus: "双击编辑状态",
+    editTags: "双击编辑标签",
+    removeTagAria: "移除标签",
     fieldDates: "日期",
     fieldTime: "时间",
     clearDate: "清除",
@@ -779,6 +795,10 @@ const STRINGS: Record<Lang, Strings> = {
     invalidDate: "日期格式無效。",
     pickDate: "選擇日期",
     editProgress: "雙擊編輯進度",
+    editAssignee: "雙擊編輯負責人",
+    editStatus: "雙擊編輯狀態",
+    editTags: "雙擊編輯標籤",
+    removeTagAria: "移除標籤",
     fieldDates: "日期",
     fieldTime: "時間",
     clearDate: "清除",
@@ -954,6 +974,10 @@ const STRINGS: Record<Lang, Strings> = {
     invalidDate: "날짜 형식이 올바르지 않습니다.",
     pickDate: "날짜 선택",
     editProgress: "두 번 클릭하여 진척 편집",
+    editAssignee: "두 번 클릭하여 담당자 편집",
+    editStatus: "두 번 클릭하여 상태 편집",
+    editTags: "두 번 클릭하여 태그 편집",
+    removeTagAria: "태그 제거",
     fieldDates: "날짜",
     fieldTime: "시간",
     clearDate: "지우기",
@@ -1129,6 +1153,10 @@ const STRINGS: Record<Lang, Strings> = {
     invalidDate: "Format de date invalide.",
     pickDate: "Choisir une date",
     editProgress: "Double-cliquer pour modifier l'avancement",
+    editAssignee: "Double-cliquer pour modifier le responsable",
+    editStatus: "Double-cliquer pour modifier le statut",
+    editTags: "Double-cliquer pour modifier les étiquettes",
+    removeTagAria: "Retirer l'étiquette",
     fieldDates: "Dates",
     fieldTime: "Heure",
     clearDate: "Effacer",
@@ -1304,6 +1332,10 @@ const STRINGS: Record<Lang, Strings> = {
     invalidDate: "Formato de fecha no válido.",
     pickDate: "Elegir fecha",
     editProgress: "Doble clic para editar el avance",
+    editAssignee: "Doble clic para editar el responsable",
+    editStatus: "Doble clic para editar el estado",
+    editTags: "Doble clic para editar las etiquetas",
+    removeTagAria: "Quitar etiqueta",
     fieldDates: "Fechas",
     fieldTime: "Hora",
     clearDate: "Borrar",
@@ -1479,6 +1511,10 @@ const STRINGS: Record<Lang, Strings> = {
     invalidDate: "Неверный формат даты.",
     pickDate: "Выбрать дату",
     editProgress: "Двойной щелчок — изменить прогресс",
+    editAssignee: "Двойной щелчок — изменить исполнителя",
+    editStatus: "Двойной щелчок — изменить статус",
+    editTags: "Двойной щелчок — изменить теги",
+    removeTagAria: "Удалить тег",
     fieldDates: "Даты",
     fieldTime: "Время",
     clearDate: "Очистить",

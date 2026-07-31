@@ -16,6 +16,7 @@ import {
   deleteTask,
   addTag,
   removeTag,
+  collectAllTags,
   addDependency,
   removeDependency,
   readBody,
@@ -107,6 +108,9 @@ export class GanttView extends ItemView {
 
   // Fit モードでペイン幅に追従するための再描画タイマー / debounce timer to re-fit in Fit mode
   private fitTimer: number | null = null;
+
+  // セル内エディタの連番（datalist の id 衝突を避ける）/ in-cell editor counter (keeps datalist ids unique)
+  private cellEditSeq = 0;
 
   // DOM 参照 / DOM refs
   private tbodyEl!: HTMLElement;
@@ -395,9 +399,13 @@ export class GanttView extends ItemView {
       if (e.key === "Escape") { e.preventDefault(); close(); }
     };
     build(menu, close);
-    // 中身を作ってから幅を測って位置決め / measure width after building, then position
+    // 中身を作ってから寸法を測って位置決め。anchor の下に置き、画面外に出るなら上へ反転する
+    // （表の行から開くとき、下の行では下に収まらない）/ measure after building, then place below the
+    // anchor, flipping above when it would overflow (lower table rows have no room below)
     const r = anchor.getBoundingClientRect();
-    menu.style.top = `${r.bottom + 4}px`;
+    let top = r.bottom + 4;
+    if (top + menu.offsetHeight > window.innerHeight) top = Math.max(4, r.top - menu.offsetHeight - 4);
+    menu.style.top = `${top}px`;
     menu.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8))}px`;
     activeDocument.addEventListener("pointerdown", onOutside, true);
     activeDocument.addEventListener("keydown", onKey, true);
@@ -2047,7 +2055,7 @@ export class GanttView extends ItemView {
       chip.createSpan({ text: tag });
       const x = chip.createEl("button", { cls: "ogantt-date-x clickable-icon" });
       setIcon(x, "x");
-      x.setAttr("aria-label", tr().clearDate);
+      x.setAttr("aria-label", tr().removeTagAria);
       x.addEventListener("click", () => void (async () => {
         const path = this.selectedPath;
         if (!path) return;
@@ -2062,6 +2070,8 @@ export class GanttView extends ItemView {
     }
     const tagAdd = tagField.createEl("input", { cls: "ogantt-tag-add", type: "text" });
     tagAdd.placeholder = tr().addTagPlaceholder;
+    // Vault 内の既存タグを候補に（付与済みは除く）/ suggest the vault's tags, minus the ones already on this task
+    this.attachSingleTagSuggestions(tagAdd, t.tags);
     tagAdd.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); tagAdd.blur(); } });
     tagAdd.addEventListener("change", () => void (async () => {
       const v = tagAdd.value.trim().replace(/^#/, "");
@@ -2387,33 +2397,258 @@ export class GanttView extends ItemView {
         // 進捗はロールアップ ON でも自分の値を表示・編集する（集約する重みが無いため）
         // progress always shows/edits the task's own value, even when rolled up (there's no weight to aggregate by)
         this.paintProgressCell(td, t);
-        this.makeProgressCell(td, t);
+        this.makeEditableCell(td, tr().editProgress, (cell) =>
+          this.inlineInput(
+            cell,
+            t.progress != null ? String(t.progress) : "",
+            () => this.paintProgressCell(cell, t),
+            (v) => this.commitProgress(t, v),
+            (inp) => {
+              inp.type = "number";
+              inp.min = "0";
+              inp.max = "100";
+              inp.step = "5";
+            }
+          )
+        );
         break;
       case "assignee":
-        td.setText(t.assignee ?? "");
+        this.paintAssigneeCell(td, t);
+        this.makeEditableCell(td, tr().editAssignee, (cell) =>
+          this.inlineInput(
+            cell,
+            t.assignee ?? "",
+            () => this.paintAssigneeCell(cell, t),
+            async (v) => {
+              await writeField(this.app, t.path, this.plugin.settings.keys.assignee, v || undefined);
+              await this.refresh();
+            },
+            (inp) => this.attachAssigneeSuggestions(inp)
+          )
+        );
         break;
-      case "status": {
-        const s = this.plugin.settings.statuses.find((x) => x.id === t.status);
-        if (s) {
-          const dot = td.createSpan({ cls: "ogantt-status-dot" });
-          dot.style.background = s.color;
-          td.createSpan({ text: s.label });
-        }
+      case "status":
+        this.paintStatusCell(td, t);
+        this.makeEditableCell(td, tr().editStatus, (cell) => this.editStatusCell(cell, t));
         break;
-      }
-      case "tags": {
-        // タグをチップで表示（多値）/ tags as chips (multi-valued)
-        td.addClass("ogantt-td-tags");
-        for (const tag of t.tags) {
-          const chip = td.createSpan({ cls: "ogantt-tag-chip", text: tag });
-          this.paintTagChip(chip, tag);
-          // タグチップを右クリック＝色を変更 / right-click a tag chip to change its color
-          chip.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); this.openColorMenu(e, "tag", tag); });
-        }
+      case "tags":
+        // タグは多値なので、セル内入力ではなく詳細パネルと同じチップ＋追加欄をポップオーバーで開く
+        // tags are multi-valued, so the cell opens the panel's chips + add field in a popover
+        this.paintTagsCell(td, t);
+        this.makeEditableCell(td, tr().editTags, (cell) => this.openTagEditor(cell, t));
         break;
-      }
       case "name":
-        break; // name は呼び出し側で処理 / handled by the caller
+        break; // name は呼び出し側で処理（クリックで詳細パネル、改名はパネルのタイトル欄）
+        // handled by the caller: click opens the detail panel, renaming lives in the panel's title field
+    }
+  }
+
+  // ----- セルの直接編集 / in-cell editing -----
+  // 方針：テーブルに表示できる列はすべてダブルクリックで直接編集できる。
+  // 列を追加するときは paintXCell（表示）と、この makeEditableCell によるエディタ起動をセットで用意する。
+  // Policy: every column the table can show is editable in place via double-click.
+  // A new column pairs a paintXCell (display) with an editor launched through makeEditableCell.
+  private makeEditableCell(cell: HTMLElement, aria: string, edit: (cell: HTMLElement) => void): void {
+    cell.addClass("ogantt-td-editable");
+    cell.setAttr("aria-label", aria);
+    // セルのシングルクリックは詳細を開かない（編集操作に専念）/ a single click here edits, it doesn't open the detail panel
+    cell.addEventListener("click", (e) => e.stopPropagation());
+    cell.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      edit(cell);
+    });
+  }
+
+  // セルを入力欄に差し替える共通処理。Enter/フォーカス外れで保存、Esc で取消、値が同じなら書き込まない
+  // swap a cell for an input: Enter/blur saves, Esc cancels, an unchanged value is never written
+  private inlineInput(
+    cell: HTMLElement,
+    value: string,
+    repaint: () => void,
+    commit: (v: string) => Promise<void>,
+    configure?: (inp: HTMLInputElement) => void
+  ): void {
+    if (cell.querySelector("input, select")) return; // 編集中の二重起動を防ぐ / already editing
+    cell.empty();
+    const inp = cell.createEl("input", { type: "text", cls: "ogantt-cell-input" });
+    inp.value = value;
+    configure?.(inp);
+    inp.focus();
+    inp.select();
+    // Enter 保存後に blur が続いて二重保存にならないよう、一度きりに固定 / run exactly once (Enter is followed by blur)
+    let settled = false;
+    const cancel = (): void => {
+      if (settled) return;
+      settled = true;
+      repaint();
+    };
+    const save = (): void => {
+      if (settled) return;
+      settled = true;
+      const v = inp.value.trim();
+      if (v === value.trim()) {
+        repaint(); // 変更なしなら書き込まない / nothing changed, skip the write
+        return;
+      }
+      void commit(v);
+    };
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); save(); }
+      else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+    });
+    inp.addEventListener("blur", save);
+  }
+
+  // 進捗の保存。0%・空欄は未設定として削除（詳細パネルのスライダーと同じ規則）
+  // save progress; 0% and blank clear the field (same rule as the panel slider)
+  private async commitProgress(t: Task, raw: string): Promise<void> {
+    const n = raw === "" ? 0 : Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+    const next = n > 0 ? n : undefined;
+    if (next === t.progress) return;
+    await writeField(this.app, t.path, this.plugin.settings.keys.progress, next);
+    await this.refresh();
+  }
+
+  // 担当者セル / assignee cell
+  private paintAssigneeCell(td: HTMLElement, t: Task): void {
+    td.empty();
+    if (t.assignee) td.createSpan({ cls: "ogantt-td-text", text: t.assignee });
+  }
+
+  // 既存の担当者を入力候補に出して表記ゆれを防ぐ / suggest existing assignees to avoid spelling drift
+  private attachAssigneeSuggestions(inp: HTMLInputElement): void {
+    const names = [...new Set(this.tasks.map((x) => x.assignee).filter((a): a is string => !!a))].sort();
+    if (names.length === 0) return;
+    this.attachSuggestions(inp, (list) => {
+      for (const n of names) list.createEl("option", { value: n });
+    });
+  }
+
+  // 入力欄に datalist を付けて候補を出す共通処理。候補の中身は fill が入れる
+  // attach a datalist to an input; `fill` supplies the options
+  private attachSuggestions(inp: HTMLInputElement, fill: (list: HTMLDataListElement) => void): HTMLDataListElement {
+    // 同時に別セルを編集中でも id が衝突しないよう連番を振る / a counter keeps ids unique across concurrent editors
+    const id = `ogantt-suggest-${++this.cellEditSeq}`;
+    const list = (inp.parentElement ?? inp).createEl("datalist");
+    list.id = id;
+    inp.setAttr("list", id);
+    fill(list);
+    return list;
+  }
+
+  // Vault 内の既存タグを候補に出す（単一タグ入力用。詳細パネルのタグ追加欄）
+  // suggest the vault's existing tags for a single-tag input (the detail panel's add field)
+  private attachSingleTagSuggestions(inp: HTMLInputElement, exclude: string[] = []): void {
+    const all = collectAllTags(this.app).filter((x) => !exclude.includes(x));
+    if (all.length === 0) return;
+    this.attachSuggestions(inp, (list) => {
+      for (const tag of all) list.createEl("option", { value: tag });
+    });
+  }
+
+  // タグ編集のポップオーバー（詳細パネルと同じ操作：チップの × で削除、入力＋Enter で追加）
+  // 1 セルに複数タグを収められないので、日付セルと同じくポップオーバーで開く
+  // tag editor popover, same interaction as the detail panel: × on a chip removes, input + Enter adds.
+  // a cell can't hold several tags, so it opens a popover just like the date cell does
+  private openTagEditor(anchor: HTMLElement, t: Task): void {
+    const path = t.path;
+    this.openPopover(anchor, "ogantt-tagmenu", (menu) => {
+      const build = (): void => {
+        menu.empty();
+        // 背景 refresh が this.tasks を作り替えるので、毎回パスから最新を引き直す
+        // a background refresh may rebuild this.tasks, so look the task up by path every time
+        const live = this.tasks.find((x) => x.path === path) ?? t;
+        // 変更をメモリに反映してから盤面とポップオーバーを描き直す / apply in memory, then redraw board + popover
+        const apply = (mutate: (tags: string[]) => string[]): void => {
+          const l = this.tasks.find((x) => x.path === path);
+          if (l) l.tags = mutate(l.tags);
+          this.rerender();
+          build();
+        };
+        const chips = menu.createDiv({ cls: "ogantt-tagmenu-chips" });
+        for (const tag of live.tags) {
+          const chip = chips.createSpan({ cls: "ogantt-tag-chip" });
+          this.paintTagChip(chip, tag);
+          chip.createSpan({ text: tag });
+          const x = chip.createEl("button", { cls: "ogantt-date-x clickable-icon" });
+          setIcon(x, "x");
+          x.setAttr("aria-label", tr().removeTagAria);
+          x.addEventListener("click", () => void (async () => {
+            await removeTag(this.app, path, tag);
+            apply((tags) => tags.filter((y) => y !== tag));
+          })());
+        }
+        const add = menu.createEl("input", { cls: "ogantt-tag-add", type: "text" });
+        add.placeholder = tr().addTagPlaceholder;
+        this.attachSingleTagSuggestions(add, live.tags);
+        add.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add.blur(); } });
+        add.addEventListener("change", () => void (async () => {
+          const v = add.value.trim().replace(/^#/, "");
+          if (!v) return;
+          await addTag(this.app, path, v);
+          apply((tags) => (tags.includes(v) ? tags : [...tags, v]));
+        })());
+        add.focus(); // 追加後も入力欄に留まって続けて足せる / keep focus so tags can be added back to back
+      };
+      build();
+    });
+  }
+
+  // ステータスセル（色ドット＋ラベル）/ status cell (color dot + label)
+  private paintStatusCell(td: HTMLElement, t: Task): void {
+    td.empty();
+    const s = this.plugin.settings.statuses.find((x) => x.id === t.status);
+    if (!s) return;
+    const dot = td.createSpan({ cls: "ogantt-status-dot" });
+    dot.style.background = s.color;
+    td.createSpan({ cls: "ogantt-td-text", text: s.label });
+  }
+
+  // ステータスは選択肢が決まっているのでセレクトで編集する / status has a fixed set, so it edits as a select
+  private editStatusCell(cell: HTMLElement, t: Task): void {
+    if (cell.querySelector("input, select")) return;
+    cell.empty();
+    const sel = cell.createEl("select", { cls: "ogantt-cell-input" });
+    sel.createEl("option", { text: "—", value: "" }); // 未設定に戻す / clear the status
+    for (const s of this.plugin.settings.statuses) {
+      const o = sel.createEl("option", { text: s.label, value: s.id });
+      if (s.id === t.status) o.selected = true;
+    }
+    sel.focus();
+    // ダブルクリックで一覧まで開く（未対応環境ではフォーカスのみで、クリックすれば開く）
+    // open the dropdown right away; where showPicker is unavailable, focus is enough and a click opens it
+    try {
+      sel.showPicker();
+    } catch {
+      /* フォーカス済みなので何もしない / already focused, nothing to do */
+    }
+    let settled = false;
+    const finish = (save: boolean): void => {
+      if (settled) return;
+      settled = true;
+      if (!save || sel.value === (t.status ?? "")) {
+        this.paintStatusCell(cell, t);
+        return;
+      }
+      void (async () => {
+        await writeField(this.app, t.path, this.plugin.settings.keys.status, sel.value || undefined);
+        await this.refresh();
+      })();
+    };
+    sel.addEventListener("change", () => finish(true));
+    sel.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); finish(false); } });
+    sel.addEventListener("blur", () => finish(true));
+  }
+
+  // タグセル（多値・チップ表示）/ tags cell (multi-valued chips)
+  private paintTagsCell(td: HTMLElement, t: Task): void {
+    td.empty();
+    td.addClass("ogantt-td-tags");
+    for (const tag of t.tags) {
+      const chip = td.createSpan({ cls: "ogantt-tag-chip", text: tag });
+      this.paintTagChip(chip, tag);
+      // タグチップを右クリック＝色を変更 / right-click a tag chip to change its color
+      chip.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); this.openColorMenu(e, "tag", tag); });
     }
   }
 
@@ -2431,70 +2666,9 @@ export class GanttView extends ItemView {
     td.createSpan({ cls: "ogantt-meter-num", text: p != null ? `${p}%` : "—" });
   }
 
-  // 進捗セルをダブルクリックで直接編集可能にする / make a progress cell editable via double-click
-  private makeProgressCell(cell: HTMLElement, t: Task): void {
-    cell.addClass("ogantt-td-editable");
-    cell.setAttr("aria-label", tr().editProgress);
-    // セルのシングルクリックは詳細を開かない（進捗編集に専念）/ a single click here edits progress, not opens detail
-    cell.addEventListener("click", (e) => e.stopPropagation());
-    cell.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
-      this.editProgressCell(cell, t);
-    });
-  }
-
-  // セル内で数値入力に切り替える。Enter/フォーカス外れで保存、Esc で取消
-  // swap the cell for a number input: Enter/blur saves, Esc cancels
-  private editProgressCell(cell: HTMLElement, t: Task): void {
-    if (cell.querySelector("input")) return; // 編集中の二重起動を防ぐ / already editing
-    cell.empty();
-    const inp = cell.createEl("input", { type: "number", cls: "ogantt-meter-input" });
-    inp.min = "0";
-    inp.max = "100";
-    inp.step = "5";
-    inp.value = t.progress != null ? String(t.progress) : "";
-    inp.focus();
-    inp.select();
-    // Enter 保存後に blur が続いて二重保存にならないよう、一度きりに固定 / run exactly once (Enter is followed by blur)
-    let settled = false;
-    const cancel = (): void => {
-      if (settled) return;
-      settled = true;
-      this.paintProgressCell(cell, t);
-    };
-    const commit = (): void => {
-      if (settled) return;
-      settled = true;
-      void (async () => {
-        const raw = inp.value.trim();
-        const n = raw === "" ? 0 : Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
-        // 0%・空欄は未設定として削除（詳細パネルのスライダーと同じ規則）/ 0% and blank clear the field (same rule as the panel slider)
-        const next = n > 0 ? n : undefined;
-        if (next === t.progress) {
-          this.paintProgressCell(cell, t); // 変更なしなら書き込まない / nothing changed, skip the write
-          return;
-        }
-        await writeField(this.app, t.path, this.plugin.settings.keys.progress, next);
-        await this.refresh();
-      })();
-    };
-    inp.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") { e.preventDefault(); commit(); }
-      else if (e.key === "Escape") { e.preventDefault(); cancel(); }
-    });
-    inp.addEventListener("blur", () => commit());
-  }
-
   // テーブルの日付セルをダブルクリックで直接編集可能にする / make a table date cell editable via double-click
   private makeDateCell(cell: HTMLElement, t: Task, which: "start" | "end"): void {
-    cell.addClass("ogantt-td-editable");
-    cell.setAttr("aria-label", tr().pickDate);
-    // セルのシングルクリックは詳細を開かない（日付編集に専念）/ a single click here edits dates, not opens detail
-    cell.addEventListener("click", (e) => e.stopPropagation());
-    cell.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
-      this.openCellDatePicker(cell, t, which);
-    });
+    this.makeEditableCell(cell, tr().pickDate, (c) => this.openCellDatePicker(c, t, which));
   }
 
   // テーブルのセルから範囲カレンダーを開いて日付を直接編集 / open the range calendar from a table cell

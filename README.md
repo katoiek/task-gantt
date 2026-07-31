@@ -25,7 +25,7 @@ Click a task to open the detail panel and edit its dates, status, assignee, prog
 1. In **Settings → Task Gantt**, set the **target folder** (e.g. `Projects/Cleanup`).
 2. Open the view from the **"Open Gantt" ribbon icon** in the left column (or the command **"Open Gantt"**). The ribbon opens the Gantt for the folder of the currently open note — or the folder selected in the file explorer — and falls back to the default folder in settings (the **vault root** when none is set). You can also right-click any folder → **Open as Gantt**.
 3. Direct subfolders become **groups**, and the `.md` files inside them become **tasks**.
-4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter. You can also **double-click a Start/Due cell** in the table to pick a date from a calendar, or **double-click a Progress cell** to type a percentage (0–100; blank or 0 clears it).
+4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter. **Every column the table can show is editable in place — just double-click the cell.** Start and Due open a calendar, Progress takes a percentage (0–100; blank or 0 clears it), Status opens a dropdown, Assignee is a text field that suggests names already used in the board, and Tags opens a small editor with a chip per tag (× to remove) and an add field that suggests the vault's existing tags. Enter or clicking away saves, Esc cancels.
 5. Click a task in the table — or **double-click its bar** — to slide in a **detail panel** (dates, status, assignee, progress, body) from the right.
 6. Use the **＋ New task** button to create a one-day task in the current folder and name it on the spot, and **Today** to scroll the timeline to the current date.
 7. Use the **Day / Week / Month / Fit** buttons to change the timeline scale. **Fit** auto-scales to the pane width and re-fits when you resize.
@@ -44,7 +44,7 @@ An options row above the table shapes how the board is displayed.
 
 ![Click a column header to sort, with an ↑/↓ indicator](docs/images/sort-en.png)
 
-**Choose columns** with the gear button — show or hide Start, Due, Progress, Assignee, Status, and Tags. The column layout and sort are remembered across sessions:
+**Choose columns** with the gear button — show or hide Start, Due, Progress, Assignee, Status, and Tags. Any column shown here can be edited by double-clicking its cell. The column layout and sort are remembered across sessions:
 
 ![Show or hide table columns from the gear menu](docs/images/column_en.png)
 
@@ -84,7 +84,7 @@ Give a task a `parent` (a single wikilink to another task) and it nests under th
 
 ## Tags
 
-Tasks use Obsidian's native `tags` (frontmatter `tags:` plus inline `#tag`), so they stay in sync with Obsidian's search and tag pane. **Group by Tag** to see a task under each of its tags — a multi-valued task appears in several groups — filter by tag, and show a **Tags** column of chips. When grouped by tag, **drag a task onto a tag group** to add that tag, distinct from a folder drop, which *moves* the task. Add or remove tags in the detail panel.
+Tasks use Obsidian's native `tags` (frontmatter `tags:` plus inline `#tag`), so they stay in sync with Obsidian's search and tag pane. **Group by Tag** to see a task under each of its tags — a multi-valued task appears in several groups — filter by tag, and show a **Tags** column of chips. When grouped by tag, **drag a task onto a tag group** to add that tag, distinct from a folder drop, which *moves* the task. Add or remove tags in the detail panel, or double-click the **Tags** cell to open the same editor there. Either way, tags are written to frontmatter `tags:` — a `#tag` written in the body is shown but can't be removed from here.
 
 ## Coloring tags and folders
 
@@ -96,7 +96,7 @@ Tags and folders get an automatic color from their name, and you can override it
 
 ## Creating tasks
 
-Press **＋ New task** to create a dated note in the current folder and rename it immediately. You don't have to start there, though: every note inside the target folder already appears as a row — **including notes with no dates yet** — so you can also click an existing note and set **Start** / **Due** in the detail panel to turn it into a scheduled task. Empty Start, Due, and Progress cells are double-click editable too, so you can fill a blank value straight from the table.
+Press **＋ New task** to create a dated note in the current folder and rename it immediately. You don't have to start there, though: every note inside the target folder already appears as a row — **including notes with no dates yet** — so you can also click an existing note and set **Start** / **Due** in the detail panel to turn it into a scheduled task. Empty cells are double-click editable too, so you can fill a blank value straight from the table.
 
 ## Task frontmatter
 
@@ -254,7 +254,7 @@ MIT — see [`LICENSE`](./LICENSE).
 1. **設定 → Task Gantt** で**対象フォルダ**を指定（例: `Projects/お掃除`）。
 2. 左列の **「Gantt を開く」リボンアイコン**（またはコマンド「Gantt を開く」）でビューを開く。リボンは、**現在開いているノートのフォルダ**（またはエクスプローラで選択中のフォルダ）を Gantt 表示し、どちらも無ければ設定の既定フォルダ（未設定なら **Vault ルート**）を開きます。フォルダを右クリック →**「Open as Gantt」**でも開けます。
 3. 直下のサブフォルダが**グループ**、その中の `.md` が**タスク**になります。
-4. バーを**ドラッグ／端をリサイズ**すると、そのファイルの `start`/`end` に書き戻します。表の**開始・期限セルをダブルクリック**するとカレンダーから日付を選べ、**進捗セルをダブルクリック**すると % を直接入力できます（0–100。空欄または 0 で未設定に戻ります）。
+4. バーを**ドラッグ／端をリサイズ**すると、そのファイルの `start`/`end` に書き戻します。**テーブルに表示できる列はすべて、セルをダブルクリックすればその場で編集できます。** 開始・期限はカレンダー、進捗は % の直接入力（0–100。空欄または 0 で未設定）、ステータスはドロップダウン、担当者はボード内で既に使われている名前を候補に出すテキスト欄、タグは詳細パネルと同じエディタ（タグごとのチップと × による削除＋Vault 内の既存タグを候補に出す追加欄）が開きます。Enter またはフォーカスを外すと保存、Esc で取消します。
 5. 表のタスクをクリック、または**バーをダブルクリック**すると、右から**詳細パネル**（日付・ステータス・担当者・進捗・本文）がスライドインします。
 6. **＋ 新規タスク**ボタンで現在のフォルダに1日タスクを作ってその場で命名、**今日**ボタンでタイムラインを今日へスクロールできます。
 7. **Day / Week / Month / Fit** ボタンで時間軸の拡大率を変更。**Fit** はペイン幅に自動で収め、リサイズにも追従します。
@@ -273,7 +273,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![列ヘッダのクリックでソート（↑/↓ 表示）](docs/images/sort-ja.png)
 
-**列の表示**は歯車ボタンから、開始・期限・進捗・担当者・ステータス・タグを出し分け。列レイアウトとソートはセッションをまたいで保存されます：
+**列の表示**は歯車ボタンから、開始・期限・進捗・担当者・ステータス・タグを出し分け。ここに出せる列はすべてセルのダブルクリックで編集できます。列レイアウトとソートはセッションをまたいで保存されます：
 
 ![歯車メニューから列を表示／非表示](docs/images/column_ja.png)
 
@@ -313,7 +313,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ## タグ
 
-タスクは Obsidian ネイティブの `tags`（フロントマター `tags:` ＋本文 `#tag`）を使うので、Obsidian の検索・タグペインと同期します。**タグでグループ化**すると、各タグの下にそのタスクが表示され（多値のタスクは複数グループに登場）、タグでの絞り込みや、チップ表示の**タグ列**も使えます。タグでグループ化中は、**タスクをタグのグループへドラッグ**するとそのタグを付与できます（フォルダへのドロップ＝移動とは別動作）。タグの追加・削除は詳細パネルからも行えます。
+タスクは Obsidian ネイティブの `tags`（フロントマター `tags:` ＋本文 `#tag`）を使うので、Obsidian の検索・タグペインと同期します。**タグでグループ化**すると、各タグの下にそのタスクが表示され（多値のタスクは複数グループに登場）、タグでの絞り込みや、チップ表示の**タグ列**も使えます。タグでグループ化中は、**タスクをタグのグループへドラッグ**するとそのタグを付与できます（フォルダへのドロップ＝移動とは別動作）。タグの追加・削除は詳細パネル、または**タグ**セルのダブルクリックで同じエディタを開いて行えます。どちらもフロントマターの `tags:` に書き込むため、本文中に書いた `#tag` は表示されますがここからは削除できません。
 
 ## タグ・フォルダの色
 
@@ -325,7 +325,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ## タスクの作成
 
-**＋ 新規タスク**で現在のフォルダに日付付きノートを作り、すぐ名前を付けられます。もちろんそこから始める必要はありません。対象フォルダ内のノートは、**まだ日付が無いものも含めて**そのまま行として表示されるので、既存ノートをクリックして詳細パネルで **開始 / 期限** を入力すれば、そのままスケジュール付きタスクになります。開始・期限・進捗のセルは**値が空のままでもダブルクリックで編集できる**ので、表から直接入力しても構いません。
+**＋ 新規タスク**で現在のフォルダに日付付きノートを作り、すぐ名前を付けられます。もちろんそこから始める必要はありません。対象フォルダ内のノートは、**まだ日付が無いものも含めて**そのまま行として表示されるので、既存ノートをクリックして詳細パネルで **開始 / 期限** を入力すれば、そのままスケジュール付きタスクになります。各セルは**値が空のままでもダブルクリックで編集できる**ので、表から直接入力しても構いません。
 
 ## タスクの書き方
 
