@@ -15,3 +15,9 @@ examples/*.png
 
 # 参照用の動画など（本体ではない）/ reference videos & scratch files (not part of the plugin)
 sample files/
+
+# 開発用のエージェント構成（ローカル限定・プラグイン本体とは無関係）
+# local-only agent setup (Planner / Generator / Evaluator); nothing to do with the plugin itself
+.claude/
+.mcp.json
+docs/agent-team.md
