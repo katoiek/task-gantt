@@ -163,7 +163,23 @@ export async function connectGoogle(plugin: GanttPlugin): Promise<boolean> {
   });
   if (status !== 200 || typeof json.refresh_token !== "string") {
     console.error("Task Gantt: Google token exchange failed", status, json);
-    new Notice(tr().gcalConnectFailed);
+    // Google が返した理由をそのまま出す。原因（redirect_uri_mismatch / invalid_client 等）で
+    // 対処が全く変わるため、汎用メッセージだけではコンソールを開かないと切り分けられない。
+    // surface Google's own reason: the fix differs entirely per cause
+    // (redirect_uri_mismatch vs invalid_client …), so a generic message forces a console trip.
+    const reason =
+      typeof json.error_description === "string"
+        ? json.error_description
+        : typeof json.error === "string"
+          ? json.error
+          : // refresh_token だけが欠けるのは「同意済みで再発行されなかった」ケース
+            // a missing refresh_token alone means consent existed and Google didn't re-issue one
+            status === 200
+            ? "no refresh_token in response"
+            : `HTTP ${status}`;
+    new Notice(`${tr().gcalConnectFailed}\n${reason}`, 15_000);
+    g.lastError = `connect: ${reason}`;
+    await plugin.saveData(plugin.settings);
     return false;
   }
   g.refreshToken = json.refresh_token;

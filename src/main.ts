@@ -8,6 +8,9 @@ import { migrateRenamedPath, schedulePush, syncGcal } from "./gcal/sync";
 
 export default class GanttPlugin extends Plugin {
   settings!: GanttSettings;
+  // 設定タブ。表から色を変えたときに開いていれば描き直すため保持する
+  // the settings tab, held so a table-side color edit can refresh it while it's open
+  settingTab?: GanttSettingTab;
   private lastNotifyCheck = 0; // 前回チェック時刻 / last notification check (epoch ms)
   private lastGcalPull = 0; // 前回の Google カレンダー Pull / last Google Calendar pull (epoch ms)
 
@@ -41,7 +44,9 @@ export default class GanttPlugin extends Plugin {
       })
     );
 
-    this.addSettingTab(new GanttSettingTab(this.app, this));
+    // 表から色を変えたときに設定画面へ反映できるよう参照を持つ / kept so table-side color edits can refresh it
+    this.settingTab = new GanttSettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
 
     this.addCommand({
       id: "gcal-sync-now",

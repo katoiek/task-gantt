@@ -1,6 +1,14 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
+// 宣言的設定の型（@since 1.13.0）。型のみの参照で実行時 API は呼ばないため、
+// minAppVersion 1.7.2 のままでも no-unsupported-api には触れない。
+// declarative-settings types (@since 1.13.0); type-only references call no runtime API,
+// so they don't trip no-unsupported-api while minAppVersion stays at 1.7.2.
+import type { SettingDefinitionItem, SettingGroupItem } from "obsidian";
 import type GanttPlugin from "./main";
 import { StatusDef, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset } from "./types";
+import { collectAllTags } from "./model";
+import { ConfirmModal, TagSuggestModal } from "./modals";
+import { obsidianTagColor, toHex } from "./colors";
 import { t as tr } from "./i18n";
 import { LEADS, leadLabel, sendTestNotification } from "./notify";
 import { connectGoogle, disconnectGoogle, isConnected } from "./gcal/auth";
@@ -69,7 +77,10 @@ export interface GanttSettings {
   filterMatch: FilterMatch; // all=すべてに一致(AND) / any=いずれかに一致(OR)
   filterPresets: FilterPreset[]; // ユーザー定義のフィルタプリセット / user-defined filter presets
   progressLineColor: string; // 稲妻線の色 / progress line color
-  // タグ/フォルダの色（手動上書き。未登録は名前ハッシュで自動生成）/ manual color overrides (unset → auto from name hash)
+  // タグの既定色。空文字＝Obsidian 本体のタグ色に従う / default tag color; empty = follow Obsidian's own tag color
+  defaultTagColor: string;
+  // 色を指定したタグだけを保持する（載っている＝色を指定している）。色は常に具体値
+  // only tags with an explicit colour are listed (listed ⇔ coloured); the colour is never empty
   tagColors: { name: string; color: string }[];
   folderColors: { name: string; color: string }[];
   // 通知（Discord / Slack の Incoming Webhook）/ notifications via incoming webhooks
@@ -147,6 +158,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   filterMatch: "all",
   filterPresets: [],
   progressLineColor: "#f59e0b", // 既定はバー色と重なりにくい橙 / amber, unlikely to clash with bar colors
+  defaultTagColor: "", // 空＝Obsidian 本体のタグ色 / empty = Obsidian's own tag color
   tagColors: [],
   folderColors: [],
   notify: {
@@ -199,6 +211,13 @@ export const DEFAULT_SETTINGS: GanttSettings = {
 export class GanttSettingTab extends PluginSettingTab {
   plugin: GanttPlugin;
 
+  // 宣言版で描画されているか。getSettingDefinitions() は 1.13 以降でしか呼ばれないので、
+  // これが true なら再描画は update()、false なら display() 側の draw() を使う。
+  // whether the tab renders declaratively: getSettingDefinitions() is only called on 1.13+,
+  // so true means redraw via update(), false means redraw via the display()-side draw().
+  private declarative = false;
+
+
   constructor(app: App, plugin: GanttPlugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -206,6 +225,28 @@ export class GanttSettingTab extends PluginSettingTab {
 
   private save(): void {
     void this.plugin.saveSettings();
+  }
+
+  // 設定画面の外（表の右クリックなど）から色を変えたときに、開いていれば描き直す
+  // redraw from outside the tab (e.g. a right-click in the table) when it happens to be open
+  refreshIfOpen(): void {
+    if (this.declarative) this.updateDeclarative();
+    else if (this.containerEl.firstChild) this.draw();
+  }
+
+  // 構造が変わる操作のあとの描き直し。描画経路に応じて振り分ける
+  // redraw after a change that alters the structure, routed by which renderer is in use
+  private redraw(): void {
+    if (this.declarative) this.updateDeclarative();
+    else this.draw();
+  }
+
+  // update() は @since 1.13.0。minAppVersion 1.7.2 を保つため型付きの直接呼び出しを避け、
+  // 実行時に存在するときだけ呼ぶ（1.12 以下では declarative が false なのでそもそも通らない）。
+  // update() is @since 1.13.0; to keep minAppVersion at 1.7.2 we avoid a typed direct call and
+  // invoke it only when it exists at runtime (on 1.12 and older, `declarative` is never true).
+  private updateDeclarative(): void {
+    (this as unknown as { update?: () => void }).update?.();
   }
 
   // ===== 各入力欄の組み立て（推奨の getSettingDefinitions と display() フォールバックで共有）=====
@@ -269,7 +310,7 @@ export class GanttSettingTab extends PluginSettingTab {
         b.setIcon("rotate-ccw").setTooltip(tr().setResetTooltip).onClick(() => {
           s.progressLineColor = DEFAULT_SETTINGS.progressLineColor;
           this.save();
-          this.draw(); // ピッカーの表示値を戻す / refresh the picker's shown value
+          this.redraw(); // ピッカーの表示値を戻す / refresh the picker's shown value
         })
       );
   }
@@ -281,10 +322,75 @@ export class GanttSettingTab extends PluginSettingTab {
       .addColorPicker((c) => c.setValue(st.color).onChange((v) => { st.color = v; this.save(); }));
   }
 
+  // 色を指定したタグの1行。行が存在する＝色を指定している、なので色は常に具体値を持つ
+  // one row per explicitly coloured tag; a row exists only when a colour is set, so it's never empty
   private ctlTagColorRow(setting: Setting, tc: { name: string; color: string }): void {
     setting
-      .addText((t) => t.setPlaceholder(tr().setColorName).setValue(tc.name).onChange((v) => { tc.name = v.trim(); this.save(); }))
-      .addColorPicker((c) => c.setValue(tc.color).onChange((v) => { tc.color = v; this.save(); }));
+      .addText((t) => t.setValue(tc.name).setDisabled(true))
+      .addColorPicker((c) => c.setValue(toHex(tc.color)).onChange((v) => { tc.color = v; this.save(); }))
+      .addExtraButton((b) =>
+        b.setIcon("x").setTooltip(tr().confirmDropTagColorOk).onClick(() => this.confirmRemoveTagColor(tc))
+      );
+  }
+
+  // 一覧の並び。順序に意味は無く、追加元が2箇所あって挿入順が予測できないのでタグ名の昇順で固定する
+  // display order: the list is a lookup table with no meaningful order, and rows arrive from two
+  // different places, so insertion order is unpredictable — sort by tag name instead
+  private sortedTagColors(): { name: string; color: string }[] {
+    return this.plugin.settings.tagColors.slice().sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // 色指定を解除する（＝一覧から外す）。設定画面には取り消しが無いので確認を挟む
+  // drop a colour override, which removes the row; the settings tab has no undo, so confirm first
+  private confirmRemoveTagColor(tc: { name: string; color: string }): void {
+    new ConfirmModal(this.plugin.app, {
+      title: tr().confirmDropTagColorTitle,
+      body: tr().confirmDropTagColorBody(tc.name),
+      sub: tr().confirmDropTagColorSub,
+      confirmText: tr().confirmDropTagColorOk,
+      cancelText: tr().cancel,
+      onConfirm: () => {
+        const live = this.plugin.settings.tagColors;
+        const at = live.indexOf(tc);
+        if (at >= 0) live.splice(at, 1);
+        this.save();
+        this.redraw();
+      },
+    }).open();
+  }
+
+  // 色を付けるタグを Vault の一覧から選ぶ（手入力だと名前を間違えて色が効かない）
+  // pick the tag to colour from the vault's own list; typing it by hand invites a silent typo
+  private pickTagToColor(): void {
+    const s = this.plugin.settings;
+    const taken = new Set(s.tagColors.map((c) => c.name));
+    const choices = collectAllTags(this.plugin.app).filter((tag) => !taken.has(tag));
+    if (choices.length === 0) {
+      new Notice(tr().setNoTagsToColor);
+      return;
+    }
+    new TagSuggestModal(this.plugin.app, choices, tr().setPickTagPlaceholder, (tag) => {
+      // 既定色を初期値にして、そこから変えてもらう / seed with the default so the user edits from there
+      s.tagColors.push({ name: tag, color: toHex(s.defaultTagColor || obsidianTagColor()) });
+      this.save();
+      this.redraw();
+    }).open();
+  }
+
+  // タグの既定色（空＝名前から自動生成）/ default tag color (empty = auto from the name)
+  private ctlDefaultTagColor(setting: Setting): void {
+    const s = this.plugin.settings;
+    setting
+      .addColorPicker((c) =>
+        c.setValue(toHex(s.defaultTagColor || obsidianTagColor())).onChange((v) => { s.defaultTagColor = v; this.save(); })
+      )
+      .addExtraButton((b) =>
+        b.setIcon("rotate-ccw").setTooltip(tr().setDefaultTagColorAuto).onClick(() => {
+          s.defaultTagColor = ""; // Obsidian 本体のタグ色へ戻す / back to Obsidian's own tag color
+          this.save();
+          this.redraw();
+        })
+      );
   }
 
   private ctlKeyRow(setting: Setting, k: keyof GanttSettings["keys"]): void {
@@ -312,54 +418,47 @@ export class GanttSettingTab extends PluginSettingTab {
     );
   }
 
-  // ===== Google カレンダー同期のセクション / the Google Calendar sync section =====
-  private drawGcal(containerEl: HTMLElement): void {
+  // ===== Google カレンダー同期の各行 / the Google Calendar sync rows =====
+  // display() と getSettingDefinitions() の両方から使うため、行ごとにヘルパー化する
+  // one helper per row, shared by display() and getSettingDefinitions() so the two can't drift
+  private ctlGcalClientId(setting: Setting): void {
     const g = this.plugin.settings.gcal;
-    const connected = isConnected(this.plugin);
+    setting.addText((t) => t.setValue(g.clientId).onChange((v) => { g.clientId = v.trim(); this.save(); }));
+  }
 
-    new Setting(containerEl).setName(tr().setGcalHeading).setDesc(tr().setGcalDesc).setHeading();
-
-    // モバイルでは案内のみ表示（ループバック認証が使えない）/ mobile gets a note only (no loopback auth)
-    if (!Platform.isDesktop) {
-      new Setting(containerEl).setDesc(tr().gcalDesktopOnly);
-      return;
-    }
-
-    // 認証情報（シークレットは伏せ字入力）/ credentials (the secret uses a password input)
-    new Setting(containerEl).setName(tr().setGcalClientIdName).setDesc(tr().setGcalCredsDesc).addText((t) =>
-      t.setValue(g.clientId).onChange((v) => { g.clientId = v.trim(); this.save(); })
-    );
-    new Setting(containerEl).setName(tr().setGcalClientSecretName).addText((t) => {
+  private ctlGcalClientSecret(setting: Setting): void {
+    const g = this.plugin.settings.gcal;
+    setting.addText((t) => {
       t.inputEl.type = "password";
       t.setValue(g.clientSecret).onChange((v) => { g.clientSecret = v.trim(); this.save(); });
     });
+  }
 
-    // 接続 / 切断（接続状態を説明欄に表示）/ connect / disconnect with the status in the description
-    new Setting(containerEl)
-      .setName(tr().setGcalAccountName)
-      .setDesc(connected ? tr().gcalStatusConnected : tr().gcalStatusNotConnected)
-      .addButton((b) => {
-        if (connected) {
-          // setDestructive() は @since 1.13.0 で minAppVersion 1.7.2 と両立しない（no-unsupported-api エラー）。
-          // setWarning() は @deprecated だが「非推奨」は Recommendation（非ブロッキング）に留まるため、こちらを使う。
-          // setDestructive() requires @since 1.13.0, incompatible with minAppVersion 1.7.2 (trips no-unsupported-api).
-          // setWarning() is @deprecated but only a non-blocking Recommendation, so it's kept here instead.
-          b.setButtonText(tr().setGcalDisconnect).setWarning().onClick(() => void (async () => {
-            await disconnectGoogle(this.plugin);
-            this.draw();
-          })());
-        } else {
-          b.setButtonText(tr().setGcalConnect).setCta().onClick(() => void (async () => {
-            const ok = await connectGoogle(this.plugin);
-            if (ok) this.draw();
-          })());
-        }
-      });
+  // 接続 / 切断（押すと接続状態が変わるので、完了後に描き直す）/ connect / disconnect, redrawn once the state flips
+  private ctlGcalAccount(setting: Setting): void {
+    setting.addButton((b) => {
+      if (isConnected(this.plugin)) {
+        // setDestructive() は @since 1.13.0 で minAppVersion 1.7.2 と両立しない（no-unsupported-api エラー）。
+        // setWarning() は @deprecated だが「非推奨」は Recommendation（非ブロッキング）に留まるため、こちらを使う。
+        // setDestructive() requires @since 1.13.0, incompatible with minAppVersion 1.7.2 (trips no-unsupported-api).
+        // setWarning() is @deprecated but only a non-blocking Recommendation, so it's kept here instead.
+        b.setButtonText(tr().setGcalDisconnect).setWarning().onClick(() => void (async () => {
+          await disconnectGoogle(this.plugin);
+          this.redraw();
+        })());
+      } else {
+        b.setButtonText(tr().setGcalConnect).setCta().onClick(() => void (async () => {
+          const ok = await connectGoogle(this.plugin);
+          if (ok) this.redraw();
+        })());
+      }
+    });
+  }
 
-    if (!connected) return; // 以降の項目は接続後のみ / the rest only makes sense once connected
-
-    // 同期先カレンダー（一覧は非同期で取得して差し込む）/ target calendar (the list loads asynchronously)
-    new Setting(containerEl).setName(tr().setGcalCalendarName).addDropdown((d) => {
+  // 同期先カレンダー（一覧は非同期で取得して差し込む）/ target calendar (the list loads asynchronously)
+  private ctlGcalCalendar(setting: Setting): void {
+    const g = this.plugin.settings.gcal;
+    setting.addDropdown((d) => {
       if (g.calendarId) d.addOption(g.calendarId, g.calendarName || g.calendarId);
       else d.addOption("", "—");
       d.setValue(g.calendarId);
@@ -380,62 +479,292 @@ export class GanttSettingTab extends PluginSettingTab {
         })
         .catch((e) => console.error("Task Gantt: calendar list failed", e));
     });
+  }
 
-    // 方向・範囲 / directions & scope
-    new Setting(containerEl).setName(tr().setGcalPushName).addToggle((t) =>
-      t.setValue(g.pushEnabled).onChange((v) => { g.pushEnabled = v; this.save(); })
-    );
-    new Setting(containerEl).setName(tr().setGcalPullName).addToggle((t) =>
-      t.setValue(g.pullEnabled).onChange((v) => { g.pullEnabled = v; this.save(); })
-    );
-    new Setting(containerEl)
-      .setName(tr().setGcalOptInName)
-      .setDesc(tr().setGcalOptInDesc(this.plugin.settings.keys.gcal))
-      .addToggle((t) => t.setValue(g.optInOnly).onChange((v) => { g.optInOnly = v; this.save(); }));
-    new Setting(containerEl).setName(tr().setGcalScopeName).setDesc(tr().setGcalScopeDesc).addText((t) =>
+  private ctlGcalToggle(setting: Setting, key: "pushEnabled" | "pullEnabled" | "optInOnly" | "deleteEventOnTaskDelete"): void {
+    const g = this.plugin.settings.gcal;
+    setting.addToggle((t) => t.setValue(g[key]).onChange((v) => { g[key] = v; this.save(); }));
+  }
+
+  private ctlGcalScope(setting: Setting): void {
+    const g = this.plugin.settings.gcal;
+    setting.addText((t) =>
       t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(g.scopeFolder).onChange((v) => {
         g.scopeFolder = v.trim();
         this.save();
       })
     );
+  }
 
-    // 間隔・削除ポリシー / interval & deletion policies
-    new Setting(containerEl).setName(tr().setGcalPullIntervalName).addDropdown((d) => {
+  private ctlGcalInterval(setting: Setting): void {
+    const g = this.plugin.settings.gcal;
+    setting.addDropdown((d) => {
       for (const m of [1, 5, 10, 30, 60]) d.addOption(String(m), String(m));
       d.setValue(String(g.pullIntervalMin)).onChange((v) => { g.pullIntervalMin = Number(v); this.save(); });
     });
-    new Setting(containerEl).setName(tr().setGcalDeleteEventName).addToggle((t) =>
-      t.setValue(g.deleteEventOnTaskDelete).onChange((v) => { g.deleteEventOnTaskDelete = v; this.save(); })
-    );
-    new Setting(containerEl).setName(tr().setGcalOnEventDeletedName).addDropdown((d) =>
+  }
+
+  private ctlGcalOnDeleted(setting: Setting): void {
+    const g = this.plugin.settings.gcal;
+    setting.addDropdown((d) =>
       d
         .addOptions({ unlink: tr().gcalUnlinkOption, clearDates: tr().gcalClearDatesOption })
         .setValue(g.onEventDeleted)
         .onChange((v) => { g.onEventDeleted = v as "unlink" | "clearDates"; this.save(); })
     );
+  }
 
-    // 今すぐ同期＋最終同期・エラー表示 / sync-now with the last-sync time and any error
-    const status = g.lastError
-      ? `⚠️ ${g.lastError}`
-      : g.lastSync
-        ? tr().gcalLastSync(new Date(g.lastSync).toLocaleString())
-        : "";
-    new Setting(containerEl).setName(tr().setGcalSyncNow).setDesc(status).addButton((b) =>
+  private ctlGcalSyncNow(setting: Setting): void {
+    const g = this.plugin.settings.gcal;
+    setting.addButton((b) =>
       b.setButtonText(tr().setGcalSyncNow).onClick(() => void (async () => {
         const ok = await syncGcal(this.plugin, { pull: true });
         new Notice(ok ? tr().gcalSyncDone : `⚠️ ${g.lastError || "(console)"}`);
-        this.draw();
+        this.redraw(); // 最終同期時刻・エラー表示を更新 / refresh the last-sync time and any error
       })())
     );
   }
 
-  // ===== display()（@deprecated 1.13.0 だが現状維持が唯一の解）=====
-  // 後継の getSettingDefinitions / update は @since 1.13.0 で、minAppVersion 1.7.2 と両立しない
-  // （使うと no-unsupported-api エラー、minAppVersion を 1.13.0 に上げると 1.12.x ユーザーを締め出す）。
+  // 「今すぐ同期」行の説明（最終同期時刻 or 直近のエラー）/ the sync-now row's description
+  private gcalStatusDesc(): string {
+    const g = this.plugin.settings.gcal;
+    if (g.lastError) return `⚠️ ${g.lastError}`;
+    return g.lastSync ? tr().gcalLastSync(new Date(g.lastSync).toLocaleString()) : "";
+  }
+
+  // ===== Google カレンダー同期のセクション（display() 用の組み立て）=====
+  // ===== the Google Calendar sync section, composed for display() =====
+  private drawGcal(containerEl: HTMLElement): void {
+    new Setting(containerEl).setName(tr().setGcalHeading).setDesc(tr().setGcalDesc).setHeading();
+
+    // モバイルでは案内のみ表示（ループバック認証が使えない）/ mobile gets a note only (no loopback auth)
+    if (!Platform.isDesktop) {
+      new Setting(containerEl).setDesc(tr().gcalDesktopOnly);
+      return;
+    }
+
+    // 認証情報（シークレットは伏せ字入力）/ credentials (the secret uses a password input)
+    this.ctlGcalClientId(new Setting(containerEl).setName(tr().setGcalClientIdName).setDesc(tr().setGcalCredsDesc));
+    this.ctlGcalClientSecret(new Setting(containerEl).setName(tr().setGcalClientSecretName));
+    this.ctlGcalAccount(
+      new Setting(containerEl)
+        .setName(tr().setGcalAccountName)
+        .setDesc(isConnected(this.plugin) ? tr().gcalStatusConnected : tr().gcalStatusNotConnected)
+    );
+
+    if (!isConnected(this.plugin)) return; // 以降の項目は接続後のみ / the rest only makes sense once connected
+
+    this.ctlGcalCalendar(new Setting(containerEl).setName(tr().setGcalCalendarName));
+    this.ctlGcalToggle(new Setting(containerEl).setName(tr().setGcalPushName), "pushEnabled");
+    this.ctlGcalToggle(new Setting(containerEl).setName(tr().setGcalPullName), "pullEnabled");
+    this.ctlGcalToggle(
+      new Setting(containerEl).setName(tr().setGcalOptInName).setDesc(tr().setGcalOptInDesc(this.plugin.settings.keys.gcal)),
+      "optInOnly"
+    );
+    this.ctlGcalScope(new Setting(containerEl).setName(tr().setGcalScopeName).setDesc(tr().setGcalScopeDesc));
+    this.ctlGcalInterval(new Setting(containerEl).setName(tr().setGcalPullIntervalName));
+    this.ctlGcalToggle(new Setting(containerEl).setName(tr().setGcalDeleteEventName), "deleteEventOnTaskDelete");
+    this.ctlGcalOnDeleted(new Setting(containerEl).setName(tr().setGcalOnEventDeletedName));
+    this.ctlGcalSyncNow(new Setting(containerEl).setName(tr().setGcalSyncNow).setDesc(this.gcalStatusDesc()));
+  }
+
+  // ===== getSettingDefinitions()（@since 1.13.0・宣言的設定）=====
+  // 1.13 以降はこちらが使われ、display() は呼ばれない。1.12 以下は本メソッドを知らないので
+  // display() にフォールバックする（公式の Path B）。行の中身は ctl* ヘルパーを両経路で共有し、
+  // 二重管理によるズレを防ぐ。ここでは 1.13 専用の実行時 API を一切呼ばない。
+  // ===== getSettingDefinitions() (@since 1.13.0, declarative settings) =====
+  // Used from 1.13 on, where display() is skipped; older versions don't know this method and fall
+  // back to display() (the official Path B). Row contents come from the shared ctl* helpers so the
+  // two paths can't drift. No 1.13-only runtime API is called from here.
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    this.declarative = true; // 再描画の経路を update() 側へ / route redraws to update()
+    const s = this.plugin.settings;
+    const connected = (): boolean => Platform.isDesktop && isConnected(this.plugin);
+
+    // 描画時点の並びを固定する。onDelete が渡してくる番号はこのスナップショットに対するものなので、
+    // 実データからは「番号」ではなく「その行そのもの」を探して消す（番号で消すと別の行を巻き込む）。
+    // snapshot the order used for rendering: the index onDelete hands back refers to this array, so we
+    // locate the row by identity rather than deleting by index, which could take out a different row.
+    const statusRows = s.statuses.slice();
+    const tagRows = s.tagColors.slice();
+    const dropRow = <T,>(live: T[], snapshot: T[], index: number): void => {
+      const at = live.indexOf(snapshot[index]);
+      if (at >= 0) live.splice(at, 1);
+      this.save();
+      this.updateDeclarative();
+    };
+
+    const items: SettingDefinitionItem[] = [
+      { name: tr().setDefaultFolderName, desc: tr().setDefaultFolderDesc, render: (x) => this.ctlRootFolder(x) },
+      { name: tr().setRecurseName, desc: tr().setRecurseDesc, render: (x) => this.ctlRecurse(x) },
+      { name: tr().setDefaultZoomName, render: (x) => this.ctlZoom(x) },
+      { name: tr().setDateFormatName, render: (x) => this.ctlDateFormat(x) },
+      { name: tr().setTimezoneName, desc: tr().setTimezoneDesc, render: (x) => this.ctlTimezone(x) },
+      {
+        name: tr().setProgressLineColorName,
+        desc: tr().setProgressLineColorDesc,
+        render: (x) => this.ctlProgressLineColor(x),
+      },
+      // ステータス（追加・削除はフレームワークの list が面倒を見る）/ statuses (the list type owns add/delete)
+      {
+        type: "list",
+        heading: tr().setStatusesHeading,
+        // name を空にして行ラベルを出さない（id/ラベル欄と二重表示になるため）。
+        // 行のクラスは render 内で付ける（定義側に cls が無いため）。
+        // an empty name keeps the row label out (it would duplicate the id/label fields);
+        // the row class goes on inside render, since definitions have no `cls` field
+        items: statusRows.map((st): SettingGroupItem => ({
+          name: "",
+          render: (x) => { x.setClass("ogantt-setting-row"); this.ctlStatusRow(x, st); },
+        })),
+        onDelete: (i) => dropRow(s.statuses, statusRows, i),
+        addItem: {
+          name: tr().setAddStatus,
+          action: () => {
+            s.statuses.push({ id: "new", label: "New", color: "#888888" });
+            this.save();
+            this.updateDeclarative();
+          },
+        },
+      },
+      // タグの色（フォルダの色は表で右クリック）/ tag colors (folder colors via right-click in the table)
+      // 見出しの無い単独項目は直前のグループ（ステータス）に吸い寄せられて見えるので、
+      // 既定色は「タグの色」見出しを持つグループの中に置く
+      // a headingless item reads as part of the preceding group (statuses), so the default color
+      // lives inside a group that carries the "Tag colors" heading
+      {
+        type: "group",
+        heading: tr().setTagColorsHeading,
+        items: [
+          {
+            name: tr().setDefaultTagColorName,
+            desc: tr().setDefaultTagColorDesc,
+            render: (x) => this.ctlDefaultTagColor(x),
+          },
+        ],
+      },
+      {
+        type: "list",
+        heading: tr().setTagColorsPerTag,
+        emptyState: tr().setNoTagColors,
+        // 削除は行内の × に確認付きで持たせるので、フレームワークの onDelete は使わない
+        // deletion lives on the row's own × with a confirm, so the framework's onDelete is not used
+        items: this.sortedTagColors().map((tc): SettingGroupItem => ({
+          name: "",
+          render: (x) => { x.setClass("ogantt-setting-row"); this.ctlTagColorRow(x, tc); },
+        })),
+        addItem: { name: tr().setAddTagColor, action: () => this.pickTagToColor() },
+      },
+      // 通知 / notifications
+      {
+        type: "group",
+        heading: tr().setNotifyHeading,
+        items: [
+          { name: tr().setNotifyHeading, desc: tr().setNotifyDesc },
+          {
+            name: "Discord webhook URL",
+            desc: tr().setWebhookDesc,
+            render: (x) => this.ctlWebhook(x, "discordWebhook", "https://discord.com/api/webhooks/…"),
+          },
+          {
+            name: "Slack webhook URL",
+            desc: tr().setWebhookDesc,
+            render: (x) => this.ctlWebhook(x, "slackWebhook", "https://hooks.slack.com/services/…"),
+          },
+          {
+            name: "Microsoft Teams webhook URL (Workflows)",
+            desc: tr().setWebhookDesc,
+            render: (x) => this.ctlWebhook(x, "teamsWebhook", "https://….logic.azure.com/workflows/…"),
+          },
+          // テスト送信＝Webhook 設定の即時確認 / send-a-test button for instant webhook verification
+          { name: tr().setNotifyTestName, action: () => void sendTestNotification(this.plugin) },
+          { name: tr().setNotifyStartName, render: (x) => this.ctlNotifyToggle(x, "notifyStart") },
+          { name: tr().setNotifyEndName, render: (x) => this.ctlNotifyToggle(x, "notifyEnd") },
+        ],
+      },
+      {
+        type: "group",
+        heading: tr().setLeadsName,
+        items: LEADS.map((lead): SettingGroupItem => ({
+          name: leadLabel(lead.id),
+          render: (x) => this.ctlLeadToggle(x, lead.id),
+        })),
+      },
+      // Google カレンダー同期。接続後にだけ意味を持つ行は visible で出し分ける
+      // Google Calendar sync; rows that only matter once connected are gated with `visible`
+      {
+        type: "group",
+        heading: tr().setGcalHeading,
+        items: [
+          { name: tr().setGcalHeading, desc: tr().setGcalDesc },
+          // モバイルはループバック認証が使えないため案内のみ / mobile can't do loopback auth, so it gets a note
+          { name: tr().setGcalHeading, desc: tr().gcalDesktopOnly, visible: () => !Platform.isDesktop },
+          {
+            name: tr().setGcalClientIdName,
+            desc: tr().setGcalCredsDesc,
+            visible: () => Platform.isDesktop,
+            render: (x) => this.ctlGcalClientId(x),
+          },
+          {
+            name: tr().setGcalClientSecretName,
+            visible: () => Platform.isDesktop,
+            render: (x) => this.ctlGcalClientSecret(x),
+          },
+          {
+            name: tr().setGcalAccountName,
+            desc: isConnected(this.plugin) ? tr().gcalStatusConnected : tr().gcalStatusNotConnected,
+            visible: () => Platform.isDesktop,
+            render: (x) => this.ctlGcalAccount(x),
+          },
+          { name: tr().setGcalCalendarName, visible: connected, render: (x) => this.ctlGcalCalendar(x) },
+          { name: tr().setGcalPushName, visible: connected, render: (x) => this.ctlGcalToggle(x, "pushEnabled") },
+          { name: tr().setGcalPullName, visible: connected, render: (x) => this.ctlGcalToggle(x, "pullEnabled") },
+          {
+            name: tr().setGcalOptInName,
+            desc: tr().setGcalOptInDesc(s.keys.gcal),
+            visible: connected,
+            render: (x) => this.ctlGcalToggle(x, "optInOnly"),
+          },
+          {
+            name: tr().setGcalScopeName,
+            desc: tr().setGcalScopeDesc,
+            visible: connected,
+            render: (x) => this.ctlGcalScope(x),
+          },
+          { name: tr().setGcalPullIntervalName, visible: connected, render: (x) => this.ctlGcalInterval(x) },
+          {
+            name: tr().setGcalDeleteEventName,
+            visible: connected,
+            render: (x) => this.ctlGcalToggle(x, "deleteEventOnTaskDelete"),
+          },
+          { name: tr().setGcalOnEventDeletedName, visible: connected, render: (x) => this.ctlGcalOnDeleted(x) },
+          {
+            name: tr().setGcalSyncNow,
+            desc: this.gcalStatusDesc(),
+            visible: connected,
+            render: (x) => this.ctlGcalSyncNow(x),
+          },
+        ],
+      },
+      // フロントマターのキー名 / frontmatter key names
+      {
+        type: "group",
+        heading: tr().setKeysHeading,
+        items: (Object.keys(s.keys) as (keyof GanttSettings["keys"])[]).map(
+          (k): SettingGroupItem => ({ name: k, render: (x) => this.ctlKeyRow(x, k) })
+        ),
+      },
+    ];
+    return items;
+  }
+
+  // ===== display()（1.13 未満向けのフォールバック）=====
+  // 1.13 以降は getSettingDefinitions() が使われ、このメソッドは呼ばれない。minAppVersion 1.7.2 を
+  // 保つ間は 1.12.x のために残す必要があり、公式ガイドもこの併設（Path B）を案内している。
   // 非推奨 API の「呼び出し」を避けるため、再描画は this.draw() に委譲し this.display() は内部から呼ばない。
-  // ===== display() (@deprecated 1.13.0, but keeping it is the only viable option) =====
-  // Its successor getSettingDefinitions/update is @since 1.13.0 and incompatible with minAppVersion 1.7.2
-  // (using it trips no-unsupported-api; raising minAppVersion to 1.13.0 locks out 1.12.x users).
+  // ===== display(): the fallback for Obsidian older than 1.13 =====
+  // From 1.13 on, getSettingDefinitions() renders the tab and this method is never called. It has to
+  // stay for 1.12.x while minAppVersion is 1.7.2; the official guide calls this dual setup "Path B".
   // To avoid invoking the deprecated API, redraws go via this.draw(); we never call this.display() ourselves.
   display(): void {
     this.draw();
@@ -478,23 +807,16 @@ export class GanttSettingTab extends PluginSettingTab {
 
     // タグの色（名前＋色＋削除。フォルダの色は表で右クリック）/ tag colors (name + color + delete; folder colors via right-click in the table)
     new Setting(containerEl).setName(tr().setTagColorsHeading).setHeading();
-    s.tagColors.forEach((tc, i) => {
-      const row = new Setting(containerEl).setClass("ogantt-setting-row");
-      this.ctlTagColorRow(row, tc);
-      row.addExtraButton((b) =>
-        b.setIcon("trash").setTooltip(tr().setDeleteTooltip).onClick(() => {
-          s.tagColors.splice(i, 1);
-          this.save();
-          this.draw();
-        })
-      );
-    });
+    this.ctlDefaultTagColor(
+      new Setting(containerEl).setName(tr().setDefaultTagColorName).setDesc(tr().setDefaultTagColorDesc)
+    );
+    new Setting(containerEl).setName(tr().setTagColorsPerTag).setHeading();
+    if (s.tagColors.length === 0) new Setting(containerEl).setDesc(tr().setNoTagColors);
+    for (const tc of this.sortedTagColors()) {
+      this.ctlTagColorRow(new Setting(containerEl).setClass("ogantt-setting-row"), tc);
+    }
     new Setting(containerEl).addButton((b) =>
-      b.setButtonText(tr().setAddTagColor).onClick(() => {
-        s.tagColors.push({ name: "", color: "#888888" });
-        this.save();
-        this.draw();
-      })
+      b.setButtonText(tr().setAddTagColor).onClick(() => this.pickTagToColor())
     );
 
     // 通知（Discord / Slack Webhook・リードタイム）/ notifications (webhooks + lead times)
