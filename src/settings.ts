@@ -660,7 +660,7 @@ export class GanttSettingTab extends PluginSettingTab {
         // The first entry is the column-header row: with no onDelete, the framework adds no delete
         // buttons at all, so a header sitting among the rows can't be deleted by mistake
         items: [
-          { name: "", render: (x) => this.ctlStatusHeader(x) } as SettingGroupItem,
+          { name: "", render: (x) => this.ctlStatusHeader(x) },
           ...s.statuses.map((st): SettingGroupItem => ({
             name: "",
             render: (x) => {
