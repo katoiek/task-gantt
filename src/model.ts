@@ -1,6 +1,35 @@
 import { App, TFile, TFolder, getAllTags, normalizePath } from "obsidian";
 import { GanttSettings } from "./settings";
-import { Task, Row, Dep, DepType } from "./types";
+import { Task, Row, Dep, DepType, StatusDef, StatusGroup } from "./types";
+
+// ── ステータスグループ / status groups ──
+// 移行用の推測に使うキーワード（id・ラベルを小文字化して部分一致）。上から順に評価し、
+// どれにも当たらなければ active。日英に加えて日常的に使う和語も見る。
+// keywords for the migration guess (substring match on lowercased id + label), evaluated in
+// order; anything unmatched lands in active. Japanese wording is included alongside English.
+const GROUP_HINTS: [StatusGroup, string[]][] = [
+  ["completed", ["done", "complete", "closed", "finish", "resolved", "完了", "済", "終了"]],
+  ["cancelled", ["cancel", "reject", "dropped", "abandon", "中止", "キャンセル", "却下", "取り消", "取消"]],
+  ["deferred", ["defer", "hold", "pending", "paused", "block", "waiting", "保留", "延期", "待ち", "中断"]],
+];
+
+// 既存設定（group を持たない）から所属グループを推測する / guess a group for a pre-upgrade status
+export function inferStatusGroup(id: string, label: string): StatusGroup {
+  const hay = `${id} ${label}`.toLowerCase();
+  for (const [group, words] of GROUP_HINTS) {
+    if (words.some((w) => hay.includes(w))) return group;
+  }
+  return "active";
+}
+
+// タスクのステータスが属するグループ。未設定・設定に無い id は undefined（＝分類不能）で、
+// 完了扱いにはしない：分類できないものを完了に寄せると完了フィルタが嘘をつく
+// the group a task's status belongs to; unset or unknown ids yield undefined rather than being
+// folded into "completed" — guessing there would make the completed filter lie
+export function statusGroupOf(statuses: StatusDef[], status?: string): StatusGroup | undefined {
+  if (!status) return undefined;
+  return statuses.find((s) => s.id === status)?.group;
+}
 
 // after の生エントリから型と リンクを分離 / split a raw `after` entry into type + link
 function parseDepRaw(raw: string): { type: DepType; link: string } {

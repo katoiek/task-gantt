@@ -3,6 +3,7 @@
 // Pick a supported language from Obsidian's UI language (moment locale); fall back to English.
 
 import { moment } from "obsidian";
+import type { StatusGroup } from "./types";
 
 // 対応言語：日本語・英語・中国語（簡体/繁体）・韓国語・フランス語・スペイン語・ロシア語
 // supported: Japanese, English, Chinese (Simplified/Traditional), Korean, French, Spanish, Russian
@@ -95,6 +96,16 @@ interface Strings {
   textOpNotContains: string; // を含まない / does not contain
   textOpStartsWith: string; // で始まる / starts with
   textOpEndsWith: string; // で終わる / ends with
+  // ステータスグループ（Wrike 準拠の 4 種）/ status groups (Wrike's four)
+  fieldStatusGroup: string; // ステータスグループ / Status group
+  sgActive: string; // アクティブ / Active
+  sgCompleted: string; // 完了 / Completed
+  sgDeferred: string; // 延期 / Deferred
+  sgCancelled: string; // キャンセル / Cancelled
+  setStatusGroup: string; // 設定のグループ欄 / the group field in settings
+  setNoCompletedStatus: string; // 完了グループが空のときの注意書き / warning when Completed is empty
+  presetCompleted: string; // 完了済み / Completed
+  presetIncomplete: string; // 未完了 / Incomplete
   // 取り消し / undo
   nothingToUndo: string;
   undone: (label: string) => string;
@@ -428,6 +439,15 @@ const STRINGS: Record<Lang, Strings> = {
     textOpNotContains: "を含まない",
     textOpStartsWith: "で始まる",
     textOpEndsWith: "で終わる",
+    fieldStatusGroup: "ステータスグループ",
+    sgActive: "アクティブ",
+    sgCompleted: "完了",
+    sgDeferred: "延期",
+    sgCancelled: "キャンセル",
+    setStatusGroup: "グループ",
+    setNoCompletedStatus: "「完了」グループのステータスがありません。プリセットの「完了済み」は常に 0 件になります。",
+    presetCompleted: "完了済み",
+    presetIncomplete: "未完了",
   },
   en: {
     colTask: "Task",
@@ -619,6 +639,15 @@ const STRINGS: Record<Lang, Strings> = {
     textOpNotContains: "does not contain",
     textOpStartsWith: "starts with",
     textOpEndsWith: "ends with",
+    fieldStatusGroup: "Status group",
+    sgActive: "Active",
+    sgCompleted: "Completed",
+    sgDeferred: "Deferred",
+    sgCancelled: "Cancelled",
+    setStatusGroup: "Group",
+    setNoCompletedStatus: "No status belongs to the Completed group, so the Completed preset always comes back empty.",
+    presetCompleted: "Completed",
+    presetIncomplete: "Incomplete",
   },
   zh: {
     colTask: "任务",
@@ -810,6 +839,15 @@ const STRINGS: Record<Lang, Strings> = {
     textOpNotContains: "不包含",
     textOpStartsWith: "开头是",
     textOpEndsWith: "结尾是",
+    fieldStatusGroup: "状态组",
+    sgActive: "进行中",
+    sgCompleted: "已完成",
+    sgDeferred: "已推迟",
+    sgCancelled: "已取消",
+    setStatusGroup: "分组",
+    setNoCompletedStatus: "没有状态属于「已完成」组，因此「已完成」预设始终为空。",
+    presetCompleted: "已完成",
+    presetIncomplete: "未完成",
   },
   "zh-tw": {
     colTask: "任務",
@@ -1001,6 +1039,15 @@ const STRINGS: Record<Lang, Strings> = {
     textOpNotContains: "不包含",
     textOpStartsWith: "開頭為",
     textOpEndsWith: "結尾為",
+    fieldStatusGroup: "狀態群組",
+    sgActive: "進行中",
+    sgCompleted: "已完成",
+    sgDeferred: "已延後",
+    sgCancelled: "已取消",
+    setStatusGroup: "群組",
+    setNoCompletedStatus: "沒有狀態屬於「已完成」群組，因此「已完成」預設一律為空。",
+    presetCompleted: "已完成",
+    presetIncomplete: "未完成",
   },
   ko: {
     colTask: "작업",
@@ -1192,6 +1239,15 @@ const STRINGS: Record<Lang, Strings> = {
     textOpNotContains: "미포함",
     textOpStartsWith: "시작 문자",
     textOpEndsWith: "끝 문자",
+    fieldStatusGroup: "상태 그룹",
+    sgActive: "진행",
+    sgCompleted: "완료",
+    sgDeferred: "보류",
+    sgCancelled: "취소",
+    setStatusGroup: "그룹",
+    setNoCompletedStatus: "「완료」 그룹에 속한 상태가 없어 「완료됨」 프리셋은 항상 비어 있습니다.",
+    presetCompleted: "완료됨",
+    presetIncomplete: "미완료",
   },
   fr: {
     colTask: "Tâche",
@@ -1383,6 +1439,15 @@ const STRINGS: Record<Lang, Strings> = {
     textOpNotContains: "ne contient pas",
     textOpStartsWith: "commence par",
     textOpEndsWith: "se termine par",
+    fieldStatusGroup: "Groupe de statut",
+    sgActive: "Actif",
+    sgCompleted: "Terminé",
+    sgDeferred: "Différé",
+    sgCancelled: "Annulé",
+    setStatusGroup: "Groupe",
+    setNoCompletedStatus: "Aucun statut n'appartient au groupe Terminé : le préréglage « Terminées » restera toujours vide.",
+    presetCompleted: "Terminées",
+    presetIncomplete: "Non terminées",
   },
   es: {
     colTask: "Tarea",
@@ -1574,6 +1639,15 @@ const STRINGS: Record<Lang, Strings> = {
     textOpNotContains: "no contiene",
     textOpStartsWith: "empieza por",
     textOpEndsWith: "termina en",
+    fieldStatusGroup: "Grupo de estado",
+    sgActive: "Activo",
+    sgCompleted: "Completado",
+    sgDeferred: "Aplazado",
+    sgCancelled: "Cancelado",
+    setStatusGroup: "Grupo",
+    setNoCompletedStatus: "Ningún estado pertenece al grupo Completado, por lo que el preajuste «Completadas» siempre estará vacío.",
+    presetCompleted: "Completadas",
+    presetIncomplete: "Sin completar",
   },
   ru: {
     colTask: "Задача",
@@ -1765,10 +1839,30 @@ const STRINGS: Record<Lang, Strings> = {
     textOpNotContains: "не содержит",
     textOpStartsWith: "начинается с",
     textOpEndsWith: "заканчивается на",
+    fieldStatusGroup: "Группа статусов",
+    sgActive: "Активные",
+    sgCompleted: "Завершено",
+    sgDeferred: "Отложено",
+    sgCancelled: "Отменено",
+    setStatusGroup: "Группа",
+    setNoCompletedStatus: "Ни один статус не входит в группу «Завершено», поэтому пресет «Завершённые» всегда будет пустым.",
+    presetCompleted: "Завершённые",
+    presetIncomplete: "Незавершённые",
   },
 };
 
 // 現在言語の文言を返す / strings for the current language
 export function t(): Strings {
   return STRINGS[lang];
+}
+
+// ステータスグループの表示名（設定・フィルタ・凡例で共有）/ a status group's label, shared across the UI
+export function statusGroupLabel(g: StatusGroup): string {
+  const s = t();
+  switch (g) {
+    case "active": return s.sgActive;
+    case "completed": return s.sgCompleted;
+    case "deferred": return s.sgDeferred;
+    case "cancelled": return s.sgCancelled;
+  }
 }

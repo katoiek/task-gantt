@@ -3,6 +3,7 @@ import { GanttSettings, DEFAULT_SETTINGS, GanttSettingTab } from "./settings";
 import { GanttView } from "./view";
 import { VIEW_TYPE_GANTT, GanttViewState } from "./types";
 import { t } from "./i18n";
+import { inferStatusGroup } from "./model";
 import { checkNotifications } from "./notify";
 import { migrateRenamedPath, schedulePush, syncGcal } from "./gcal/sync";
 
@@ -131,6 +132,14 @@ export default class GanttPlugin extends Plugin {
     const data = (await this.loadData()) as Partial<GanttSettings> | null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
     this.settings.keys = Object.assign({}, DEFAULT_SETTINGS.keys, this.settings.keys);
+    // ステータスは設定画面で直接書き換えるので必ず複製する（未保存だと既定配列を共有してしまう）。
+    // 2.9.0 以前の保存データには group が無いので、id とラベルから推測して補う。
+    // statuses are mutated in place by the settings tab, so always clone (an unsaved install would
+    // otherwise share the DEFAULT array); pre-2.9.0 data has no group, so infer one from id + label
+    this.settings.statuses = (this.settings.statuses ?? []).map((s) => ({
+      ...s,
+      group: s.group ?? inferStatusGroup(s.id ?? "", s.label ?? ""),
+    }));
     // 既定の空配列/オブジェクトを共有参照しないよう複製（変更でモジュール既定を汚さない）/ clone so we don't mutate the shared DEFAULT containers
     this.settings.tagColors = (this.settings.tagColors ?? []).map((c) => ({ ...c }));
     this.settings.folderColors = (this.settings.folderColors ?? []).map((c) => ({ ...c }));

@@ -58,10 +58,10 @@ An options row above the table shapes how the board is displayed.
 
 ## Filters
 
-A **filter row** below the options narrows the board. Click **Add filter** and pick a field — **Name**, **Status**, **Assignee**, **Tag**, **Start date**, or **Due date** — then set its condition. Each filter shows as a chip you can click to edit or remove with **×**.
+A **filter row** below the options narrows the board. Click **Add filter** and pick a field — **Name**, **Status**, **Status group**, **Assignee**, **Tag**, **Start date**, or **Due date** — then set its condition. Each filter shows as a chip you can click to edit or remove with **×**.
 
 - **Name** matches with *is / is not / contains / does not contain / starts with / ends with*.
-- **Status / Assignee / Tag** let you tick several values — including **(none)** for unset — with *is / is not / is empty / is not empty*.
+- **Status / Status group / Assignee / Tag** let you tick several values — including **(none)** for unset — with *is / is not / is empty / is not empty*.
 - **Start date / Due date** compare against a preset (yesterday/today/tomorrow), a specific date, a relative date (e.g. *1 week from now*, recomputed each day), or a date range, with *is / before / after / on or before / on or after / empty / not empty*.
 
 ![The filter row with chips and the match toggle](docs/images/filter-en.png)
@@ -70,7 +70,7 @@ With two or more filters, choose **Show items matching → Match all** (AND) or 
 
 ### Presets
 
-Open **Presets** for one-click filter sets. Built-in presets are **No dates (no bar)**, **Has dates**, **Overdue**, and **Unassigned**. Build any combination of filters and **save it as a preset** by typing a name — saved presets can be re-applied or deleted, and **Clear filters** removes them all. Filters and presets persist across sessions.
+Open **Presets** for one-click filter sets. Built-in presets are **No dates (no bar)**, **Has dates**, **Overdue**, **Unassigned**, **Completed**, and **Incomplete**. The last two read the **status group** rather than status names: *Completed* is everything in the Completed group, and *Incomplete* is everything that is neither Completed nor Cancelled — active work, deferred work, and tasks with no status at all. Build any combination of filters and **save it as a preset** by typing a name — saved presets can be re-applied or deleted, and **Clear filters** removes them all. Filters and presets persist across sessions.
 
 ![Built-in and saved filter presets](docs/images/filter-preset-en.png)
 
@@ -122,7 +122,7 @@ The body is the task description (shown in the detail panel).
 | Frontmatter | Meaning |
 |-------------|---------|
 | `start` / `end` | Start / end date `YYYY-MM-DD` (bar position and length). A time of day can be added as `YYYY-MM-DDTHH:mm+09:00` (edit via the detail panel; the offset follows the **Timezone** setting). |
-| `status` | Status ID (defined in settings, reflected in bar color). |
+| `status` | Status ID (defined in settings, reflected in bar color; its status group drives the Completed / Incomplete filters). |
 | `assignee` | Assignee (label shown next to the bar). |
 | `progress` | Progress 0–100 (fill inside the bar; editable with the detail-panel slider, or by double-clicking the **Progress** column). |
 | `after` | Array of wikilinks to predecessors (dependency arrows; violations turn red). |
@@ -150,7 +150,11 @@ The **Timezone** setting (system or a fixed GMT offset, listed with representati
 
 The **Progress line color** setting sets the color of the jagged line drawn by the **Progress line** view option, with a button to reset it to the default amber.
 
-**Statuses are fully customizable** — add, edit, or delete them. Each status has an **id** (matches the `status` frontmatter value), a **label**, and a **color** reflected in the bar.
+**Statuses are fully customizable** — add, edit, or delete them. Each status has an **id** (matches the `status` frontmatter value), a **label**, a **group**, and a **color** reflected in the bar.
+
+The **group** is what tells the plugin whether a task is finished. There are four, borrowed from Wrike and not extensible: **Active** (being worked on), **Completed** (done), **Deferred** (paused — on hold, blocked, waiting), and **Cancelled** (dropped). Every status belongs to exactly one, and the *Completed* / *Incomplete* filter presets read only the group, never the status name — so a status called `Shipped` counts as finished as long as it sits in the Completed group. If no status is in the Completed group, settings say so and the *Completed* preset stays empty.
+
+> Upgrading from 2.8.x: existing statuses are assigned a group once, guessed from their id and label (`done`/`完了` → Completed, `cancelled`/`中止` → Cancelled, `on hold`/`blocked`/`保留` → Deferred, everything else → Active). Check the list after upgrading and correct anything the guess got wrong.
 
 You can also rename the **frontmatter keys** the plugin reads (start, end, status, assignee, after, progress, milestone) to match your own vault conventions.
 
@@ -289,10 +293,10 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ## フィルタ
 
-オプション行の下の**フィルタ行**でボードを絞り込めます。**フィルタを追加**から項目（**名前**／**ステータス**／**担当者**／**タグ**／**開始日**／**期限日**）を選び、条件を設定します。各フィルタはチップで表示され、クリックで編集、**×**で削除できます。
+オプション行の下の**フィルタ行**でボードを絞り込めます。**フィルタを追加**から項目（**名前**／**ステータス**／**ステータスグループ**／**担当者**／**タグ**／**開始日**／**期限日**）を選び、条件を設定します。各フィルタはチップで表示され、クリックで編集、**×**で削除できます。
 
 - **名前**：と一致／以外／を含む／を含まない／で始まる／で終わる
-- **ステータス／担当者／タグ**：複数値をチェックで選択（**（なし）＝未設定**も選べます）。と一致／以外／未設定／設定あり
+- **ステータス／ステータスグループ／担当者／タグ**：複数値をチェックで選択（**（なし）＝未設定**も選べます）。と一致／以外／未設定／設定あり
 - **開始日／期限日**：プリセット（昨日・今日・明日）／具体的な日付／相対的な日付（例：*1 週間後*・毎日再計算）／期間と比較。と一致／より前／より後／以前／以後／未設定／設定あり
 
 ![チップと一致条件トグルを備えたフィルタ行](docs/images/filter-ja.png)
@@ -301,7 +305,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ### プリセット
 
-**プリセット**からワンクリックでフィルタ構成を切り替えられます。組み込みプリセットは **日付なし（バーなし）／日付あり／期限切れ／未割り当て**。任意のフィルタ構成に名前を付けて**プリセットとして保存**でき、保存したプリセットは再適用・削除が可能です。**フィルタをクリア**で全解除。フィルタとプリセットはセッションをまたいで保存されます。
+**プリセット**からワンクリックでフィルタ構成を切り替えられます。組み込みプリセットは **日付なし（バーなし）／日付あり／期限切れ／未割り当て／完了済み／未完了**。後ろの 2 つはステータス名ではなく**ステータスグループ**を見ます：**完了済み**は完了グループのタスク、**未完了**は完了でもキャンセルでもないタスク（アクティブ・延期・ステータス未設定）です。任意のフィルタ構成に名前を付けて**プリセットとして保存**でき、保存したプリセットは再適用・削除が可能です。**フィルタをクリア**で全解除。フィルタとプリセットはセッションをまたいで保存されます。
 
 ![組み込みプリセットとマイプリセット](docs/images/filter-preset-ja.png)
 
@@ -353,7 +357,7 @@ after:
 | フロントマター | 意味 |
 |----------------|------|
 | `start` / `end` | 開始 / 終了日 `YYYY-MM-DD`（バーの位置と長さ）。`YYYY-MM-DDTHH:mm+09:00` 形式で時刻も設定可（詳細パネルで編集。オフセットは**タイムゾーン**設定に従う） |
-| `status` | ステータス ID（設定で定義、バー色に反映） |
+| `status` | ステータス ID（設定で定義、バー色に反映。所属する**ステータスグループ**が完了済み／未完了フィルタの根拠） |
 | `assignee` | 担当者（バー脇にラベル表示） |
 | `progress` | 進捗 0–100（バー内の塗り。詳細パネルのスライダー、または**進捗**列のダブルクリックで編集） |
 | `after` | 先行タスクへの wikilink 配列（依存＝矢印、違反は赤） |
@@ -381,7 +385,11 @@ after:
 
 **稲妻線の色**設定で、表示オプションの**稲妻線**で描かれる折れ線の色を変更できます（既定の橙に戻すボタン付き）。
 
-**ステータスは自由に追加・編集・削除**できます。各ステータスは **id**（フロントマターの `status` 値と対応）・**ラベル**・**色**（バー色に反映）を持ちます。
+**ステータスは自由に追加・編集・削除**できます。各ステータスは **id**（フロントマターの `status` 値と対応）・**ラベル**・**グループ**・**色**（バー色に反映）を持ちます。
+
+**グループ**は「そのタスクが終わっているか」をプラグインが判断する唯一の根拠です。Wrike に倣った 4 種**固定**で、増やすことはできません：**アクティブ**（作業中）・**完了**（終了）・**延期**（保留・ブロック・待ち）・**キャンセル**（中止）。各ステータスはちょうど 1 つに属し、フィルタプリセットの**完了済み／未完了**はグループだけを見ます（ステータス名は見ません）。そのため `リリース済み` という名前でも、完了グループに入れておけば完了として扱われます。完了グループのステータスが 1 つも無い場合は設定画面に注意が出て、**完了済み**プリセットは常に 0 件になります。
+
+> 2.8.x からの更新時：既存のステータスには、id とラベルからグループを一度だけ推測して設定します（`done`／`完了` → 完了、`cancelled`／`中止` → キャンセル、`on hold`／`blocked`／`保留` → 延期、それ以外 → アクティブ）。更新後に一覧を確認し、外れているものは直してください。
 
 プラグインが読む**フロントマターのキー名**（start / end / status / assignee / after / progress / milestone）も、各自の Vault の慣習に合わせて変更できます。
 

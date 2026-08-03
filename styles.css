@@ -934,6 +934,46 @@ input.ogantt-cell-input[type="number"] {
   flex-wrap: wrap;
   width: 100%;
 }
+/* ステータス行は 5 列のグリッド（ID / ラベル / グループ / 色 / 削除）。見出し行も同じグリッドに
+   載せるので、コントロールが指定より広く描かれても列がずれない。minmax で幅を上限にしておくと、
+   ペインが狭いときは折り返さずに一緒に縮む */
+/* status rows are a 5-column grid (id / label / group / color / delete); the header row rides the
+   same grid, so a control rendering wider than requested can't shift the columns. minmax makes the
+   widths a ceiling, letting a narrow pane shrink every row alike instead of wrapping */
+.setting-item.ogantt-status-row .setting-item-control {
+  display: grid;
+  grid-template-columns: minmax(0, 7em) minmax(0, 11em) minmax(0, 9em) auto auto;
+  gap: var(--size-4-2);
+  align-items: center;
+  justify-items: start;
+}
+/* 入力とセレクトは列いっぱいに（色ピッカーと削除は自然な幅のまま）*/
+/* inputs and selects fill their column; the color picker and delete button keep their natural size */
+.setting-item.ogantt-status-row .setting-item-control > input,
+.setting-item.ogantt-status-row .setting-item-control > select {
+  width: 100%;
+  min-width: 0;
+}
+
+/* 列見出しの行（コントロールを持たない文字だけの行）/ the column-header row: labels, no controls */
+.setting-item.ogantt-setting-head {
+  border-top: none;
+  padding-bottom: 0;
+}
+.setting-item.ogantt-setting-head .setting-item-control > span {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: left; /* 設定欄は既定で右寄せ / the settings control area right-aligns by default */
+}
+
+/* 設定タブの注意書き（例: 「完了」グループが空）/ an advisory line in the settings tab */
+.setting-item.ogantt-setting-warn {
+  border-top: none;
+  padding-top: 0;
+}
+.setting-item.ogantt-setting-warn .setting-item-description {
+  color: var(--text-warning);
+}
 
 /* ---- 詳細パネル（右からスライドイン）/ detail slide-over ---- */
 .ogantt-detail {

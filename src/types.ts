@@ -1,10 +1,18 @@
 // 中核データ型 / Core data types
 
+// ステータスグループ（Wrike 準拠の 4 種・固定）。ユーザーは種類を増やせない：
+// 増やせると「完了とは何か」が曖昧になり、完了/未完了のプリセットが意味を失うため。
+// status group: Wrike's four, fixed. Users can't add more — an open-ended set would blur
+// what "completed" means and hollow out the completed/incomplete presets.
+export type StatusGroup = "active" | "completed" | "deferred" | "cancelled";
+export const STATUS_GROUPS: StatusGroup[] = ["active", "completed", "deferred", "cancelled"];
+
 // ステータス定義（設定でカスタマイズ可能）/ Status definition (customizable in settings)
 export interface StatusDef {
   id: string; // フロントマター status 値と対応 / matches the `status` frontmatter value
   label: string;
   color: string; // バー色 / bar color (CSS color)
+  group: StatusGroup; // 所属グループ（1 ステータス＝1 グループ）/ owning group (exactly one)
 }
 
 // 依存の種類（SF は未対応）/ dependency type (SF unsupported)
@@ -65,15 +73,17 @@ export interface DateFilterItem {
   value?: DateValue; // empty/notEmpty では未使用 / unused for empty/notEmpty
 }
 
-// ── カテゴリ系フィルタ（ステータス/担当者/タグ）/ category filter (status/assignee/tag) ──
-export type CategoryField = "status" | "assignee" | "tag";
+// ── カテゴリ系フィルタ（ステータス/ステータスグループ/担当者/タグ）/ category filter ──
+export type CategoryField = "status" | "statusGroup" | "assignee" | "tag";
 // と一致 / 以外 / 未設定 / 設定あり / is / is not / is empty / is not empty
 export type CategoryOp = "is" | "isNot" | "empty" | "notEmpty";
 export interface CategoryFilter {
   kind: "category";
   field: CategoryField;
   op: CategoryOp;
-  values: string[]; // is/isNot の対象値（フィールド内は OR）。ステータスは id を格納 / selected values (OR within field); status stores ids
+  // is/isNot の対象値（フィールド内は OR）。ステータスは id、ステータスグループは StatusGroup を格納
+  // selected values (OR within the field); status stores ids, statusGroup stores StatusGroup values
+  values: string[];
 }
 
 // ── テキスト系フィルタ（タスク名）/ text filter (task name) ──

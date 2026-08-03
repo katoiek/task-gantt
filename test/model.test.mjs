@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant } from "./model.mjs";
+import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -105,6 +105,30 @@ check("nest無効なら親子は同じ depth", flatRows.find((r) => r.task?.name
 
 // subtreePaths は自分＋子孫 / subtree includes self + descendants
 check("subtreePaths は親＋子", JSON.stringify(subtreePaths(sub, "p/F/Parent.md").sort()) === JSON.stringify(["p/F/Child.md", "p/F/Parent.md"]));
+
+// ── ステータスグループ / status groups ──
+// 移行時の推測：id かラベルのどちらかが当たれば分類される / the migration guess matches id or label
+check("推測: done → completed", inferStatusGroup("done", "Done") === "completed");
+check("推測: 完了 → completed", inferStatusGroup("kanryo", "完了") === "completed");
+check("推測: cancelled → cancelled", inferStatusGroup("cancelled", "Cancelled") === "cancelled");
+check("推測: 中止 → cancelled", inferStatusGroup("chushi", "中止") === "cancelled");
+check("推測: on hold → deferred", inferStatusGroup("on-hold", "On hold") === "deferred");
+check("推測: blocked → deferred", inferStatusGroup("blocked", "Blocked") === "deferred");
+check("推測: 保留 → deferred", inferStatusGroup("horyu", "保留") === "deferred");
+check("推測: in progress → active", inferStatusGroup("in-progress", "In progress") === "active");
+check("推測: 未知の語は active", inferStatusGroup("review", "レビュー中") === "active");
+// completed を先に見るので "完了待ち" のような複合語は completed 側 / completed wins on the first hit
+check("推測: 大文字小文字を無視", inferStatusGroup("DONE", "DONE") === "completed");
+
+const statusDefs = [
+  { id: "todo", label: "To do", color: "#000", group: "active" },
+  { id: "done", label: "Done", color: "#000", group: "completed" },
+];
+check("statusGroupOf: 定義済み id", statusGroupOf(statusDefs, "done") === "completed");
+check("statusGroupOf: ステータス未設定は undefined", statusGroupOf(statusDefs, undefined) === undefined);
+check("statusGroupOf: 空文字は undefined", statusGroupOf(statusDefs, "") === undefined);
+// 設定に無い id は「分類不能」。完了に寄せると完了フィルタが嘘をつく / unknown ids stay unclassified
+check("statusGroupOf: 未定義 id は undefined", statusGroupOf(statusDefs, "ghost") === undefined);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

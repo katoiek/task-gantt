@@ -40,6 +40,10 @@ _Avoid_: Owner, Member, Person
 Task の進行状態（例: To do / In progress / Done）。設定で定義し、バー色に反映する。
 _Avoid_: State, Phase
 
+**Status group**:
+Status が属する 4 種の分類（アクティブ / 完了 / 延期 / キャンセル）。Wrike に倣った**固定の 4 種**でユーザーは増やせず、各 Status はちょうど 1 つに属する。「完了 / 未完了」の判定はこのグループだけを根拠にし、Status の id やラベルからは推測しない。フロントマターには持たず、設定の Status 定義から都度引く。
+_Avoid_: Category, Bucket, Phase
+
 **Inline edit**:
 テーブルのセルをダブルクリックして、その場で値を編集する操作。**テーブルに表示できる列はすべて Inline edit に対応する**（列を追加するときは表示用の描画とエディタをセットで実装する）。Enter／フォーカス外れで保存、Esc で取消し、値が変わっていなければ書き込まない。編集可能セルはシングルクリックを飲み込むため、詳細パネルを開く導線はタスク名セル（および Bar のダブルクリック）が担う。
 _Avoid_: Quick edit, Cell edit, Direct edit

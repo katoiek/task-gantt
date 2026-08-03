@@ -5,11 +5,11 @@ import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 // so they don't trip no-unsupported-api while minAppVersion stays at 1.7.2.
 import type { SettingDefinitionItem, SettingGroupItem } from "obsidian";
 import type GanttPlugin from "./main";
-import { StatusDef, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset } from "./types";
+import { StatusDef, StatusGroup, STATUS_GROUPS, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset } from "./types";
 import { collectAllTags } from "./model";
 import { ConfirmModal, TagSuggestModal } from "./modals";
 import { obsidianTagColor, toHex } from "./colors";
-import { t as tr } from "./i18n";
+import { t as tr, statusGroupLabel } from "./i18n";
 import { LEADS, leadLabel, sendTestNotification } from "./notify";
 import { connectGoogle, disconnectGoogle, isConnected } from "./gcal/auth";
 import { listCalendars } from "./gcal/api";
@@ -141,10 +141,11 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   rootFolder: "",
   recurse: true,
   statuses: [
-    { id: "todo", label: "To do", color: "#9aa0a6" },
-    { id: "in-progress", label: "In progress", color: "#3b82f6" },
-    { id: "blocked", label: "Blocked", color: "#ef4444" },
-    { id: "done", label: "Done", color: "#22c55e" },
+    { id: "todo", label: "To do", color: "#9aa0a6", group: "active" },
+    { id: "in-progress", label: "In progress", color: "#3b82f6", group: "active" },
+    // 手が止まっている状態なので Wrike の Deferred に置く / stalled work maps to Wrike's Deferred
+    { id: "blocked", label: "Blocked", color: "#ef4444", group: "deferred" },
+    { id: "done", label: "Done", color: "#22c55e", group: "completed" },
   ],
   defaultZoom: "Week",
   dateFormat: "YYYY/MM/DD",
@@ -315,11 +316,63 @@ export class GanttSettingTab extends PluginSettingTab {
       );
   }
 
+  // 一覧の列名。行には名前欄が無く id/ラベル/グループ/色が並ぶだけなので、どれが何かを見出しで示す。
+  // 列はグリッド（.ogantt-status-row）が決めるので、見出しの 4 つとコントロールの 4 つが同じ列に載る
+  // column names for the list: a row is just id/label/group/color with no name field, so say which is
+  // which. The grid on .ogantt-status-row places the columns, so the four labels land on the four
+  // controls regardless of how wide each control renders
+  private ctlStatusHeader(setting: Setting): void {
+    setting.setClass("ogantt-setting-row").setClass("ogantt-status-row").setClass("ogantt-setting-head");
+    const c = setting.controlEl;
+    c.createSpan({ text: tr().setStatusId });
+    c.createSpan({ text: tr().setStatusLabel });
+    c.createSpan({ text: tr().setStatusGroup });
+    c.createSpan({ text: tr().setStatusColor });
+  }
+
+  // ステータス 1 行（削除ボタンまで含む）。宣言版の onDelete は使わず行に持たせることで、
+  // 一覧の先頭に列見出しの行を差し込んでも削除の対象がずれない
+  // one status row, delete button included: keeping deletion on the row instead of the framework's
+  // onDelete means a column-header row at the top of the list can't throw off which row gets removed
   private ctlStatusRow(setting: Setting, st: StatusDef): void {
     setting
       .addText((t) => t.setPlaceholder(tr().setStatusId).setValue(st.id).onChange((v) => { st.id = v.trim(); this.save(); }))
       .addText((t) => t.setPlaceholder(tr().setStatusLabel).setValue(st.label).onChange((v) => { st.label = v; this.save(); }))
-      .addColorPicker((c) => c.setValue(st.color).onChange((v) => { st.color = v; this.save(); }));
+      // グループ（完了/未完了の判定に使う。種類は Wrike と同じ 4 固定）
+      // the group behind the completed/incomplete distinction; the four are fixed, as in Wrike
+      .addDropdown((d) => {
+        for (const g of STATUS_GROUPS) d.addOption(g, statusGroupLabel(g));
+        d.setValue(st.group)
+          .onChange((v) => {
+            const warned = this.statusGroupWarning() !== undefined;
+            st.group = v as StatusGroup;
+            this.save();
+            // 注意書きの有無が変わったときだけ描き直す（毎回だと入力中のフォーカスが飛ぶ）
+            // redraw only when the advisory appears or disappears; doing it always steals focus
+            if (warned !== (this.statusGroupWarning() !== undefined)) this.redraw();
+          })
+          .selectEl.setAttr("aria-label", tr().setStatusGroup);
+      })
+      .addColorPicker((c) => c.setValue(st.color).onChange((v) => { st.color = v; this.save(); }))
+      .addExtraButton((b) =>
+        b.setIcon("trash").setTooltip(tr().setDeleteTooltip).onClick(() => {
+          // 番号ではなく行そのものを探して消す（描画後に並びが変わっていても巻き込まない）
+          // locate the row by identity, not by index, so a reordered list can't take out the wrong one
+          const live = this.plugin.settings.statuses;
+          const at = live.indexOf(st);
+          if (at >= 0) live.splice(at, 1);
+          this.save();
+          this.redraw();
+        })
+      );
+  }
+
+  // 「完了」が空だと完了プリセットが常に 0 件になるので、その旨だけ伝える（禁止はしない）
+  // an empty Completed group makes the completed preset always empty; say so without forbidding it
+  private statusGroupWarning(): string | undefined {
+    return this.plugin.settings.statuses.some((s) => s.group === "completed")
+      ? undefined
+      : tr().setNoCompletedStatus;
   }
 
   // 色を指定したタグの1行。行が存在する＝色を指定している、なので色は常に具体値を持つ
@@ -581,19 +634,7 @@ export class GanttSettingTab extends PluginSettingTab {
     const s = this.plugin.settings;
     const connected = (): boolean => Platform.isDesktop && isConnected(this.plugin);
 
-    // 描画時点の並びを固定する。onDelete が渡してくる番号はこのスナップショットに対するものなので、
-    // 実データからは「番号」ではなく「その行そのもの」を探して消す（番号で消すと別の行を巻き込む）。
-    // タグ一覧は確認付きの × を行に持たせていて onDelete を使わないため、ここはステータスのみ。
-    // snapshot the order used for rendering: the index onDelete hands back refers to this array, so we
-    // locate the row by identity rather than deleting by index, which could take out a different row.
-    // Only statuses need this: the tag list carries its own × with a confirm and never uses onDelete.
-    const statusRows = s.statuses.slice();
-    const dropRow = <T,>(live: T[], snapshot: T[], index: number): void => {
-      const at = live.indexOf(snapshot[index]);
-      if (at >= 0) live.splice(at, 1);
-      this.save();
-      this.updateDeclarative();
-    };
+    const statusWarn = this.statusGroupWarning();
 
     const items: SettingDefinitionItem[] = [
       { name: tr().setDefaultFolderName, desc: tr().setDefaultFolderDesc, render: (x) => this.ctlRootFolder(x) },
@@ -606,28 +647,42 @@ export class GanttSettingTab extends PluginSettingTab {
         desc: tr().setProgressLineColorDesc,
         render: (x) => this.ctlProgressLineColor(x),
       },
-      // ステータス（追加・削除はフレームワークの list が面倒を見る）/ statuses (the list type owns add/delete)
+      // ステータス（追加はフレームワークの list、削除は行内のゴミ箱）/ statuses (the list owns add; rows own delete)
       {
         type: "list",
         heading: tr().setStatusesHeading,
         // name を空にして行ラベルを出さない（id/ラベル欄と二重表示になるため）。
         // 行のクラスは render 内で付ける（定義側に cls が無いため）。
+        // 先頭は列見出しの行。onDelete を使わない＝どの行にも削除ボタンが付かないので、
+        // 見出し行が一覧に混ざっても消せてしまう心配がない
         // an empty name keeps the row label out (it would duplicate the id/label fields);
-        // the row class goes on inside render, since definitions have no `cls` field
-        items: statusRows.map((st): SettingGroupItem => ({
-          name: "",
-          render: (x) => { x.setClass("ogantt-setting-row"); this.ctlStatusRow(x, st); },
-        })),
-        onDelete: (i) => dropRow(s.statuses, statusRows, i),
+        // the row class goes on inside render, since definitions have no `cls` field.
+        // The first entry is the column-header row: with no onDelete, the framework adds no delete
+        // buttons at all, so a header sitting among the rows can't be deleted by mistake
+        items: [
+          { name: "", render: (x) => this.ctlStatusHeader(x) } as SettingGroupItem,
+          ...s.statuses.map((st): SettingGroupItem => ({
+            name: "",
+            render: (x) => {
+              x.setClass("ogantt-setting-row").setClass("ogantt-status-row");
+              this.ctlStatusRow(x, st);
+            },
+          })),
+        ],
         addItem: {
           name: tr().setAddStatus,
           action: () => {
-            s.statuses.push({ id: "new", label: "New", color: "#888888" });
+            s.statuses.push({ id: "new", label: "New", color: "#888888", group: "active" });
             this.save();
             this.updateDeclarative();
           },
         },
       },
+      // 「完了」グループが空のときだけ出る注意書き。一覧の直後に置くと文脈が伝わる
+      // shown only when the Completed group is empty; right after the list, where it reads in context
+      ...(statusWarn
+        ? [{ name: "", desc: statusWarn, render: (x: Setting) => { x.setClass("ogantt-setting-warn"); } }]
+        : []),
       // タグの色（フォルダの色は表で右クリック）/ tag colors (folder colors via right-click in the table)
       // 見出しの無い単独項目は直前のグループ（ステータス）に吸い寄せられて見えるので、
       // 既定色は「タグの色」見出しを持つグループの中に置く
@@ -785,26 +840,22 @@ export class GanttSettingTab extends PluginSettingTab {
       new Setting(containerEl).setName(tr().setProgressLineColorName).setDesc(tr().setProgressLineColorDesc)
     );
 
-    // ステータス一覧（id/ラベル/色＋削除、末尾に追加ボタン）/ status list (id/label/color + delete, add button at the end)
+    // ステータス一覧（列見出し＋ id/ラベル/グループ/色＋削除、末尾に追加ボタン）
+    // status list: column header, then id/label/group/color + delete, with an add button at the end
     new Setting(containerEl).setName(tr().setStatusesHeading).setHeading();
-    s.statuses.forEach((st, i) => {
-      const row = new Setting(containerEl).setClass("ogantt-setting-row");
-      this.ctlStatusRow(row, st);
-      row.addExtraButton((b) =>
-        b.setIcon("trash").setTooltip(tr().setDeleteTooltip).onClick(() => {
-          s.statuses.splice(i, 1);
-          this.save();
-          this.draw();
-        })
-      );
-    });
+    this.ctlStatusHeader(new Setting(containerEl));
+    for (const st of s.statuses) {
+      this.ctlStatusRow(new Setting(containerEl).setClass("ogantt-setting-row").setClass("ogantt-status-row"), st);
+    }
     new Setting(containerEl).addButton((b) =>
       b.setButtonText(tr().setAddStatus).setCta().onClick(() => {
-        s.statuses.push({ id: "new", label: "New", color: "#888888" });
+        s.statuses.push({ id: "new", label: "New", color: "#888888", group: "active" });
         this.save();
         this.draw();
       })
     );
+    const statusWarn = this.statusGroupWarning();
+    if (statusWarn) new Setting(containerEl).setClass("ogantt-setting-warn").setDesc(statusWarn);
 
     // タグの色（名前＋色＋削除。フォルダの色は表で右クリック）/ tag colors (name + color + delete; folder colors via right-click in the table)
     new Setting(containerEl).setName(tr().setTagColorsHeading).setHeading();

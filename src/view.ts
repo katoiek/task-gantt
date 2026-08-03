@@ -1,6 +1,6 @@
 import { ItemView, Menu, MarkdownRenderer, WorkspaceLeaf, setIcon, Notice, TFile, ViewStateResult, moment } from "obsidian";
 import type GanttPlugin from "./main";
-import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, DateValue, DateOp, DateField, DateUnit, DateDir } from "./types";
+import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, DateValue, DateOp, DateField, DateUnit, DateDir, StatusGroup, STATUS_GROUPS } from "./types";
 import {
   collectTasks,
   collectFolders,
@@ -22,6 +22,7 @@ import {
   readBody,
   anchorStart,
   anchorEnd,
+  statusGroupOf,
 } from "./model";
 import {
   DateRange,
@@ -38,7 +39,7 @@ import {
 } from "./timeline";
 import { hashColor, resolveTagColor } from "./colors";
 import { ConfirmModal } from "./modals";
-import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
+import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 
 const ROW_H = 30; // 行の高さ（表とタイムラインで共通）/ shared row height
@@ -457,24 +458,38 @@ export class GanttView extends ItemView {
   private filterFieldLabel(f: Filter): string {
     if (f.kind === "date") return f.field === "start" ? tr().fieldStart : tr().fieldDue;
     if (f.kind === "text") return tr().fieldName;
-    return f.field === "status" ? tr().fieldStatus : f.field === "assignee" ? tr().fieldAssignee : tr().fieldTags;
+    switch (f.field) {
+      case "status": return tr().fieldStatus;
+      case "statusGroup": return tr().fieldStatusGroup;
+      case "assignee": return tr().fieldAssignee;
+      case "tag": return tr().fieldTags;
+    }
   }
   // チップ/メニューのアイコン / chip & menu icon
   private filterIcon(f: Filter): string {
     if (f.kind === "date") return "calendar";
     if (f.kind === "text") return "type";
-    return f.field === "status" ? "filter" : f.field === "assignee" ? "user" : "tag";
+    switch (f.field) {
+      case "status": return "filter";
+      case "statusGroup": return "flag";
+      case "assignee": return "user";
+      case "tag": return "tag";
+    }
   }
   // カテゴリ値のラベル（""＝未設定、ステータスは id→ラベル）/ a category value's label ("" = unset; status maps id→label)
   private catValueLabel(field: CategoryField, value: string): string {
     if (value === "") return tr().noneLabel; // 未設定 / unset
     if (field === "status") return this.plugin.settings.statuses.find((s) => s.id === value)?.label ?? value;
+    if (field === "statusGroup") return statusGroupLabel(value as StatusGroup);
     return value;
   }
   // カテゴリの選択肢＋末尾に「未設定(")」/ available category values, plus an "unset" ("") entry at the end
   private filterFieldValues(field: CategoryField): [string, string][] {
     let base: [string, string][];
     if (field === "status") base = this.plugin.settings.statuses.map((s) => [s.id, s.label] as [string, string]);
+    // グループは 4 固定なので、そのグループを使っているステータスが 1 つも無くても全部出す
+    // the four groups are fixed, so list them all even when no status currently uses one
+    else if (field === "statusGroup") base = STATUS_GROUPS.map((g) => [g, statusGroupLabel(g)] as [string, string]);
     else if (field === "assignee") base = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort().map((a) => [a, a] as [string, string]);
     else base = [...new Set(this.tasks.flatMap((t) => t.tags))].sort().map((tg) => [tg, tg] as [string, string]);
     return [...base, ["", tr().noneLabel]]; // 「未設定」を選べるように / allow filtering by "unset"
@@ -568,6 +583,7 @@ export class GanttView extends ItemView {
       }));
     };
     addCat("status", tr().fieldStatus, "filter");
+    addCat("statusGroup", tr().fieldStatusGroup, "flag");
     addCat("assignee", tr().fieldAssignee, "user");
     if (this.tasks.some((t) => t.tags.length > 0)) addCat("tag", tr().fieldTags, "tag");
     const addDate = (field: DateField, label: string) => {
@@ -611,6 +627,17 @@ export class GanttView extends ItemView {
       // 未割り当て＝担当者なし / no assignee
       { name: tr().presetUnassigned, filterMatch: "all", filters: [
         { kind: "category", field: "assignee", op: "empty", values: [] },
+      ] },
+      // 完了済み＝ステータスが「完了」グループ / status sits in the Completed group
+      { name: tr().presetCompleted, filterMatch: "all", filters: [
+        { kind: "category", field: "statusGroup", op: "is", values: ["completed"] },
+      ] },
+      // 未完了＝完了でもキャンセルでもない（アクティブ・延期・ステータス未設定）。中止したタスクは
+      // 「残っている仕事」ではないので除く。フィールド内は OR なので isNot 1件で「どちらでもない」
+      // incomplete = neither completed nor cancelled (active, deferred, or no status at all):
+      // cancelled work isn't outstanding work. Values OR within a field, so one isNot covers both
+      { name: tr().presetIncomplete, filterMatch: "all", filters: [
+        { kind: "category", field: "statusGroup", op: "isNot", values: ["completed", "cancelled"] },
       ] },
     ];
   }
@@ -1043,10 +1070,16 @@ export class GanttView extends ItemView {
         case "endsWith": return name.endsWith(q);
       }
     }
-    // カテゴリ（ステータス/担当者/タグ）：タスクの該当値集合を作って判定 / category: build the task's value set
+    // カテゴリ（ステータス/グループ/担当者/タグ）：タスクの該当値集合を作って判定 / category: build the task's value set
+    // グループは status から都度引く。設定に無い id やステータス未設定は空集合＝「未設定」扱いになり、
+    // 「未完了（完了でもキャンセルでもない）」には含まれる
+    // the group is derived from the status; an unknown id or no status yields an empty set, which
+    // reads as "unset" — and therefore still counts as incomplete
+    const group = f.field === "statusGroup" ? statusGroupOf(this.plugin.settings.statuses, t.status) : undefined;
     const vals = f.field === "status" ? (t.status ? [t.status] : [])
-      : f.field === "assignee" ? (t.assignee ? [t.assignee] : [])
-        : t.tags;
+      : f.field === "statusGroup" ? (group ? [group] : [])
+        : f.field === "assignee" ? (t.assignee ? [t.assignee] : [])
+          : t.tags;
     if (f.op === "empty") return vals.length === 0;
     if (f.op === "notEmpty") return vals.length > 0;
     // 値 "" は「未設定」を表すセンチネル。フィールド内は OR / "" is the "unset" sentinel; OR within the field
