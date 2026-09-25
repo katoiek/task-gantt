@@ -9,3 +9,7 @@ export function normalizePath(p) {
 export function getAllTags() {
   return null;
 }
+// 列定義（columns.ts）が参照する UI 部品のスタブ。テストでは描画しない
+// stubs for UI helpers columns.ts imports; tests never paint
+export function setIcon() {}
+export const moment = { locale: () => "en" };

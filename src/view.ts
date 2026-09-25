@@ -41,6 +41,8 @@ import { ConfirmModal } from "./modals";
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { applyFilters, regroup, GroupBy } from "./filter";
+import { BoardContext, Move, MutateResult } from "./board";
+import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnWidth, taskComparator, visibleColumns } from "./columns";
 
 const ROW_H = 30; // 行の高さ（表とタイムラインで共通）/ shared row height
 const HEAD_H = 40; // ヘッダー高さ / header height
@@ -50,17 +52,8 @@ const MIN_PPD = 2; // Fit 時の最小 1 日幅（これ未満は横スクロー
 const FIT_SCROLLBAR_PAD = 16; // 縦スクロールバー分の余白 / room for the vertical scrollbar
 const FALLBACK_BAR = "#7c8db5"; // ステータス/担当者が未設定のときのバー色 / bar color when status/assignee is unset
 
-// テーブル列の定義 / table column definitions
-// name は常時表示・可変幅(flex)、その他は表示/非表示を切替え・固定幅
-// `name` is always shown and flexes; the rest are toggleable with a fixed width
-type ColumnId = "name" | "start" | "end" | "progress" | "assignee" | "status" | "tags";
-const COLUMN_ORDER: ColumnId[] = ["name", "start", "end", "progress", "assignee", "status", "tags"];
-const OPTIONAL_COLUMNS: ColumnId[] = ["start", "end", "progress", "assignee", "status", "tags"]; // 歯車で出し分けできる列 / toggleable columns
-const COLUMN_WIDTHS: Record<ColumnId, number> = { name: 160, start: 84, end: 84, progress: 84, assignee: 96, status: 96, tags: 140 };
 const MAX_INDENT_DEPTH = 8; // インデントの段数上限（論理ツリーは無制限）/ visual indent cap (the tree itself is unlimited)
 
-// ファイルの移動・リネーム / a file move or rename
-type Move = { from: string; to: string };
 // 履歴 1 件：操作前パス→内容（null＝存在しなかった）と、操作中の移動（実行順）
 // one history entry: pre-op path → contents (null = didn't exist) and the op's moves, in order
 // created / deleted は「書き戻しでファイルを作り直してよいパス」の判定に使う（それ以外は作り直さない）
@@ -72,9 +65,6 @@ interface HistoryEntry {
   created: string[]; // 操作で作成 / made by the op
   deleted: string[]; // 操作で削除 / removed by the op
 }
-// mutate の fn の戻り値。false＝変化なし（記録しない）、true / void＝変化あり
-// what mutate's fn returns: false = nothing changed (not recorded); true / void = changed
-type MutateResult = { moves?: Move[]; created?: string[]; deleted?: string[] } | boolean | void;
 
 // 移動 b が移動 a と同じか、a（フォルダ）の移動に伴う配下の移動か / whether move b is move a itself, or follows from a folder move a
 function movesUnder(a: Move, b: Move): boolean {
@@ -262,7 +252,7 @@ export class GanttView extends ItemView {
     this.renderOptions(); // グループ/色分け/凡例を最新データで更新 / refresh layout options + legend
     this.renderFilterBar(); // 統合フィルタ行を最新データで更新 / refresh the unified filter row
     const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
-    const compare = this.taskComparator();
+    const compare = taskComparator(this.columns(), this.plugin.settings);
     if (this.flat) {
       // フラット：フォルダも親子も無視して全タスクを1本のソート済みリストに / flat: one sorted list, no grouping/nesting
       this.rows = view.slice().sort(compare).map((task) => ({ kind: "task", group: "", depth: 0, task }));
@@ -301,23 +291,27 @@ export class GanttView extends ItemView {
 
   // ----- テーブル列 / table columns -----
   // 表示中の列（name は常時、その他は設定の visibleColumns に従う）/ visible columns (name always; rest per settings)
-  private visibleColumns(): ColumnId[] {
-    const vis = new Set(this.plugin.settings.visibleColumns ?? []);
-    return COLUMN_ORDER.filter((id) => id === "name" || vis.has(id));
+  private visibleColumns(): ColumnDef[] {
+    return visibleColumns(this.columns(), this.plugin.settings.visibleColumns ?? []);
+  }
+  // 全列の定義（定義順）/ every column definition, in definition order
+  private columns(): ColumnDef[] {
+    return BUILTIN_COLUMNS;
   }
   // 表全体の幅（表示中の列幅の合計）/ total table width (sum of visible column widths)
   private tableWidth(): number {
-    return this.visibleColumns().reduce((w, id) => w + this.colW(id), 0);
+    return this.visibleColumns().reduce((w, c) => w + this.colW(c.id), 0);
   }
 
   // 列の実効幅（ユーザー上書き > 既定）/ effective column width (user override > default)
-  private colW(id: ColumnId): number {
-    return this.plugin.settings.columnWidths[id] ?? COLUMN_WIDTHS[id];
+  private colW(id: string): number {
+    const def = this.columns().find((c) => c.id === id);
+    return def ? columnWidth(def, this.plugin.settings.columnWidths) : 0;
   }
 
   // 列幅を内容に合わせて自動フィット（グリップのWクリック）。一時的に max-content にして実測する
   // auto-fit a column to its content (grip double-press): measure by temporarily sizing cells to max-content
-  private autoFitColumn(id: ColumnId, nth: number, th: HTMLElement): void {
+  private autoFitColumn(id: string, nth: number, th: HTMLElement): void {
     const cells: HTMLElement[] = [th];
     this.tbodyEl
       ?.querySelectorAll<HTMLElement>(`.ogantt-tr:not(.is-group) > .ogantt-td:nth-child(${nth})`)
@@ -337,46 +331,8 @@ export class GanttView extends ItemView {
     this.plugin.settings.columnWidths[id] = w;
     void this.plugin.saveSettings(); // 保存（ビューも再描画される）/ persist (views refresh)
   }
-  // 列ヘッダのラベル / column header label
-  private colLabel(id: ColumnId): string {
-    switch (id) {
-      case "name": return tr().colTask;
-      case "start": return tr().colStart;
-      case "end": return tr().colDue;
-      case "progress": return tr().fieldProgress;
-      case "assignee": return tr().fieldAssignee;
-      case "status": return tr().fieldStatus;
-      case "tags": return tr().fieldTags;
-    }
-  }
-  // 現在のソート設定からタスク比較関数を作る / build a task comparator from the current sort settings
-  private taskComparator(): (a: Task, b: Task) => number {
-    const by = this.plugin.settings.sortBy as ColumnId;
-    const dir = this.plugin.settings.sortDir === "desc" ? -1 : 1;
-    // ステータスは設定の定義順（アルファベット順ではない）/ status sorts by the configured order, not alphabetically
-    const statusOrder = new Map(this.plugin.settings.statuses.map((s, i) => [s.id, i]));
-    const key = (t: Task): string | number => {
-      switch (by) {
-        case "name": return t.name.toLowerCase();
-        case "start": return anchorStart(t) ?? "9999-99-99";
-        case "end": return anchorEnd(t) ?? "9999-99-99";
-        case "progress": return t.progress ?? -1; // 未設定は 0% より前 / unset sorts ahead of 0%
-        case "assignee": return (t.assignee ?? "").toLowerCase();
-        case "status": return t.status != null ? statusOrder.get(t.status) ?? 999 : 999;
-        case "tags": return t.tags.join(",").toLowerCase();
-        default: return anchorStart(t) ?? "9999-99-99";
-      }
-    };
-    return (a, b) => {
-      const ka = key(a);
-      const kb = key(b);
-      const c = typeof ka === "number" && typeof kb === "number" ? ka - kb : String(ka).localeCompare(String(kb));
-      return c * dir;
-    };
-  }
-
   // 列ヘッダクリックでソート列/方向を切替えて永続化 / clicking a header toggles sort column/direction (persisted)
-  private toggleSort(id: ColumnId): void {
+  private toggleSort(id: string): void {
     const s = this.plugin.settings;
     if (s.sortBy === id) s.sortDir = s.sortDir === "asc" ? "desc" : "asc";
     else {
@@ -388,11 +344,11 @@ export class GanttView extends ItemView {
   }
 
   // 列の表示/非表示を切替えて永続化 / toggle a column's visibility and persist
-  private setColumnVisible(id: ColumnId, on: boolean): void {
+  private setColumnVisible(id: string, on: boolean): void {
     const set = new Set(this.plugin.settings.visibleColumns ?? []);
     if (on) set.add(id);
     else set.delete(id);
-    this.plugin.settings.visibleColumns = OPTIONAL_COLUMNS.filter((c) => set.has(c)); // マスター順を維持 / keep master order
+    this.plugin.settings.visibleColumns = this.columns().filter((c) => c.optional && set.has(c.id)).map((c) => c.id); // 定義順を維持 / keep definition order
     void this.plugin.saveData(this.plugin.settings);
     this.rerender();
   }
@@ -432,12 +388,12 @@ export class GanttView extends ItemView {
   // 列の出し分けポップオーバー（チェックボックス）/ column-visibility popover (checkboxes)
   private openColumnMenu(anchor: HTMLElement): void {
     this.openPopover(anchor, "ogantt-colmenu", (menu) => {
-      for (const id of OPTIONAL_COLUMNS) {
+      for (const col of this.columns().filter((c) => c.optional)) {
         const item = menu.createEl("label", { cls: "ogantt-colmenu-item" });
         const cb = item.createEl("input", { type: "checkbox" });
-        cb.checked = (this.plugin.settings.visibleColumns ?? []).includes(id);
-        item.createSpan({ text: this.colLabel(id) });
-        cb.addEventListener("change", () => this.setColumnVisible(id, cb.checked));
+        cb.checked = (this.plugin.settings.visibleColumns ?? []).includes(col.id);
+        item.createSpan({ text: col.label() });
+        cb.addEventListener("change", () => this.setColumnVisible(col.id, cb.checked));
       }
     });
   }
@@ -1301,10 +1257,11 @@ export class GanttView extends ItemView {
 
     // (1) 左上の角＝表ヘッダー（表示中の列を並べる・クリックでソート）/ top-left corner = header (click to sort)
     const corner = grid.createDiv({ cls: "ogantt-corner" });
-    for (const id of cols) {
+    for (const col of cols) {
+      const id = col.id;
       const th = corner.createDiv({ cls: "ogantt-th ogantt-th-sortable" + (id === "name" ? " ogantt-th-name" : "") });
       if (id !== "name") th.style.width = `${this.colW(id)}px`;
-      th.createSpan({ text: this.colLabel(id) });
+      th.createSpan({ text: col.label() });
       // アクティブなソート列に ↑/↓ を表示 / show ↑/↓ on the active sort column
       if (this.plugin.settings.sortBy === id) {
         th.createSpan({ cls: "ogantt-sort-arrow", text: this.plugin.settings.sortDir === "asc" ? "↑" : "↓" });
@@ -1318,7 +1275,7 @@ export class GanttView extends ItemView {
       grip.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const nth = cols.indexOf(id) + 1;
+        const nth = cols.indexOf(col) + 1;
         if (e.timeStamp - lastDown < 400) {
           // Wクリック判定（pointerdown の preventDefault で dblclick が来ない環境があるため自前判定）
           // manual double-press detection (dblclick may be suppressed by preventDefault on pointerdown)
@@ -1415,8 +1372,8 @@ export class GanttView extends ItemView {
         tr.setAttr("data-path", t.path);
         if (t.path === this.selectedPath) tr.addClass("is-selected");
         // 表示中の列を順に描画 / render each visible column
-        for (const id of cols) {
-          if (id === "name") {
+        for (const col of cols) {
+          if (col.kind === "name") {
             const nameTd = tr.createDiv({ cls: "ogantt-td ogantt-td-name" });
             nameTd.style.paddingLeft = `${indent}px`;
             // シェブロン枠は常に確保＝親でも単独タスクでも名前位置を揃える
@@ -1443,8 +1400,8 @@ export class GanttView extends ItemView {
             });
           } else {
             const td = tr.createDiv({ cls: "ogantt-td" });
-            td.style.width = `${this.colW(id)}px`;
-            this.renderCell(td, row, id);
+            td.style.width = `${this.colW(col.id)}px`;
+            this.renderCell(td, row, col);
           }
         }
         tr.onclick = () => void this.openDetail(t.path);
@@ -2511,93 +2468,45 @@ export class GanttView extends ItemView {
     pop.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8))}px`;
   }
 
-  // 非 name 列のセル内容を描画 / fill a non-name cell by column id
-  private renderCell(td: HTMLElement, row: Row, id: ColumnId): void {
-    const t = row.task!;
-    const fmt = this.plugin.settings.dateFormat;
-    // ロールアップ ON の親は、開始/終了セルも集約値を表示（バーと一致・編集不可）
-    // when rolled up, a parent's Start/Due cells show the aggregated span too (matches the bar; not editable)
-    const rolled = this.rollup && row.span ? row.span : null;
-    switch (id) {
-      case "start":
-        if (rolled) {
-          td.setText(formatDate(rolled.start, fmt));
-        } else if (t.milestone) {
-          // マイルストーンは開始列に菱形マーカー（開始日を持たない＝編集不可）/ diamond marker; no start to edit
-          td.setText("◆");
-          td.addClass("ogantt-td-ms");
-        } else {
-          // 時刻があれば併記。テキストは span に包む（セルが flex なので直下テキストでは省略記号が効かない）
-          // append the time of day when set; wrap in a span (a bare text node can't ellipsis inside a flex cell)
-          td.createSpan({ cls: "ogantt-td-text", text: formatDate(t.start, fmt) + (t.startTime ? ` ${t.startTime}` : "") });
-          this.makeDateCell(td, t, "start");
-        }
-        break;
-      case "end":
-        if (rolled) {
-          td.setText(formatDate(rolled.end, fmt));
-        } else {
-          td.createSpan({ cls: "ogantt-td-text", text: formatDate(t.end, fmt) + (t.endTime ? ` ${t.endTime}` : "") });
-          this.makeDateCell(td, t, "end");
-        }
-        break;
-      case "progress":
-        // 進捗はロールアップ ON でも自分の値を表示・編集する（集約する重みが無いため）
-        // progress always shows/edits the task's own value, even when rolled up (there's no weight to aggregate by)
-        this.paintProgressCell(td, t);
-        this.makeEditableCell(td, tr().editProgress, (cell) =>
-          this.inlineInput(
-            cell,
-            t.progress != null ? String(t.progress) : "",
-            () => this.paintProgressCell(cell, t),
-            (v) => this.commitProgress(t, v),
-            (inp) => {
-              inp.type = "number";
-              inp.min = "0";
-              inp.max = "100";
-              inp.step = "5";
-            }
-          )
-        );
-        break;
-      case "assignee":
-        this.paintAssigneeCell(td, t);
-        this.makeEditableCell(td, tr().editAssignee, (cell) =>
-          this.inlineInput(
-            cell,
-            t.assignee ?? "",
-            () => this.paintAssigneeCell(cell, t),
-            async (v) => {
-              await this.mutate(tr().undoEdit(t.name), [t.path], () =>
-                writeField(this.app, t.path, this.plugin.settings.keys.assignee, v || undefined)
-              );
-              await this.refresh();
-            },
-            (inp) => this.attachAssigneeSuggestions(inp)
-          )
-        );
-        break;
-      case "status":
-        this.paintStatusCell(td, t);
-        this.makeEditableCell(td, tr().editStatus, (cell) => this.editStatusCell(cell, t));
-        break;
-      case "tags":
-        // タグは多値なので、セル内入力ではなく詳細パネルと同じチップ＋追加欄をポップオーバーで開く
-        // tags are multi-valued, so the cell opens the panel's chips + add field in a popover
-        this.paintTagsCell(td, t);
-        this.makeEditableCell(td, tr().editTags, (cell) => this.openTagEditor(cell, t));
-        break;
-      case "name":
-        break; // name は呼び出し側で処理（クリックで詳細パネル、改名はパネルのタイトル欄）
-        // handled by the caller: click opens the detail panel, renaming lives in the panel's title field
+  // 非 name 列のセルを描き、読み取り専用でなければダブルクリックの編集を付ける
+  // paint a non-name cell and, unless it's read-only, attach the double-click editor
+  private renderCell(td: HTMLElement, row: Row, col: CellColumn): void {
+    if (col.paint(this.board, td, row) === false) return;
+    this.makeEditableCell(td, col.editAria(), (cell) => col.edit(this.board, cell, row));
+  }
+
+  // 列定義などの部品に渡す窓口（GanttView 全体は渡さない）/ the surface handed to parts like column defs (never the whole view)
+  private boardCtx: BoardContext | null = null;
+  private get board(): BoardContext {
+    if (!this.boardCtx) {
+      const settings = () => this.plugin.settings;
+      const tasks = () => this.tasks;
+      const rollup = () => this.rollup;
+      this.boardCtx = {
+        app: this.app,
+        get settings() { return settings(); },
+        get tasks() { return tasks(); },
+        get rollup() { return rollup(); },
+        mutate: (label, paths, fn) => this.mutate(label, paths, fn),
+        refresh: () => this.refresh(),
+        rerender: () => this.rerender(),
+        inlineInput: (cell, value, repaint, commit, configure) => this.inlineInput(cell, value, repaint, commit, configure),
+        openPopover: (anchor, cls, build) => this.openPopover(anchor, cls, build),
+        openRangePicker: (anchor, state, active, repaint, save) => this.openRangePicker(anchor, state, active, repaint, save),
+        attachSuggestions: (inp, fill) => this.attachSuggestions(inp, fill),
+        attachSingleTagSuggestions: (inp, exclude) => this.attachSingleTagSuggestions(inp, exclude),
+        paintTagChip: (chip, tag) => this.paintTagChip(chip, tag),
+        openColorMenu: (e, kind, name) => this.openColorMenu(e, kind, name),
+      };
     }
+    return this.boardCtx;
   }
 
   // ----- セルの直接編集 / in-cell editing -----
   // 方針：テーブルに表示できる列はすべてダブルクリックで直接編集できる。
-  // 列を追加するときは paintXCell（表示）と、この makeEditableCell によるエディタ起動をセットで用意する。
+  // 列は src/columns.ts の ColumnDef として定義する（paint と edit が必須＝描画とエディタが必ずセットになる）。
   // Policy: every column the table can show is editable in place via double-click.
-  // A new column pairs a paintXCell (display) with an editor launched through makeEditableCell.
+  // Columns are ColumnDefs in src/columns.ts, where paint and edit are both required, so a renderer never ships without its editor.
   private makeEditableCell(cell: HTMLElement, aria: string, edit: (cell: HTMLElement) => void): void {
     cell.addClass("ogantt-td-editable");
     cell.setAttr("aria-label", aria);
@@ -2649,31 +2558,6 @@ export class GanttView extends ItemView {
     inp.addEventListener("blur", save);
   }
 
-  // 進捗の保存。0%・空欄は未設定として削除（詳細パネルのスライダーと同じ規則）
-  // save progress; 0% and blank clear the field (same rule as the panel slider)
-  private async commitProgress(t: Task, raw: string): Promise<void> {
-    const n = raw === "" ? 0 : Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
-    const next = n > 0 ? n : undefined;
-    if (next === t.progress) return;
-    await this.mutate(tr().undoEdit(t.name), [t.path], () => writeField(this.app, t.path, this.plugin.settings.keys.progress, next));
-    await this.refresh();
-  }
-
-  // 担当者セル / assignee cell
-  private paintAssigneeCell(td: HTMLElement, t: Task): void {
-    td.empty();
-    if (t.assignee) td.createSpan({ cls: "ogantt-td-text", text: t.assignee });
-  }
-
-  // 既存の担当者を入力候補に出して表記ゆれを防ぐ / suggest existing assignees to avoid spelling drift
-  private attachAssigneeSuggestions(inp: HTMLInputElement): void {
-    const names = [...new Set(this.tasks.map((x) => x.assignee).filter((a): a is string => !!a))].sort();
-    if (names.length === 0) return;
-    this.attachSuggestions(inp, (list) => {
-      for (const n of names) list.createEl("option", { value: n });
-    });
-  }
-
   // 入力欄に datalist を付けて候補を出す共通処理。候補の中身は fill が入れる
   // attach a datalist to an input; `fill` supplies the options
   private attachSuggestions(inp: HTMLInputElement, fill: (list: HTMLDataListElement) => void): HTMLDataListElement {
@@ -2694,156 +2578,6 @@ export class GanttView extends ItemView {
     this.attachSuggestions(inp, (list) => {
       for (const tag of all) list.createEl("option", { value: tag });
     });
-  }
-
-  // タグ編集のポップオーバー（詳細パネルと同じ操作：チップの × で削除、入力＋Enter で追加）
-  // 1 セルに複数タグを収められないので、日付セルと同じくポップオーバーで開く
-  // tag editor popover, same interaction as the detail panel: × on a chip removes, input + Enter adds.
-  // a cell can't hold several tags, so it opens a popover just like the date cell does
-  private openTagEditor(anchor: HTMLElement, t: Task): void {
-    const path = t.path;
-    this.openPopover(anchor, "ogantt-tagmenu", (menu) => {
-      const build = (): void => {
-        menu.empty();
-        // 背景 refresh が this.tasks を作り替えるので、毎回パスから最新を引き直す
-        // a background refresh may rebuild this.tasks, so look the task up by path every time
-        const live = this.tasks.find((x) => x.path === path) ?? t;
-        // 変更をメモリに反映してから盤面とポップオーバーを描き直す / apply in memory, then redraw board + popover
-        const apply = (mutate: (tags: string[]) => string[]): void => {
-          const l = this.tasks.find((x) => x.path === path);
-          if (l) l.tags = mutate(l.tags);
-          this.rerender();
-          build();
-        };
-        const chips = menu.createDiv({ cls: "ogantt-tagmenu-chips" });
-        for (const tag of live.tags) {
-          const chip = chips.createSpan({ cls: "ogantt-tag-chip" });
-          this.paintTagChip(chip, tag);
-          chip.createSpan({ text: tag });
-          const x = chip.createEl("button", { cls: "ogantt-date-x clickable-icon" });
-          setIcon(x, "x");
-          x.setAttr("aria-label", tr().removeTagAria);
-          x.addEventListener("click", () => void (async () => {
-            await this.mutate(tr().undoRemoveTag(t.name, tag), [path], () => removeTag(this.app, path, tag));
-            apply((tags) => tags.filter((y) => y !== tag));
-          })());
-        }
-        const add = menu.createEl("input", { cls: "ogantt-tag-add", type: "text" });
-        add.placeholder = tr().addTagPlaceholder;
-        this.attachSingleTagSuggestions(add, live.tags);
-        add.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); add.blur(); } });
-        add.addEventListener("change", () => void (async () => {
-          const v = add.value.trim().replace(/^#/, "");
-          if (!v) return;
-          await this.mutate(tr().undoAddTag(t.name, v), [path], async () => (await addTag(this.app, path, v)) || false);
-          apply((tags) => (tags.includes(v) ? tags : [...tags, v]));
-        })());
-        add.focus(); // 追加後も入力欄に留まって続けて足せる / keep focus so tags can be added back to back
-      };
-      build();
-    });
-  }
-
-  // ステータスセル（色ドット＋ラベル）/ status cell (color dot + label)
-  private paintStatusCell(td: HTMLElement, t: Task): void {
-    td.empty();
-    const s = this.plugin.settings.statuses.find((x) => x.id === t.status);
-    if (!s) return;
-    const dot = td.createSpan({ cls: "ogantt-status-dot" });
-    dot.style.background = s.color;
-    td.createSpan({ cls: "ogantt-td-text", text: s.label });
-  }
-
-  // ステータスは選択肢が決まっているのでセレクトで編集する / status has a fixed set, so it edits as a select
-  private editStatusCell(cell: HTMLElement, t: Task): void {
-    if (cell.querySelector("input, select")) return;
-    cell.empty();
-    const sel = cell.createEl("select", { cls: "ogantt-cell-input" });
-    sel.createEl("option", { text: "—", value: "" }); // 未設定に戻す / clear the status
-    for (const s of this.plugin.settings.statuses) {
-      const o = sel.createEl("option", { text: s.label, value: s.id });
-      if (s.id === t.status) o.selected = true;
-    }
-    sel.focus();
-    // ダブルクリックで一覧まで開く（未対応環境ではフォーカスのみで、クリックすれば開く）
-    // open the dropdown right away; where showPicker is unavailable, focus is enough and a click opens it
-    try {
-      sel.showPicker();
-    } catch {
-      /* フォーカス済みなので何もしない / already focused, nothing to do */
-    }
-    let settled = false;
-    const finish = (save: boolean): void => {
-      if (settled) return;
-      settled = true;
-      if (!save || sel.value === (t.status ?? "")) {
-        this.paintStatusCell(cell, t);
-        return;
-      }
-      void (async () => {
-        await this.mutate(tr().undoEdit(t.name), [t.path], () =>
-          writeField(this.app, t.path, this.plugin.settings.keys.status, sel.value || undefined)
-        );
-        await this.refresh();
-      })();
-    };
-    sel.addEventListener("change", () => finish(true));
-    sel.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); finish(false); } });
-    sel.addEventListener("blur", () => finish(true));
-  }
-
-  // タグセル（多値・チップ表示）/ tags cell (multi-valued chips)
-  private paintTagsCell(td: HTMLElement, t: Task): void {
-    td.empty();
-    td.addClass("ogantt-td-tags");
-    for (const tag of t.tags) {
-      const chip = td.createSpan({ cls: "ogantt-tag-chip", text: tag });
-      this.paintTagChip(chip, tag);
-      // タグチップを右クリック＝色を変更 / right-click a tag chip to change its color
-      chip.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); this.openColorMenu(e, "tag", tag); });
-    }
-  }
-
-  // 進捗セルの中身（細いメーター＋%）。未設定でも空メーターと「—」を描き、
-  // 値の有無に関わらずダブルクリックできる場所だと分かるようにする
-  // paint a progress cell (thin meter + %); unset still draws an empty meter and a dash,
-  // so the cell reads as double-click editable whether or not it has a value
-  private paintProgressCell(td: HTMLElement, t: Task): void {
-    td.empty();
-    td.addClass("ogantt-td-progress");
-    const p = t.progress != null ? Math.max(0, Math.min(100, Math.round(t.progress))) : null;
-    td.toggleClass("is-empty", p == null);
-    const track = td.createDiv({ cls: "ogantt-meter" });
-    if (p != null) track.createDiv({ cls: "ogantt-meter-fill" }).style.width = `${p}%`;
-    td.createSpan({ cls: "ogantt-meter-num", text: p != null ? `${p}%` : "—" });
-  }
-
-  // テーブルの日付セルをダブルクリックで直接編集可能にする / make a table date cell editable via double-click
-  private makeDateCell(cell: HTMLElement, t: Task, which: "start" | "end"): void {
-    this.makeEditableCell(cell, tr().pickDate, (c) => this.openCellDatePicker(c, t, which));
-  }
-
-  // テーブルのセルから範囲カレンダーを開いて日付を直接編集 / open the range calendar from a table cell
-  private openCellDatePicker(anchor: HTMLElement, t: Task, which: "start" | "end"): void {
-    const k = this.plugin.settings.keys;
-    const state = { start: t.start ?? "", end: t.end ?? "" };
-    const save = async (): Promise<void> => {
-      // 「開始のみ・終了なし」は無効ルール → 終了=開始 / "start only" isn't valid: fill end = start
-      if (state.start && !state.end) state.end = state.start;
-      // 既存の時刻は日付変更後も引き継ぐ（同日で逆転したら終了=開始に補正）
-      // keep the existing time of day across the date change (clamp if inverted on the same day)
-      const ts = t.startTime;
-      let te = t.endTime;
-      if (state.start && state.start === state.end && ts && te && te < ts) te = ts;
-      const tz = this.plugin.settings.tz;
-      await this.mutate(tr().undoReschedule(t.name), [t.path], async () => {
-        await writeField(this.app, t.path, k.start, combineDateTime(state.start || undefined, ts, tz));
-        await writeField(this.app, t.path, k.end, combineDateTime(state.end || undefined, te, tz));
-      });
-      await this.refresh();
-    };
-    // repaint はテーブル側では不要（save→refresh で再描画される）/ no chip repaint needed here
-    this.openRangePicker(anchor, state, which, () => {}, save);
   }
 
   // 範囲カレンダー（開始・終了を1つで指定。月移動は ←→・テーマ追従）

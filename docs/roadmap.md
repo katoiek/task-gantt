@@ -98,6 +98,11 @@ Phase 1 → Redo（Phase 1-5）→ Phase 2（列レジストリ → Custom field
   ```
 - `BoardContext`（`app`, `settings`, `tasks`, `ppd`, `range`, `mutate`, `refresh`, `rerender`）の型はここで先に定義し、列定義から `GanttView` 全体への参照を避ける（Phase 3 の分割で書き直しにならないように）。
 - `settings.visibleColumns` / `columnWidths` / `sortBy` は id 文字列のままで互換を保つ。
+- **実装済み**（`src/columns.ts` / `src/board.ts`）。上の案からの変更点:
+  - `ColumnDef` は `NameColumn | CellColumn` の判別共用体。name 列はツリー描画のためビューが直接扱い、`CellColumn` だけが `paint` / `edit` / `editAria` を必須で持つ。
+  - `paint` が `false` を返すと読み取り専用（ロールアップ中の日付、マイルストーンの開始）。編集の付与はビュー側で一律に行う。
+  - 並べ替えは `compare` ではなく `sortKey`（数値は差、それ以外は文字列比較）。`visibleColumns` / `columnWidth` / `taskComparator` は純粋関数で `test/columns.test.mjs` がある。
+  - `BoardContext` には `ppd` / `range` をまだ入れていない（使う部品が出てきた時点で足す）。代わりにセル編集用の UI 部品（`inlineInput`、`openPopover`、`openRangePicker` など）を持つ。セル描画・編集の関数は `columns.ts` に移したので、Phase 3-1 の `cells.ts` はほぼ済んでいる。
 
 ### 2-2. Custom field 列（`CONTEXT.md` に定義済み・未実装）
 
@@ -205,6 +210,7 @@ Phase 1 → Redo (1-5) → Phase 2 (column registry → custom fields) → multi
 ## Phase 2 (v2.10): Column registry → Custom fields
 
 1. **Column registry**: replace the scattered `ColumnId` / `COLUMN_ORDER` / `OPTIONAL_COLUMNS` / `COLUMN_WIDTHS` (L56–59), `colLabel`, `renderCell`, `paint*Cell` / `edit*Cell` and `taskComparator` with one `ColumnDef { id, label, width, paint, edit?, compare, optional }`. `edit` is required for every column except `name`. Define the `BoardContext` type here (`app`, `settings`, `tasks`, `ppd`, `range`, `mutate`, `refresh`, `rerender`) and pass it to `paint`/`edit`, so Phase 3 doesn't have to rewrite them. Settings keep plain id strings for compatibility.
+   - **Done** (`src/columns.ts` / `src/board.ts`), with these changes: `ColumnDef` is a `NameColumn | CellColumn` union — the view draws the name column's tree itself, and only `CellColumn` carries the required `paint` / `edit` / `editAria`. `paint` returning `false` marks a cell read-only (rolled-up dates, a milestone's start); the view attaches editors uniformly. Sorting uses a `sortKey` instead of `compare`; `visibleColumns` / `columnWidth` / `taskComparator` are pure and tested in `test/columns.test.mjs`. `BoardContext` leaves out `ppd` / `range` until a part needs them, and carries the in-cell UI helpers (`inlineInput`, `openPopover`, `openRangePicker`, …) instead. Cell painting and editing moved into `columns.ts`, so Phase 3-1's `cells.ts` is largely done.
 2. **Custom field columns** (defined in `CONTEXT.md`, not yet implemented):
    - `GanttSettings.customFields: { key, label, type: "text" | "number" | "date" }[]`, with add/remove UI in the settings tab.
    - Read into `Task.custom` in `collectTasks`.
