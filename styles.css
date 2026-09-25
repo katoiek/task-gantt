@@ -631,6 +631,13 @@
   padding: 0 4px;
   font-size: 12px;
 }
+/* 名前セルでのリネーム中は、入力欄がシェブロンの右の残り幅いっぱいに広がる
+   while renaming in the name cell, the input fills the width left of the chevron */
+.ogantt-name-editing {
+  display: inline-flex;
+  width: calc(100% - 16px); /* シェブロン枠の幅を除く / minus the chevron slot */
+  vertical-align: middle;
+}
 input.ogantt-cell-input[type="number"] {
   text-align: right; /* 数値は右揃え / numbers align right */
 }

@@ -1227,6 +1227,41 @@ export class GanttView extends ItemView {
       movesUnder(m, { from: oldPath, to: newPath }) || movesUnder({ from: m.to, to: m.from }, { from: oldPath, to: newPath })));
   }
 
+  // 詳細パネルが指定タスクで開いているか / whether the detail panel is open on the given task
+  private isDetailOpenFor(path: string): boolean {
+    return !!this.detailEl?.hasClass("is-open") && this.selectedPath === path;
+  }
+
+  // タスクをリネーム（取り消し可）。詳細パネルのタイトル欄とテーブルの名前セルが共用
+  // rename a task (undoable); shared by the detail panel's title and the table's name cell
+  private async renameTaskTo(from: string, oldName: string, newName: string): Promise<void> {
+    let np: string | null = null;
+    await this.mutate(tr().undoRename(oldName), [], async () => {
+      np = await renameTask(this.app, from, newName);
+      return np && np !== from ? { moves: [{ from, to: np }] } : false;
+    });
+    if (np && this.selectedPath === from) this.selectedPath = np;
+    await this.refresh();
+  }
+
+  // テーブルの名前セルをその場で入力欄にしてリネーム。編集中は行のドラッグを止める（文字選択が行の D&D にならないように）
+  // rename in place in the table's name cell; row dragging is paused while editing so selecting text doesn't drag the row
+  private renameInCell(nameText: HTMLElement, t: Task, row: HTMLElement): void {
+    const draggable = row.getAttr("draggable");
+    row.setAttr("draggable", "false");
+    nameText.addClass("ogantt-name-editing");
+    this.inlineInput(
+      nameText,
+      t.name,
+      () => {
+        nameText.removeClass("ogantt-name-editing");
+        nameText.setText(t.name);
+        if (draggable != null) row.setAttr("draggable", draggable);
+      },
+      (v) => this.renameTaskTo(t.path, t.name, v)
+    );
+  }
+
   // 詳細パネルを閉じて選択を外す / close the detail panel and clear the selection
   private closeDetail(): void {
     this.selectedPath = null;
@@ -1390,7 +1425,26 @@ export class GanttView extends ItemView {
                 void this.refresh();
               });
             }
-            nameTd.createSpan({ text: t.name });
+            const nameText = nameTd.createSpan({ text: t.name });
+            // 詳細パネルがこのタスクで開いている状態でのダブルクリック＝その場でリネーム。
+            // 閉じている状態では 1 回目のクリックでパネルが開くだけにする（誤ってリネームに入らない）。
+            // ダブルクリックの 1 回目でもパネルは開き直されるので、判定は 1 回目を押した瞬間の状態で行う
+            // a double-click while the detail panel shows this task renames it in place; while the panel is closed
+            // the first click just opens it (no accidental rename). The first click of a double-click re-opens the
+            // panel too, so the check uses the state at the moment that first click went down
+            let panelWasOpen = false;
+            nameTd.addEventListener("mousedown", (e) => {
+              if (e.detail === 1) panelWasOpen = this.isDetailOpenFor(t.path);
+            });
+            nameTd.addEventListener("dblclick", (e) => {
+              if (!panelWasOpen) return;
+              e.stopPropagation();
+              this.renameInCell(nameText, t, tr);
+            });
+            // 入力欄のクリックで詳細を開き直さない / clicks inside the input don't re-open the panel
+            nameText.addEventListener("click", (e) => {
+              if (nameText.querySelector("input")) e.stopPropagation();
+            });
             // タイトル右クリック＝削除メニュー / right-click the title = delete menu
             nameTd.addEventListener("contextmenu", (e) => {
               e.preventDefault();
@@ -2087,16 +2141,7 @@ export class GanttView extends ItemView {
     const header = d.createDiv({ cls: "ogantt-detail-head" });
     const titleInput = header.createEl("input", { cls: "ogantt-detail-title", type: "text" });
     titleInput.value = t.name;
-    titleInput.addEventListener("change", () => void (async () => {
-      const from = this.selectedPath!;
-      let np: string | null = null;
-      await this.mutate(tr().undoRename(t.name), [], async () => {
-        np = await renameTask(this.app, from, titleInput.value);
-        return np && np !== from ? { moves: [{ from, to: np }] } : false;
-      });
-      if (np) this.selectedPath = np;
-      await this.refresh();
-    })());
+    titleInput.addEventListener("change", () => void this.renameTaskTo(this.selectedPath!, t.name, titleInput.value));
     // 新規作成直後は名前を選択状態にして即リネームできるように / select the name right after creation
     if (focusTitle) window.setTimeout(() => { titleInput.focus(); titleInput.select(); }, 0);
     const openBtn = header.createEl("button", { cls: "clickable-icon" });
