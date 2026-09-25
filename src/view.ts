@@ -22,7 +22,6 @@ import {
   readBody,
   anchorStart,
   anchorEnd,
-  statusGroupOf,
 } from "./model";
 import {
   DateRange,
@@ -33,7 +32,6 @@ import {
   buildTicks,
   todayIndex,
   formatDate,
-  matchDate,
   buildProgressLine,
   ProgressLineRow,
 } from "./timeline";
@@ -41,6 +39,7 @@ import { hashColor, resolveTagColor } from "./colors";
 import { ConfirmModal } from "./modals";
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
+import { applyFilters, regroup, GroupBy } from "./filter";
 
 const ROW_H = 30; // 行の高さ（表とタイムラインで共通）/ shared row height
 const HEAD_H = 40; // ヘッダー高さ / header height
@@ -72,7 +71,7 @@ export class GanttView extends ItemView {
 
   // 表示オプション（ビューを開いている間だけ保持）/ view options (kept while the view is open)
   private colorBy: "status" | "assignee" = "status";
-  private groupBy: "folder" | "status" | "assignee" | "tag" = "folder";
+  private groupBy: GroupBy = "folder";
   private showEmptyFolders = true; // 空フォルダも行として表示（既定ON）/ show empty folders as rows (default on)
   private flat = false; // フラット表示（フォルダ/親子を無視し全タスク一覧）/ flat list ignoring folders & nesting
   private rollup = false; // 親タスクのバーを子孫の集約で描く（既定OFF）/ draw parent bars as a rollup of descendants (default off)
@@ -1050,78 +1049,12 @@ export class GanttView extends ItemView {
     m.showAtMouseEvent(e);
   }
 
-  // 統合フィルタ 1 件がタスクに合致するか / does one unified filter match a task
-  private matchFilter(t: Task, f: Filter, today: number): boolean {
-    if (f.kind === "date") {
-      const iso = f.field === "start" ? anchorStart(t) : anchorEnd(t);
-      return matchDate(iso ? dayIndex(iso) : undefined, f, today);
-    }
-    // テキスト（タスク名）：大文字小文字を無視。空の入力は素通し / text (name): case-insensitive; empty query = no effect
-    if (f.kind === "text") {
-      const q = f.value.trim().toLowerCase();
-      if (q === "") return true;
-      const name = t.name.toLowerCase();
-      switch (f.op) {
-        case "is": return name === q;
-        case "isNot": return name !== q;
-        case "contains": return name.includes(q);
-        case "notContains": return !name.includes(q);
-        case "startsWith": return name.startsWith(q);
-        case "endsWith": return name.endsWith(q);
-      }
-    }
-    // カテゴリ（ステータス/グループ/担当者/タグ）：タスクの該当値集合を作って判定 / category: build the task's value set
-    // グループは status から都度引く。設定に無い id やステータス未設定は空集合＝「未設定」扱いになり、
-    // 「未完了（完了でもキャンセルでもない）」には含まれる
-    // the group is derived from the status; an unknown id or no status yields an empty set, which
-    // reads as "unset" — and therefore still counts as incomplete
-    const group = f.field === "statusGroup" ? statusGroupOf(this.plugin.settings.statuses, t.status) : undefined;
-    const vals = f.field === "status" ? (t.status ? [t.status] : [])
-      : f.field === "statusGroup" ? (group ? [group] : [])
-        : f.field === "assignee" ? (t.assignee ? [t.assignee] : [])
-          : t.tags;
-    if (f.op === "empty") return vals.length === 0;
-    if (f.op === "notEmpty") return vals.length > 0;
-    // 値 "" は「未設定」を表すセンチネル。フィールド内は OR / "" is the "unset" sentinel; OR within the field
-    const hit = f.values.some((v) => (v === "" ? vals.length === 0 : vals.includes(v)));
-    return f.op === "isNot" ? !hit : hit;
-  }
-
-  // フィルタ→グループ再マッピングを適用したタスク列を返す / tasks after filter + group remap
+  // フィルタ→グループ再マッピングを適用したタスク列を返す（判定本体は filter.ts）/ tasks after filter + group remap (logic lives in filter.ts)
   private processTasks(): Task[] {
-    let list = this.tasks;
-    // 統合フィルタを filterMatch（all=AND / any=OR）で結合。today は 1 回だけ評価して共有
-    // combine unified filters by filterMatch; evaluate `today` once and share it
-    const { filters, filterMatch } = this.plugin.settings;
-    if (filters.length > 0) {
-      const today = todayIndex();
-      list = list.filter((t) =>
-        filterMatch === "any"
-          ? filters.some((f) => this.matchFilter(t, f, today))
-          : filters.every((f) => this.matchFilter(t, f, today))
-      );
-    }
-    // フラットはグループを無視＝再マッピング不要（タグ複製で重複行が出るのも防ぐ）/ flat ignores groups: skip remap (also avoids tag-duplicated rows)
-    if (this.groupBy === "folder" || this.flat) return list;
-    const none = tr().noneLabel;
-    // タグは多値＝1タスクを各タグのグループへ複製（タグ無しは (なし)）/ tags are multi-valued: duplicate a task into each tag's group
-    if (this.groupBy === "tag") {
-      const out: Task[] = [];
-      for (const t of list) {
-        if (t.tags.length === 0) out.push({ ...t, groups: [none] });
-        else for (const tag of t.tags) out.push({ ...t, groups: [tag] });
-      }
-      return out;
-    }
-    // groups を単一の合成グループへ差し替えて既存の buildRows を再利用 / remap groups to reuse buildRows
-    const statusLabel = new Map(this.plugin.settings.statuses.map((s) => [s.id, s.label]));
-    return list.map((t) => {
-      const key =
-        this.groupBy === "status"
-          ? t.status ? statusLabel.get(t.status) ?? t.status : none
-          : t.assignee || none;
-      return { ...t, groups: [key] };
-    });
+    const { filters, filterMatch, statuses } = this.plugin.settings;
+    // today は 1 回だけ評価して共有 / evaluate `today` once and share it
+    const list = applyFilters(this.tasks, filters, filterMatch, statuses, todayIndex());
+    return regroup(list, this.groupBy, this.flat, statuses, tr().noneLabel);
   }
 
   // 今日の線が中央に来るよう横スクロール / scroll horizontally so the today marker is centered
