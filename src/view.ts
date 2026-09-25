@@ -8,6 +8,7 @@ import {
   createTask,
   reparentTask,
   subtreePaths,
+  successorClosure,
   writeDates,
   combineDateTime,
   writeField,
@@ -58,6 +59,19 @@ const OPTIONAL_COLUMNS: ColumnId[] = ["start", "end", "progress", "assignee", "s
 const COLUMN_WIDTHS: Record<ColumnId, number> = { name: 160, start: 84, end: 84, progress: 84, assignee: 96, status: 96, tags: 140 };
 const MAX_INDENT_DEPTH = 8; // インデントの段数上限（論理ツリーは無制限）/ visual indent cap (the tree itself is unlimited)
 
+// ファイルの移動・リネーム / a file move or rename
+type Move = { from: string; to: string };
+// 履歴 1 件：操作前パス→内容（null＝存在しなかった）と、操作中の移動（実行順）
+// one history entry: pre-op path → contents (null = didn't exist) and the op's moves, in order
+interface HistoryEntry {
+  label: string;
+  files: Map<string, string | null>;
+  moves: Move[];
+}
+// mutate の fn の戻り値。false＝変化なし（記録しない）、true / void＝変化あり
+// what mutate's fn returns: false = nothing changed (not recorded); true / void = changed
+type MutateResult = { moves?: Move[]; created?: string[] } | boolean | void;
+
 export class GanttView extends ItemView {
   plugin: GanttPlugin;
   private zoom: ZoomMode;
@@ -80,9 +94,12 @@ export class GanttView extends ItemView {
   private optionsHost!: HTMLElement; // グループ/色分け/表示切替/凡例の差し替え先 / layout options + legend container
   private filterHost!: HTMLElement; // 統合フィルタ行の差し替え先 / unified filter bar container
 
-  // 取り消し履歴：操作前のファイル内容スナップショットと/またはファイル移動(from→to の配列)
-  // undo history: a pre-op content snapshot and/or file moves (array of from → to)
-  private undoStack: { label: string; files?: Map<string, string>; moves?: { from: string; to: string }[] }[] = [];
+  // 取り消し・やり直し履歴（対象ファイルのスナップショット＋移動）/ undo & redo history (snapshots of affected files + moves)
+  private undoStack: HistoryEntry[] = [];
+  private redoStack: HistoryEntry[] = [];
+  // 自分の書き込み中は >0。外部リネームだけを履歴の付け替え対象にするため
+  // >0 while we are writing, so only outside renames remap the history
+  private historyBusy = 0;
   private static readonly UNDO_LIMIT = 50;
 
   // バーがドラッグされたか（ドラッグ直後のクリック抑止用）/ whether a bar was dragged (to suppress the trailing click)
@@ -99,6 +116,7 @@ export class GanttView extends ItemView {
   private gridHost!: HTMLElement;
   private detailEl!: HTMLElement;
   private undoBtn: HTMLButtonElement | null = null;
+  private redoBtn: HTMLButtonElement | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: GanttPlugin) {
     super(leaf);
@@ -135,11 +153,17 @@ export class GanttView extends ItemView {
     // ファイルの作成/削除/リネーム（フォルダ移動含む）でも自動再描画 / also re-render on create / delete / rename (incl. folder moves)
     this.registerEvent(this.app.vault.on("create", () => this.scheduleRefresh()));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
-    this.registerEvent(this.app.vault.on("rename", () => this.scheduleRefresh()));
-    // Ctrl/Cmd+Z で取り消し（入力欄にフォーカス中はネイティブ undo を優先）
-    // Ctrl/Cmd+Z to undo (defer to native undo while an input is focused)
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      if (this.historyBusy === 0 && !this.isOwnMove(oldPath, file.path)) this.remapHistory(oldPath, file.path);
+      this.scheduleRefresh();
+    }));
+    // Ctrl/Cmd+Z で取り消し、Ctrl/Cmd+Shift+Z・Ctrl/Cmd+Y でやり直し（入力欄にフォーカス中はネイティブを優先）
+    // Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y redo (defer to the native ones while an input is focused)
     this.registerDomEvent(window, "keydown", (e: KeyboardEvent) => {
-      if (!(e.key === "z" || e.key === "Z") || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      const key = e.key.toLowerCase();
+      const isUndo = key === "z" && !e.shiftKey;
+      const isRedo = (key === "z" && e.shiftKey) || (key === "y" && !e.shiftKey);
+      if (!(isUndo || isRedo) || !(e.ctrlKey || e.metaKey) || e.altKey) return;
       if (this.app.workspace.getActiveViewOfType(GanttView) !== this) return;
       const ae = activeDocument.activeElement as HTMLElement | null;
       // テキスト編集中だけネイティブ undo を優先（time 等の入力はガント側の取り消しを通す）
@@ -152,7 +176,7 @@ export class GanttView extends ItemView {
             ["text", "search", "url", "tel", "password", "email", "number"].includes(ae.type)));
       if (editingText) return;
       e.preventDefault();
-      void this.undo();
+      void (isUndo ? this.undo() : this.redo());
     });
   }
 
@@ -879,6 +903,12 @@ export class GanttView extends ItemView {
     undo.setAttr("aria-label", tr().undoAria);
     undo.onclick = () => void this.undo();
     this.undoBtn = undo;
+    // やり直しボタン / redo button
+    const redo = bar.createEl("button");
+    setIcon(redo, "redo-2");
+    redo.setAttr("aria-label", tr().redoAria);
+    redo.onclick = () => void this.redo();
+    this.redoBtn = redo;
     this.updateUndoButton();
 
     const reload = bar.createEl("button");
@@ -1067,58 +1097,153 @@ export class GanttView extends ItemView {
     main.scrollLeft += tb.left - mb.left - main.clientWidth / 2;
   }
 
-  // ----- 取り消し（Undo）-----
-  // 操作前に現在のタスクファイル内容を控える / snapshot current task files before an op
-  private async pushUndo(label: string): Promise<void> {
-    const files = new Map<string, string>();
-    for (const t of this.tasks) {
-      const f = this.app.vault.getAbstractFileByPath(t.path);
-      if (f instanceof TFile) files.set(t.path, await this.app.vault.read(f));
+  // ----- 取り消し・やり直し（Undo / Redo）-----
+  // 書き込みはすべてここを通す：対象ファイルだけ操作前の内容を控え、fn を実行して履歴に積む。
+  // fn が false を返したら「変化なし」として履歴に残さない。作成したファイルは created で知らせる（Undo でゴミ箱へ）
+  // every write goes through here: snapshot only the affected files, run fn, record the entry.
+  // fn returns false for "nothing changed" (not recorded); report new files via `created` (trashed on undo)
+  private async mutate(label: string, paths: string[], fn: () => Promise<MutateResult>): Promise<boolean> {
+    const files = await this.snapshot(paths);
+    let res: MutateResult;
+    this.historyBusy++;
+    try {
+      res = await fn();
+    } finally {
+      this.historyBusy--;
     }
-    this.undoStack.push({ label, files });
-    if (this.undoStack.length > GanttView.UNDO_LIMIT) this.undoStack.shift();
+    if (res === false) return false;
+    const r = typeof res === "object" ? res : {};
+    // 移動も作成も無く内容も変わっていなければ記録しない（本文の #tag だけのタグ削除など）
+    // skip recording when nothing moved, nothing was created and no contents changed (e.g. removing an inline-only #tag)
+    if (!r.moves?.length && !r.created?.length) {
+      const now = await this.snapshot(files.keys());
+      if ([...files].every(([p, c]) => now.get(p) === c)) return false;
+    }
+    for (const p of r.created ?? []) files.set(p, null);
+    this.pushHistory(this.undoStack, { label, files, moves: r.moves ?? [] });
+    this.redoStack = []; // 新しい操作でやり直し履歴は無効 / a new op invalidates redo
     this.updateUndoButton();
+    return true;
   }
 
-  // 親変更/移動を取り消し履歴へ（戻すとき：移動を逆再生→src の旧内容を復元）/ record a reparent/move
-  private pushUndoReparent(label: string, moves: { from: string; to: string }[], srcOrigPath: string, oldContent: string): void {
-    this.undoStack.push({ label, moves, files: new Map([[srcOrigPath, oldContent]]) });
-    if (this.undoStack.length > GanttView.UNDO_LIMIT) this.undoStack.shift();
-    this.updateUndoButton();
+  // 指定パスの現在内容（無ければ null）/ current contents of the given paths (null when missing)
+  private async snapshot(paths: Iterable<string>): Promise<Map<string, string | null>> {
+    const files = new Map<string, string | null>();
+    for (const p of paths) {
+      if (files.has(p)) continue;
+      const f = this.app.vault.getAbstractFileByPath(p);
+      files.set(p, f instanceof TFile ? await this.app.vault.read(f) : null);
+    }
+    return files;
   }
 
-  // 直近の操作を取り消す（移動の巻き戻し→内容スナップショット復元）/ revert the most recent op (undo moves, then restore content)
+  // スナップショットを書き戻す（null はゴミ箱へ、無いファイルは作り直す）
+  // write a snapshot back (null trashes the file; a missing file is re-created)
+  private async restore(files: Map<string, string | null>): Promise<void> {
+    for (const [path, content] of files) {
+      const f = this.app.vault.getAbstractFileByPath(path);
+      if (content === null) {
+        if (f instanceof TFile) {
+          await this.app.fileManager.trashFile(f);
+          if (this.selectedPath === path) this.closeDetail();
+        }
+      } else if (f instanceof TFile) {
+        if ((await this.app.vault.read(f)) !== content) await this.app.vault.modify(f, content);
+      } else if (!f) {
+        const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+        if (dir && !this.app.vault.getAbstractFileByPath(dir)) await this.app.vault.createFolder(dir);
+        await this.app.vault.create(path, content);
+      }
+    }
+  }
+
+  // 移動を順に再生（行き先が埋まっていれば飛ばす）/ replay moves in order (skip when the target is taken)
+  private async replayMoves(moves: Move[]): Promise<void> {
+    for (const m of moves) {
+      const f = this.app.vault.getAbstractFileByPath(m.from);
+      if (!(f instanceof TFile) || this.app.vault.getAbstractFileByPath(m.to)) continue;
+      await this.app.fileManager.renameFile(f, m.to);
+      if (this.selectedPath === m.from) this.selectedPath = m.to;
+    }
+  }
+
+  private pushHistory(stack: HistoryEntry[], entry: HistoryEntry): void {
+    stack.push(entry);
+    if (stack.length > GanttView.UNDO_LIMIT) stack.shift();
+  }
+
+  // 直近の操作を取り消す（移動の巻き戻し→現在内容を Redo 用に控える→操作前の内容へ）
+  // revert the latest op (undo moves → keep current contents for redo → restore the pre-op contents)
   private async undo(): Promise<void> {
     const entry = this.undoStack.pop();
     if (!entry) {
       new Notice(tr().nothingToUndo);
       return;
     }
-    // 1) 移動を逆順に巻き戻す（to→from へリネーム）/ undo moves in reverse (rename to → from)
-    if (entry.moves) {
-      for (const m of [...entry.moves].reverse()) {
-        const f = this.app.vault.getAbstractFileByPath(m.to);
-        if (f instanceof TFile) {
-          await this.app.fileManager.renameFile(f, m.from);
-          if (this.selectedPath === m.to) this.selectedPath = m.from;
-        }
-      }
-    }
-    // 2) 内容スナップショットを書き戻す（パスが元に戻った後）/ restore content snapshots (after paths are back)
-    if (entry.files) {
-      for (const [path, content] of entry.files) {
-        const f = this.app.vault.getAbstractFileByPath(path);
-        if (f instanceof TFile) await this.app.vault.modify(f, content);
-      }
+    this.historyBusy++;
+    try {
+      await this.replayMoves(entry.moves.map((m) => ({ from: m.to, to: m.from })).reverse());
+      const after = await this.snapshot(entry.files.keys());
+      await this.restore(entry.files);
+      this.pushHistory(this.redoStack, { label: entry.label, files: after, moves: entry.moves });
+    } finally {
+      this.historyBusy--;
     }
     new Notice(tr().undone(entry.label));
     await this.refresh();
     this.updateUndoButton();
   }
 
-  // 取り消しボタンの有効/無効を更新 / enable or disable the undo button
+  // 取り消した操作をやり直す（操作後の内容を書き戻し→移動を再生）/ redo an undone op (restore post-op contents → replay moves)
+  private async redo(): Promise<void> {
+    const entry = this.redoStack.pop();
+    if (!entry) {
+      new Notice(tr().nothingToRedo);
+      return;
+    }
+    this.historyBusy++;
+    try {
+      const before = await this.snapshot(entry.files.keys());
+      await this.restore(entry.files);
+      await this.replayMoves(entry.moves);
+      this.pushHistory(this.undoStack, { label: entry.label, files: before, moves: entry.moves });
+    } finally {
+      this.historyBusy--;
+    }
+    new Notice(tr().redone(entry.label));
+    await this.refresh();
+    this.updateUndoButton();
+  }
+
+  // 外部（ファイルエクスプローラー等）でのリネームに合わせて履歴内のパスを付け替える。フォルダは配下ごと
+  // remap history paths after an outside rename (file explorer etc.); a folder remaps everything under it
+  private remapHistory(oldPath: string, newPath: string): void {
+    const map = (p: string): string =>
+      p === oldPath ? newPath : p.startsWith(oldPath + "/") ? newPath + p.slice(oldPath.length) : p;
+    for (const e of [...this.undoStack, ...this.redoStack]) {
+      e.files = new Map([...e.files].map(([p, c]) => [map(p), c]));
+      e.moves = e.moves.map((m) => ({ from: map(m.from), to: map(m.to) }));
+    }
+  }
+
+  // 直近の履歴に記録済みの移動か（イベントが遅れて届いても自分の移動で付け替えないため）
+  // whether a rename is one of our own recorded moves (so a late event doesn't remap history)
+  private isOwnMove(oldPath: string, newPath: string): boolean {
+    const tops = [this.undoStack[this.undoStack.length - 1], this.redoStack[this.redoStack.length - 1]];
+    return tops.some((e) => e?.moves.some((m) =>
+      (m.from === oldPath && m.to === newPath) || (m.from === newPath && m.to === oldPath)));
+  }
+
+  // 詳細パネルを閉じて選択を外す / close the detail panel and clear the selection
+  private closeDetail(): void {
+    this.selectedPath = null;
+    this.detailEl?.removeClass("is-open");
+  }
+
+  // 取り消し・やり直しボタンの有効/無効を更新 / enable or disable the undo and redo buttons
   private updateUndoButton(): void {
     if (this.undoBtn) this.undoBtn.disabled = this.undoStack.length === 0;
+    if (this.redoBtn) this.redoBtn.disabled = this.redoStack.length === 0;
   }
 
   // ----- 表＋タイムラインを 1 つの CSS グリッドで（sticky で行を揃える）-----
@@ -1539,13 +1664,17 @@ export class GanttView extends ItemView {
         if (type == null) {
           new Notice(tr().sfUnsupported);
         } else {
-          await this.pushUndo(tr().undoAddDep(type));
-          await addDependency(this.app, this.plugin.settings, target.path, source.path, type);
-          // メモリにも依存を反映（metadataCache 更新前でも整列できるように）/ reflect dep in-memory
-          target.deps = target.deps.filter((dd) => dd.path !== source.path);
-          target.deps.push({ path: source.path, type });
-          // SS/FF は後続の日付を先行に揃える（連鎖も）/ snap SS/FF successors to the predecessor
-          await this.realignSuccessors(source.path);
+          // 連動しうるのは target（新しい辺）と、source・target それぞれの SS/FF 後続
+          // the cascade can reach target (via the new edge) plus the SS/FF successors of source and target
+          const paths = [target.path, ...successorClosure(this.tasks, source.path), ...successorClosure(this.tasks, target.path)];
+          await this.mutate(tr().undoAddDep(type), paths, async () => {
+            await addDependency(this.app, this.plugin.settings, target.path, source.path, type);
+            // メモリにも依存を反映（metadataCache 更新前でも整列できるように）/ reflect dep in-memory
+            target.deps = target.deps.filter((dd) => dd.path !== source.path);
+            target.deps.push({ path: source.path, type });
+            // SS/FF は後続の日付を先行に揃える（連鎖も）/ snap SS/FF successors to the predecessor
+            await this.realignSuccessors(source.path);
+          });
           this.rerender();
         }
       }
@@ -1745,8 +1874,9 @@ export class GanttView extends ItemView {
         // クリック → 確認なしで即切断（Ctrl+Z で取り消し可）/ click → remove immediately (undo with Ctrl+Z)
         depG.addEventListener("click", (ev: MouseEvent) => void (async () => {
           ev.stopPropagation();
-          await this.pushUndo(tr().undoRemoveDep(depType));
-          await removeDependency(this.app, this.plugin.settings, succPath, predPath);
+          await this.mutate(tr().undoRemoveDep(depType), [succPath], () =>
+            removeDependency(this.app, this.plugin.settings, succPath, predPath)
+          );
           await this.refresh();
         })());
         svg.appendChild(depG);
@@ -1801,32 +1931,34 @@ export class GanttView extends ItemView {
         handle.removeEventListener("pointerup", onUp);
         const dxDays = Math.round((e.clientX - startX) / this.ppd);
         if (dxDays !== 0) {
-          await this.pushUndo(tr().undoReschedule(task.name));
-          if (milestone) {
-            const nd = dayToStr(dayIndex(task.end ?? task.start!) + dxDays);
-            await writeDates(this.app, this.plugin.settings, task.path, nd, nd, true);
-            task.end = nd; // メモリ更新 / update in-memory
-          } else {
-            const s0 = dayIndex(task.start!);
-            const e0 = dayIndex(task.end ?? task.start!);
-            let ns = s0;
-            let ne = e0;
-            if (mode === "move") {
-              ns = s0 + dxDays;
-              ne = e0 + dxDays;
-            } else if (mode === "r") {
-              ne = Math.max(s0, e0 + dxDays);
+          const cascade = [task.path, ...successorClosure(this.tasks, task.path)];
+          await this.mutate(tr().undoReschedule(task.name), cascade, async () => {
+            if (milestone) {
+              const nd = dayToStr(dayIndex(task.end ?? task.start!) + dxDays);
+              await writeDates(this.app, this.plugin.settings, task.path, nd, nd, true);
+              task.end = nd; // メモリ更新 / update in-memory
             } else {
-              ns = Math.min(e0, s0 + dxDays);
+              const s0 = dayIndex(task.start!);
+              const e0 = dayIndex(task.end ?? task.start!);
+              let ns = s0;
+              let ne = e0;
+              if (mode === "move") {
+                ns = s0 + dxDays;
+                ne = e0 + dxDays;
+              } else if (mode === "r") {
+                ne = Math.max(s0, e0 + dxDays);
+              } else {
+                ns = Math.min(e0, s0 + dxDays);
+              }
+              const nsS = dayToStr(ns);
+              const neS = dayToStr(ne);
+              await writeDates(this.app, this.plugin.settings, task.path, nsS, neS, false);
+              task.start = nsS; // メモリ更新 / update in-memory
+              task.end = neS;
             }
-            const nsS = dayToStr(ns);
-            const neS = dayToStr(ne);
-            await writeDates(this.app, this.plugin.settings, task.path, nsS, neS, false);
-            task.start = nsS; // メモリ更新 / update in-memory
-            task.end = neS;
-          }
-          // SS/FF 後続を連動（メモリ更新＋ディスク書き込み）/ cascade to SS/FF successors
-          await this.realignSuccessors(task.path);
+            // SS/FF 後続を連動（メモリ更新＋ディスク書き込み）/ cascade to SS/FF successors
+            await this.realignSuccessors(task.path);
+          });
           // メモリから即再描画（ディスク再読込前に正しい位置を表示）/ render from memory for instant correct positions
           this.rerender();
         } else {
@@ -1851,14 +1983,20 @@ export class GanttView extends ItemView {
   // 今のフォルダに 1 日タスク（開始=終了=今日）を作り、詳細パネルを開いて命名を促す
   // create a 1-day task (start = end = today) in the current folder, then open the panel to name it
   private async createNewTask(): Promise<void> {
-    const file = await createTask(this.app, this.folder, tr().newTaskName);
-    if (!file) return;
-    const k = this.plugin.settings.keys;
-    const today = dayToStr(todayIndex());
-    await writeField(this.app, file.path, k.start, today);
-    await writeField(this.app, file.path, k.end, today);
+    let created: string | null = null;
+    await this.mutate(tr().undoCreate(tr().newTaskName), [], async () => {
+      const file = await createTask(this.app, this.folder, tr().newTaskName);
+      if (!file) return false;
+      const k = this.plugin.settings.keys;
+      const today = dayToStr(todayIndex());
+      await writeField(this.app, file.path, k.start, today);
+      await writeField(this.app, file.path, k.end, today);
+      created = file.path;
+      return { created: [file.path] };
+    });
+    if (!created) return;
     await this.refresh();
-    await this.openDetail(file.path, true);
+    await this.openDetail(created, true);
   }
 
   // ----- ドラッグ＆ドロップ（フォルダへ＝親解除して移動／タスクへ＝サブタスク化）-----
@@ -1907,11 +2045,16 @@ export class GanttView extends ItemView {
     const pf = parentTaskPath ? this.app.vault.getAbstractFileByPath(parentTaskPath) : null;
     const parentFile = pf instanceof TFile ? pf : null;
     const name = this.tasks.find((t) => t.path === srcPath)?.name ?? srcPath;
-    const res = await reparentTask(this.app, this.plugin.settings, this.tasks, srcPath, destFolder, parentFile);
-    if (!res) return;
     const label = parentTaskPath ? tr().undoSubtask(name) : tr().undoDetach(name);
-    this.pushUndoReparent(label, res.moves, srcPath, res.oldContent);
-    const srcMove = res.moves.find((m) => m.from === srcPath);
+    let moves: Move[] = [];
+    const ok = await this.mutate(label, [srcPath], async () => {
+      const res = await reparentTask(this.app, this.plugin.settings, this.tasks, srcPath, destFolder, parentFile);
+      if (!res) return false;
+      moves = res.moves;
+      return { moves };
+    });
+    if (!ok) return;
+    const srcMove = moves.find((m) => m.from === srcPath);
     if (srcMove && this.selectedPath === srcPath) this.selectedPath = srcMove.to;
     await this.refresh();
   }
@@ -1920,8 +2063,7 @@ export class GanttView extends ItemView {
   private async addTagTo(srcPath: string, tag: string): Promise<void> {
     const pre = this.tasks.find((x) => x.path === srcPath);
     if (!pre || pre.tags.includes(tag)) return;
-    await this.pushUndo(tr().undoAddTag(pre.name, tag));
-    await addTag(this.app, srcPath, tag);
+    await this.mutate(tr().undoAddTag(pre.name, tag), [srcPath], async () => (await addTag(this.app, srcPath, tag)) || false);
     // 背景 refresh で this.tasks が作り替わる場合に備え、最新を引き直して更新 / look up the live task (survives a background refresh)
     const live = this.tasks.find((x) => x.path === srcPath);
     if (live && !live.tags.includes(tag)) live.tags.push(tag);
@@ -1952,7 +2094,12 @@ export class GanttView extends ItemView {
     const titleInput = header.createEl("input", { cls: "ogantt-detail-title", type: "text" });
     titleInput.value = t.name;
     titleInput.addEventListener("change", () => void (async () => {
-      const np = await renameTask(this.app, this.selectedPath!, titleInput.value);
+      const from = this.selectedPath!;
+      let np: string | null = null;
+      await this.mutate(tr().undoRename(t.name), [], async () => {
+        np = await renameTask(this.app, from, titleInput.value);
+        return np && np !== from ? { moves: [{ from, to: np }] } : false;
+      });
       if (np) this.selectedPath = np;
       await this.refresh();
     })());
@@ -2015,7 +2162,7 @@ export class GanttView extends ItemView {
       x.addEventListener("click", () => void (async () => {
         const path = this.selectedPath;
         if (!path) return;
-        await removeTag(this.app, path, tag);
+        await this.mutate(tr().undoRemoveTag(t.name, tag), [path], () => removeTag(this.app, path, tag));
         // 背景 refresh が this.tasks を作り替えるので、クロージャの t ではなく最新を引き直して更新
         // a background refresh may rebuild this.tasks, so look up the live task (not the closure's t)
         const live = this.tasks.find((x) => x.path === path);
@@ -2033,7 +2180,7 @@ export class GanttView extends ItemView {
       const v = tagAdd.value.trim().replace(/^#/, "");
       const path = this.selectedPath;
       if (!v || !path) return;
-      await addTag(this.app, path, v);
+      await this.mutate(tr().undoAddTag(t.name, v), [path], async () => (await addTag(this.app, path, v)) || false);
       // 最新オブジェクトを引き直してメモリ更新→即再描画 / look up the live task, update in-memory, re-render
       const live = this.tasks.find((x) => x.path === path);
       if (live && !live.tags.includes(v)) live.tags.push(v);
@@ -2069,10 +2216,11 @@ export class GanttView extends ItemView {
     const progVal = progField.createSpan({ cls: "ogantt-progress-val", text: `${t.progress ?? 0}%` });
     progRange.addEventListener("input", () => progVal.setText(`${progRange.value}%`));
     progRange.addEventListener("change", () => void (async () => {
-      if (!this.selectedPath) return;
+      const path = this.selectedPath;
+      if (!path) return;
       // 0% は未設定として削除、それ以外は数値で保存 / drop at 0% (unset), otherwise store the number
       const n = Number(progRange.value);
-      await writeField(this.app, this.selectedPath, k.progress, n > 0 ? n : undefined);
+      await this.mutate(tr().undoEdit(t.name), [path], () => writeField(this.app, path, k.progress, n > 0 ? n : undefined));
       await this.refresh();
     })());
 
@@ -2089,8 +2237,9 @@ export class GanttView extends ItemView {
       box.checked = !g.optInOnly || flag === true || flag === "true";
       box.disabled = !g.optInOnly; // 全タスク同期モードでは個別選択なし / no per-task choice when everything syncs
       box.addEventListener("change", () => void (async () => {
-        if (!this.selectedPath) return;
-        await writeField(this.app, this.selectedPath, k.gcal, box.checked ? true : undefined);
+        const path = this.selectedPath;
+        if (!path) return;
+        await this.mutate(tr().undoEdit(t.name), [path], () => writeField(this.app, path, k.gcal, box.checked ? true : undefined));
         schedulePush(this.plugin); // 反映（またはオプトアウトのイベント削除）を予約 / schedule the push (or the opt-out cleanup)
       })());
       const link = g.state[t.path]?.link;
@@ -2128,8 +2277,11 @@ export class GanttView extends ItemView {
     });
     bodyArea.addEventListener("input", autosize);
     bodyArea.addEventListener("blur", () => void (async () => {
-      bodyText = bodyArea.value;
-      await writeBody(this.app, this.selectedPath!, bodyText);
+      const path = this.selectedPath;
+      if (path && bodyArea.value !== bodyText) {
+        bodyText = bodyArea.value;
+        await this.mutate(tr().undoEdit(t.name), [path], () => writeBody(this.app, path, bodyText));
+      }
       bodyWrap.removeClass("is-editing");
       await renderPreview();
     })());
@@ -2147,13 +2299,10 @@ export class GanttView extends ItemView {
       confirmText: tr().menuDelete,
       cancelText: tr().cancel,
       onConfirm: () => void (async () => {
-        const ok = await deleteTask(this.app, path);
+        const ok = await this.mutate(tr().undoDelete(t.name), [path], async () => (await deleteTask(this.app, path)) || false);
         if (!ok) return;
         // 削除したタスクの詳細が開いていたら閉じる / close the detail panel if it showed the deleted task
-        if (this.selectedPath === path) {
-          this.selectedPath = null;
-          this.detailEl?.removeClass("is-open");
-        }
+        if (this.selectedPath === path) this.closeDetail();
         new Notice(tr().deletedNotice(t.name));
         await this.refresh();
       })(),
@@ -2162,8 +2311,10 @@ export class GanttView extends ItemView {
 
   // フィールド保存（空なら削除）/ save a frontmatter field (delete if empty)
   private async saveField(key: string, value: string): Promise<void> {
-    if (!this.selectedPath) return;
-    await writeField(this.app, this.selectedPath, key, value === "" ? undefined : value);
+    const path = this.selectedPath;
+    if (!path) return;
+    const name = this.tasks.find((x) => x.path === path)?.name ?? path;
+    await this.mutate(tr().undoEdit(name), [path], () => writeField(this.app, path, key, value === "" ? undefined : value));
     await this.refresh();
   }
 
@@ -2194,10 +2345,12 @@ export class GanttView extends ItemView {
         times.end = times.start;
       }
       repaint(); // 補正を即時反映 / reflect any clamping right away
-      await this.pushUndo(tr().undoReschedule(t.name)); // Ctrl+Z で取り消し可 / undoable
+      const path = this.selectedPath;
       const tz = this.plugin.settings.tz;
-      await writeField(this.app, this.selectedPath, k.start, combineDateTime(state.start || undefined, times.start, tz));
-      await writeField(this.app, this.selectedPath, k.end, combineDateTime(state.end || undefined, times.end, tz));
+      await this.mutate(tr().undoReschedule(t.name), [path], async () => {
+        await writeField(this.app, path, k.start, combineDateTime(state.start || undefined, times.start, tz));
+        await writeField(this.app, path, k.end, combineDateTime(state.end || undefined, times.end, tz));
+      });
       await this.refresh();
     };
 
@@ -2376,7 +2529,9 @@ export class GanttView extends ItemView {
             t.assignee ?? "",
             () => this.paintAssigneeCell(cell, t),
             async (v) => {
-              await writeField(this.app, t.path, this.plugin.settings.keys.assignee, v || undefined);
+              await this.mutate(tr().undoEdit(t.name), [t.path], () =>
+                writeField(this.app, t.path, this.plugin.settings.keys.assignee, v || undefined)
+              );
               await this.refresh();
             },
             (inp) => this.attachAssigneeSuggestions(inp)
@@ -2461,7 +2616,7 @@ export class GanttView extends ItemView {
     const n = raw === "" ? 0 : Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
     const next = n > 0 ? n : undefined;
     if (next === t.progress) return;
-    await writeField(this.app, t.path, this.plugin.settings.keys.progress, next);
+    await this.mutate(tr().undoEdit(t.name), [t.path], () => writeField(this.app, t.path, this.plugin.settings.keys.progress, next));
     await this.refresh();
   }
 
@@ -2530,7 +2685,7 @@ export class GanttView extends ItemView {
           setIcon(x, "x");
           x.setAttr("aria-label", tr().removeTagAria);
           x.addEventListener("click", () => void (async () => {
-            await removeTag(this.app, path, tag);
+            await this.mutate(tr().undoRemoveTag(t.name, tag), [path], () => removeTag(this.app, path, tag));
             apply((tags) => tags.filter((y) => y !== tag));
           })());
         }
@@ -2541,7 +2696,7 @@ export class GanttView extends ItemView {
         add.addEventListener("change", () => void (async () => {
           const v = add.value.trim().replace(/^#/, "");
           if (!v) return;
-          await addTag(this.app, path, v);
+          await this.mutate(tr().undoAddTag(t.name, v), [path], async () => (await addTag(this.app, path, v)) || false);
           apply((tags) => (tags.includes(v) ? tags : [...tags, v]));
         })());
         add.focus(); // 追加後も入力欄に留まって続けて足せる / keep focus so tags can be added back to back
@@ -2587,7 +2742,9 @@ export class GanttView extends ItemView {
         return;
       }
       void (async () => {
-        await writeField(this.app, t.path, this.plugin.settings.keys.status, sel.value || undefined);
+        await this.mutate(tr().undoEdit(t.name), [t.path], () =>
+          writeField(this.app, t.path, this.plugin.settings.keys.status, sel.value || undefined)
+        );
         await this.refresh();
       })();
     };
@@ -2639,10 +2796,11 @@ export class GanttView extends ItemView {
       const ts = t.startTime;
       let te = t.endTime;
       if (state.start && state.start === state.end && ts && te && te < ts) te = ts;
-      await this.pushUndo(tr().undoReschedule(t.name)); // Ctrl+Z で取り消し可 / undoable
       const tz = this.plugin.settings.tz;
-      await writeField(this.app, t.path, k.start, combineDateTime(state.start || undefined, ts, tz));
-      await writeField(this.app, t.path, k.end, combineDateTime(state.end || undefined, te, tz));
+      await this.mutate(tr().undoReschedule(t.name), [t.path], async () => {
+        await writeField(this.app, t.path, k.start, combineDateTime(state.start || undefined, ts, tz));
+        await writeField(this.app, t.path, k.end, combineDateTime(state.end || undefined, te, tz));
+      });
       await this.refresh();
     };
     // repaint はテーブル側では不要（save→refresh で再描画される）/ no chip repaint needed here
