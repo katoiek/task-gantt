@@ -142,7 +142,9 @@ Drag from a bar's round handle to another bar to create a dependency. The connec
 
 ## Undo and redo
 
-Every change made on the board can be undone with **Ctrl/Cmd+Z** or the undo button, and redone with **Ctrl/Cmd+Shift+Z**, **Ctrl/Cmd+Y** or the redo button: cell edits, everything in the detail panel (including renames and body text), dragging bars, dependencies, moves and subtasks, tags, and creating or deleting a task. Undoing a delete re-creates the note in place. SS/FF successors that moved along with a task move back with it. While you are typing in a text field, the shortcuts undo your typing instead. The history lasts while the board is open, and survives files being renamed from the file explorer.
+Every change made on the board can be undone with **Ctrl/Cmd+Z** or the undo button, and redone with **Ctrl/Cmd+Shift+Z**, **Ctrl/Cmd+Y** or the redo button: cell edits, everything in the detail panel (including renames and body text), dragging bars, dependencies, moves and subtasks, tags, and creating or deleting a task. Undoing a delete re-creates the note in place. SS/FF successors that moved along with a task move back with it. While you are typing in a text field, the shortcuts undo your typing instead. Renaming or moving the board's tasks or folders from the file explorer joins the history too, so undo always walks back in the order things happened. The history lasts while the board is open.
+
+Changes made **outside Obsidian** — renaming, moving or deleting notes in Windows Explorer or macOS Finder, or by a sync tool — are not part of the history: Obsidian only sees them as a file disappearing and another appearing. Undoing an earlier change to such a note does nothing, so rename and move tasks inside Obsidian (the title field, or Obsidian's own file explorer) if you want to be able to undo it.
 
 ## Settings
 
@@ -381,7 +383,9 @@ after:
 
 ## 取り消し・やり直し
 
-ボード上の変更は、**Ctrl/Cmd+Z** または取り消しボタンで元に戻し、**Ctrl/Cmd+Shift+Z**・**Ctrl/Cmd+Y** またはやり直しボタンでやり直せます。対象はセルの編集、詳細パネルのすべての項目（名前の変更・本文を含む）、バーのドラッグ、依存、移動・サブタスク化、タグ、タスクの作成・削除です。削除を取り消すと、ノートが同じ場所に作り直されます。一緒に動いた SS/FF の後続も、まとめて元に戻ります。テキスト入力中は、ショートカットは入力内容の取り消しとして働きます。履歴はボードを開いている間保持され、ファイルエクスプローラーでのリネーム後も有効です。
+ボード上の変更は、**Ctrl/Cmd+Z** または取り消しボタンで元に戻し、**Ctrl/Cmd+Shift+Z**・**Ctrl/Cmd+Y** またはやり直しボタンでやり直せます。対象はセルの編集、詳細パネルのすべての項目（名前の変更・本文を含む）、バーのドラッグ、依存、移動・サブタスク化、タグ、タスクの作成・削除です。削除を取り消すと、ノートが同じ場所に作り直されます。一緒に動いた SS/FF の後続も、まとめて元に戻ります。テキスト入力中は、ショートカットは入力内容の取り消しとして働きます。ファイルエクスプローラーでボードのタスクやフォルダをリネーム・移動した場合も履歴に入るので、取り消しは常に起きた順に遡ります。履歴はボードを開いている間保持されます。
+
+**Obsidian の外**で行った変更（Windows のエクスプローラーや macOS の Finder、同期ツールでのノートのリネーム・移動・削除）は履歴に入りません。Obsidian からは「ファイルが消えて、別のファイルが現れた」としか見えないためです。そうしたノートに対するそれ以前の変更を取り消しても、何も起きません。取り消せるようにしたい場合は、リネームや移動を Obsidian の中（タイトル欄や Obsidian のファイルエクスプローラー）で行ってください。
 
 ## 設定
 

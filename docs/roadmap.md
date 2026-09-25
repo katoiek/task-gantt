@@ -63,11 +63,13 @@ Phase 1 → Redo（Phase 1-5）→ Phase 2（列レジストリ → Custom field
     - `moves`: リネーム・移動（逆順に巻き戻す）
   - 書き込みは Undo 付きの 1 つの関数に集約する（`private async mutate(label, paths, fn)`）。表示中の列の Inline edit と詳細パネルの編集は、すべてこの経路を通す。
   - SS/FF 後続の連動（`realignSuccessors`）がある操作では、**書き込み前に**依存を推移的にたどって後続パスを列挙する（`successorClosure(tasks, rootPath)`・純粋関数でテスト可能）。
-  - 古い履歴のパス: `vault.on("rename")` で履歴内の旧パスを新パスへ付け替える（代替案「リネームで履歴を消す」は UX が落ちるため不採用）。
+  - 外部でのリネーム（ファイルエクスプローラー等）: このボードのタスク・フォルダに限り、1 操作として履歴に積む（2.9.3）。時系列どおりに戻せ、古い履歴のパスも食い違わない。フォルダのリネームで配下ごとに届くイベントは 1 件に畳む。当初の「履歴内のパスを付け替える」方式は、Undo が時系列とずれる（名前を戻さずに古い操作だけ戻す）ため置き換えた。
+  - 無いファイルを作り直すのは「削除の取り消し」「作成のやり直し」のときだけ。外部で消されたファイルは作り直さない。
+  - Obsidian の外（Windows のエクスプローラー・macOS の Finder・同期ツール）での変更は対象外。Obsidian には `rename` ではなく `delete` と `create` として届くため。削除と作成の組をリネームとみなす推測判定は、誤判定の恐れから見送り、README に明記した。
 - 受け入れ条件:
   - 全 Inline edit 列と詳細パネルの各フィールド、リネーム、新規作成が Ctrl/Cmd+Z で戻る。
   - 1 操作あたりの読み込みファイル数が「変更対象＋連動対象」に限られる。
-  - リネーム後も、それ以前の履歴が正しく戻る。
+  - 外部でのリネームも 1 回の Undo で戻り、その次の Undo でそれ以前の操作が戻る。
 
 ### 1-5. Redo
 
@@ -195,8 +197,9 @@ Phase 1 → Redo (1-5) → Phase 2 (column registry → custom fields) → multi
    - Not undoable as of 2.9.1: in the detail panel — `saveField` (status, assignee), the progress slider, the GCal sync checkbox, title rename, body edits, tag add/remove; in cells — progress (`commitProgress`), status, assignee, tag add/remove in the popover; plus `createTask` and `deleteTask`. Only dates, dependency add/remove, tag-by-drop and reparent/move are undoable today.
    - Entry shape (implemented): `{ label, files: Map<path, before | null>, moves }`. `null` means "didn't exist before": undoing a create trashes the file, undoing a delete re-creates it at the same path with the same contents (the trashed copy stays in the trash). `moves` are replayed in reverse.
    - Funnel every write through `mutate(label, paths, fn)`. For SS/FF cascades, enumerate the transitive successors *before* writing with a pure, testable `successorClosure(tasks, rootPath)`.
-   - Keep older entries valid across renames by remapping paths in `vault.on("rename")` (clearing history on rename was rejected as worse UX).
-   - Acceptance: every inline-edit column, every detail-panel field, rename and create revert with Ctrl/Cmd+Z; per-op reads are limited to affected files; older entries still revert correctly after a rename.
+   - Outside renames (file explorer etc.) of this board's tasks or folders are recorded as ops of their own (2.9.3), so undo walks back in order and older entries never hold stale paths; a folder rename's per-file events fold into one entry. This replaced the original path-remapping approach, which undid older ops without undoing the rename. A missing file is re-created only when undoing a delete or redoing a create — never when it was deleted outside the board.
+   - Changes made outside Obsidian (Windows Explorer, macOS Finder, sync tools) are out of scope: they reach Obsidian as `delete` + `create`, not `rename`. Guessing renames from such pairs was rejected as too error-prone; the README says so.
+   - Acceptance: every inline-edit column, every detail-panel field, rename and create revert with Ctrl/Cmd+Z; per-op reads are limited to affected files; an outside rename is undone by one undo, and the next undo reaches the op before it.
 5. **Redo**: on undo, push the current contents of the affected files (and reversed `moves`) onto a redo stack; clear it on any new op. Shortcut Ctrl/Cmd+Shift+Z (and Ctrl+Y). This makes the previously rejected frontmatter-diff command pattern unnecessary.
 
 ## Phase 2 (v2.10): Column registry → Custom fields

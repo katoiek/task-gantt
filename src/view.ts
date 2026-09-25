@@ -63,14 +63,24 @@ const MAX_INDENT_DEPTH = 8; // インデントの段数上限（論理ツリー�
 type Move = { from: string; to: string };
 // 履歴 1 件：操作前パス→内容（null＝存在しなかった）と、操作中の移動（実行順）
 // one history entry: pre-op path → contents (null = didn't exist) and the op's moves, in order
+// created / deleted は「書き戻しでファイルを作り直してよいパス」の判定に使う（それ以外は作り直さない）
+// created / deleted decide which paths a restore may re-create (no other missing file is ever re-created)
 interface HistoryEntry {
   label: string;
   files: Map<string, string | null>;
   moves: Move[];
+  created: string[]; // 操作で作成 / made by the op
+  deleted: string[]; // 操作で削除 / removed by the op
 }
 // mutate の fn の戻り値。false＝変化なし（記録しない）、true / void＝変化あり
 // what mutate's fn returns: false = nothing changed (not recorded); true / void = changed
-type MutateResult = { moves?: Move[]; created?: string[] } | boolean | void;
+type MutateResult = { moves?: Move[]; created?: string[]; deleted?: string[] } | boolean | void;
+
+// 移動 b が移動 a と同じか、a（フォルダ）の移動に伴う配下の移動か / whether move b is move a itself, or follows from a folder move a
+function movesUnder(a: Move, b: Move): boolean {
+  if (a.from === b.from && a.to === b.to) return true;
+  return b.from.startsWith(a.from + "/") && b.to === a.to + b.from.slice(a.from.length);
+}
 
 export class GanttView extends ItemView {
   plugin: GanttPlugin;
@@ -100,6 +110,8 @@ export class GanttView extends ItemView {
   // 自分の書き込み中は >0。外部リネームだけを履歴の付け替え対象にするため
   // >0 while we are writing, so only outside renames remap the history
   private historyBusy = 0;
+  // 同じタイミングで届いた外部リネーム（まとめて記録する）/ outside renames arriving together, recorded as a batch
+  private pendingRenames: Move[] = [];
   private static readonly UNDO_LIMIT = 50;
 
   // バーがドラッグされたか（ドラッグ直後のクリック抑止用）/ whether a bar was dragged (to suppress the trailing click)
@@ -154,7 +166,7 @@ export class GanttView extends ItemView {
     this.registerEvent(this.app.vault.on("create", () => this.scheduleRefresh()));
     this.registerEvent(this.app.vault.on("delete", () => this.scheduleRefresh()));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-      if (this.historyBusy === 0 && !this.isOwnMove(oldPath, file.path)) this.remapHistory(oldPath, file.path);
+      if (this.historyBusy === 0 && !this.isOwnMove(oldPath, file.path)) this.queueOutsideRename(oldPath, file.path);
       this.scheduleRefresh();
     }));
     // Ctrl/Cmd+Z で取り消し、Ctrl/Cmd+Shift+Z・Ctrl/Cmd+Y でやり直し（入力欄にフォーカス中はネイティブを優先）
@@ -1120,10 +1132,15 @@ export class GanttView extends ItemView {
       if ([...files].every(([p, c]) => now.get(p) === c)) return false;
     }
     for (const p of r.created ?? []) files.set(p, null);
-    this.pushHistory(this.undoStack, { label, files, moves: r.moves ?? [] });
-    this.redoStack = []; // 新しい操作でやり直し履歴は無効 / a new op invalidates redo
-    this.updateUndoButton();
+    this.record({ label, files, moves: r.moves ?? [], created: r.created ?? [], deleted: r.deleted ?? [] });
     return true;
+  }
+
+  // 新しい操作を履歴へ（やり直し履歴は無効になる）/ record a new op (invalidates redo)
+  private record(entry: HistoryEntry): void {
+    this.pushHistory(this.undoStack, entry);
+    this.redoStack = [];
+    this.updateUndoButton();
   }
 
   // 指定パスの現在内容（無ければ null）/ current contents of the given paths (null when missing)
@@ -1137,9 +1154,11 @@ export class GanttView extends ItemView {
     return files;
   }
 
-  // スナップショットを書き戻す（null はゴミ箱へ、無いファイルは作り直す）
-  // write a snapshot back (null trashes the file; a missing file is re-created)
-  private async restore(files: Map<string, string | null>): Promise<void> {
+  // スナップショットを書き戻す。null はゴミ箱へ。無いファイルは recreatable に含まれるときだけ作り直し、
+  // それ以外（外部で消された等）は触らない
+  // write a snapshot back: null trashes the file; a missing file is re-created only when it is in
+  // `recreatable`, otherwise (e.g. deleted outside the board) it is left alone
+  private async restore(files: Map<string, string | null>, recreatable: string[]): Promise<void> {
     for (const [path, content] of files) {
       const f = this.app.vault.getAbstractFileByPath(path);
       if (content === null) {
@@ -1149,7 +1168,7 @@ export class GanttView extends ItemView {
         }
       } else if (f instanceof TFile) {
         if ((await this.app.vault.read(f)) !== content) await this.app.vault.modify(f, content);
-      } else if (!f) {
+      } else if (!f && recreatable.includes(path)) {
         const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
         if (dir && !this.app.vault.getAbstractFileByPath(dir)) await this.app.vault.createFolder(dir);
         await this.app.vault.create(path, content);
@@ -1157,13 +1176,16 @@ export class GanttView extends ItemView {
     }
   }
 
-  // 移動を順に再生（行き先が埋まっていれば飛ばす）/ replay moves in order (skip when the target is taken)
+  // 移動を順に再生（ファイルもフォルダも。行き先が埋まっていれば飛ばす）
+  // replay moves in order (files and folders alike; skip when the target is taken)
   private async replayMoves(moves: Move[]): Promise<void> {
     for (const m of moves) {
       const f = this.app.vault.getAbstractFileByPath(m.from);
-      if (!(f instanceof TFile) || this.app.vault.getAbstractFileByPath(m.to)) continue;
+      if (!f || this.app.vault.getAbstractFileByPath(m.to)) continue;
       await this.app.fileManager.renameFile(f, m.to);
-      if (this.selectedPath === m.from) this.selectedPath = m.to;
+      const sel = this.selectedPath;
+      if (sel === m.from) this.selectedPath = m.to;
+      else if (sel?.startsWith(m.from + "/")) this.selectedPath = m.to + sel.slice(m.from.length);
     }
   }
 
@@ -1184,8 +1206,8 @@ export class GanttView extends ItemView {
     try {
       await this.replayMoves(entry.moves.map((m) => ({ from: m.to, to: m.from })).reverse());
       const after = await this.snapshot(entry.files.keys());
-      await this.restore(entry.files);
-      this.pushHistory(this.redoStack, { label: entry.label, files: after, moves: entry.moves });
+      await this.restore(entry.files, entry.deleted); // 削除の取り消しだけ作り直す / only undoing a delete re-creates
+      this.pushHistory(this.redoStack, { ...entry, files: after });
     } finally {
       this.historyBusy--;
     }
@@ -1204,9 +1226,9 @@ export class GanttView extends ItemView {
     this.historyBusy++;
     try {
       const before = await this.snapshot(entry.files.keys());
-      await this.restore(entry.files);
+      await this.restore(entry.files, entry.created); // 作成のやり直しだけ作り直す / only redoing a create re-creates
       await this.replayMoves(entry.moves);
-      this.pushHistory(this.undoStack, { label: entry.label, files: before, moves: entry.moves });
+      this.pushHistory(this.undoStack, { ...entry, files: before });
     } finally {
       this.historyBusy--;
     }
@@ -1215,23 +1237,38 @@ export class GanttView extends ItemView {
     this.updateUndoButton();
   }
 
-  // 外部（ファイルエクスプローラー等）でのリネームに合わせて履歴内のパスを付け替える。フォルダは配下ごと
-  // remap history paths after an outside rename (file explorer etc.); a folder remaps everything under it
-  private remapHistory(oldPath: string, newPath: string): void {
-    const map = (p: string): string =>
-      p === oldPath ? newPath : p.startsWith(oldPath + "/") ? newPath + p.slice(oldPath.length) : p;
-    for (const e of [...this.undoStack, ...this.redoStack]) {
-      e.files = new Map([...e.files].map(([p, c]) => [map(p), c]));
-      e.moves = e.moves.map((m) => ({ from: map(m.from), to: map(m.to) }));
+  // 外部（ファイルエクスプローラー等）でのリネームも 1 操作として履歴に積む。時系列どおりに戻せるように、
+  // かつ古い履歴のパスが現在と食い違わないように。同期などによる無関係なリネームを拾わないよう、
+  // このボードのタスク（またはタスクを含むフォルダ）に限る
+  // record an outside rename (file explorer etc.) as an op of its own, so undo walks back in order and
+  // older entries never see a path that no longer exists. Limited to this board's tasks (or folders
+  // holding them) so unrelated renames, e.g. from sync, stay out of the history
+  // フォルダのリネームは配下のファイルごとにもイベントが届くため、同じタイミングの分をまとめて
+  // フォルダ側の 1 件に畳む / a folder rename also fires for each file inside it, so batch the events
+  // that arrive together and fold them into the folder's single move
+  private queueOutsideRename(oldPath: string, newPath: string): void {
+    this.pendingRenames.push({ from: oldPath, to: newPath });
+    if (this.pendingRenames.length === 1) window.setTimeout(() => this.flushOutsideRenames(), 0);
+  }
+
+  private flushOutsideRenames(): void {
+    const batch = this.pendingRenames;
+    this.pendingRenames = [];
+    for (const m of batch) {
+      if (batch.some((o) => o !== m && movesUnder(o, m))) continue; // フォルダの移動に含まれる / implied by a folder move
+      const onBoard = this.tasks.some((t) => t.path === m.from || t.path.startsWith(m.from + "/"));
+      if (!onBoard) continue;
+      const name = (m.from.split("/").pop() ?? m.from).replace(/\.md$/, "");
+      this.record({ label: tr().undoRename(name), files: new Map(), moves: [m], created: [], deleted: [] });
     }
   }
 
-  // 直近の履歴に記録済みの移動か（イベントが遅れて届いても自分の移動で付け替えないため）
-  // whether a rename is one of our own recorded moves (so a late event doesn't remap history)
+  // 直近の履歴に記録済みの移動か（イベントが遅れて届いても自分の移動を二重に記録しないため）
+  // whether a rename is one of our own recorded moves (so a late event isn't recorded twice)
   private isOwnMove(oldPath: string, newPath: string): boolean {
     const tops = [this.undoStack[this.undoStack.length - 1], this.redoStack[this.redoStack.length - 1]];
     return tops.some((e) => e?.moves.some((m) =>
-      (m.from === oldPath && m.to === newPath) || (m.from === newPath && m.to === oldPath)));
+      movesUnder(m, { from: oldPath, to: newPath }) || movesUnder({ from: m.to, to: m.from }, { from: oldPath, to: newPath })));
   }
 
   // 詳細パネルを閉じて選択を外す / close the detail panel and clear the selection
@@ -2299,7 +2336,9 @@ export class GanttView extends ItemView {
       confirmText: tr().menuDelete,
       cancelText: tr().cancel,
       onConfirm: () => void (async () => {
-        const ok = await this.mutate(tr().undoDelete(t.name), [path], async () => (await deleteTask(this.app, path)) || false);
+        const ok = await this.mutate(tr().undoDelete(t.name), [path], async () =>
+          (await deleteTask(this.app, path)) ? { deleted: [path] } : false
+        );
         if (!ok) return;
         // 削除したタスクの詳細が開いていたら閉じる / close the detail panel if it showed the deleted task
         if (this.selectedPath === path) this.closeDetail();
