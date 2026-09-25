@@ -140,6 +140,10 @@ Sample data for a quick try lives in `examples/Cleaning Project お掃除プロ�
 
 Drag from a bar's round handle to another bar to create a dependency. The connected ends decide the type: **FS** (finish→start), **SS** (start→start), **FF** (finish→finish). SS/FF successors snap to their predecessor when you reschedule. Click a dependency line to remove it (undo with **Ctrl/Cmd+Z** or the undo button).
 
+## Undo and redo
+
+Every change made on the board can be undone with **Ctrl/Cmd+Z** or the undo button, and redone with **Ctrl/Cmd+Shift+Z**, **Ctrl/Cmd+Y** or the redo button: cell edits, everything in the detail panel (including renames and body text), dragging bars, dependencies, moves and subtasks, tags, and creating or deleting a task. Undoing a delete re-creates the note in place. SS/FF successors that moved along with a task move back with it. While you are typing in a text field, the shortcuts undo your typing instead. The history lasts while the board is open, and survives files being renamed from the file explorer.
+
 ## Settings
 
 Open **Settings → Task Gantt** to configure the default folder, subfolder recursion, default zoom, and the **date display format** (`YYYY/MM/DD`, `DD/MM/YYYY`, or `MM/DD/YYYY`; stored dates always stay ISO `YYYY-MM-DD`).
@@ -374,6 +378,10 @@ after:
 ## 依存関係
 
 バーの丸ハンドルから別のバーへドラッグすると依存を作成します。つないだ端で種類が決まります：**FS**（終了→開始）・**SS**（開始→開始）・**FF**（終了→終了）。SS/FF の後続は、先行の日程変更に追従します。依存線をクリックで切断（**Ctrl/Cmd+Z** または取り消しボタンで戻せます）。
+
+## 取り消し・やり直し
+
+ボード上の変更は、**Ctrl/Cmd+Z** または取り消しボタンで元に戻し、**Ctrl/Cmd+Shift+Z**・**Ctrl/Cmd+Y** またはやり直しボタンでやり直せます。対象はセルの編集、詳細パネルのすべての項目（名前の変更・本文を含む）、バーのドラッグ、依存、移動・サブタスク化、タグ、タスクの作成・削除です。削除を取り消すと、ノートが同じ場所に作り直されます。一緒に動いた SS/FF の後続も、まとめて元に戻ります。テキスト入力中は、ショートカットは入力内容の取り消しとして働きます。履歴はボードを開いている間保持され、ファイルエクスプローラーでのリネーム後も有効です。
 
 ## 設定
 
