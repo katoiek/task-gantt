@@ -1,0 +1,33 @@
+# main への push と PR で型チェック・ビルド・テストを実行 / type-check, build and test on pushes to main and on PRs
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+          cache: npm
+
+      # lock どおりに依存を入れる / install exactly what the lock file pins
+      - name: Install
+        run: npm ci
+
+      # build は tsc による型チェックを含む / build includes the tsc type check
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test

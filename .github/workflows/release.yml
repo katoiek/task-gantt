@@ -22,9 +22,11 @@ jobs:
         with:
           node-version: "22.x"
 
+      # lock どおりに依存を入れ、テストが通ったものだけをビルドする / install from the lock, build only if tests pass
       - name: Build plugin
         run: |
-          npm install
+          npm ci
+          npm test
           npm run build
 
       # 成果物の出所を暗号的に証明する / attest the provenance of the build artifacts
