@@ -1,5 +1,6 @@
 import { App, TFile, TFolder, getAllTags, normalizePath } from "obsidian";
 import { GanttSettings } from "./settings";
+import { fmText } from "./links";
 import { Task, Row, Dep, DepType, StatusDef, StatusGroup, CustomField, CustomFieldType, CustomValue } from "./types";
 
 // ── ステータスグループ / status groups ──
@@ -297,7 +298,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       startTime: ps?.time,
       endTime: pe?.time,
       status: fm[k.status] != null ? String(fm[k.status]) : undefined,
-      assignee: fm[k.assignee] != null ? String(fm[k.assignee]) : undefined,
+      assignee: fmText(fm[k.assignee]),
       deps: [] as Dep[],
       progress: fm[k.progress] != null ? Number(fm[k.progress]) : undefined,
       milestone,

@@ -3,6 +3,7 @@
 import { Task, Filter, FilterMatch, StatusDef } from "./types";
 import { anchorStart, anchorEnd, statusGroupOf } from "./model";
 import { dayIndex, matchDate } from "./timeline";
+import { linkLabel } from "./links";
 
 export type GroupBy = "folder" | "status" | "assignee" | "tag";
 
@@ -72,7 +73,7 @@ export function regroup(tasks: Task[], groupBy: GroupBy, flat: boolean, statuses
     const key =
       groupBy === "status"
         ? t.status ? statusLabel.get(t.status) ?? t.status : noneLabel
-        : t.assignee || noneLabel;
+        : t.assignee ? linkLabel(t.assignee) : noneLabel;
     return { ...t, groups: [key] };
   });
 }

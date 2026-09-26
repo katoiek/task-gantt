@@ -39,6 +39,8 @@ import {
 } from "./timeline";
 import { hashColor, resolveTagColor } from "./colors";
 import { ConfirmModal } from "./modals";
+import { linkLabel } from "./links";
+import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } from "./linkui";
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { isConnected } from "./gcal/auth";
@@ -490,7 +492,7 @@ export class GanttView extends ItemView {
     // グループは 4 固定なので、そのグループを使っているステータスが 1 つも無くても全部出す
     // the four groups are fixed, so list them all even when no status currently uses one
     else if (field === "statusGroup") base = STATUS_GROUPS.map((g) => [g, statusGroupLabel(g)] as [string, string]);
-    else if (field === "assignee") base = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort().map((a) => [a, a] as [string, string]);
+    else if (field === "assignee") base = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort().map((a) => [a, linkLabel(a)] as [string, string]);
     else base = [...new Set(this.tasks.flatMap((t) => t.tags))].sort().map((tg) => [tg, tg] as [string, string]);
     return [...base, ["", tr().noneLabel]]; // 「未設定」を選べるように / allow filtering by "unset"
   }
@@ -988,7 +990,7 @@ export class GanttView extends ItemView {
     if (this.colorBy === "status") {
       for (const s of statuses) this.legendChip(legend, s.color, s.label);
     } else {
-      for (const a of assignees) this.legendChip(legend, hashColor(a), a);
+      for (const a of assignees) this.legendChip(legend, hashColor(a), linkLabel(a));
       if (this.tasks.some((t) => !t.assignee)) this.legendChip(legend, FALLBACK_BAR, none);
     }
   }
@@ -1626,7 +1628,7 @@ export class GanttView extends ItemView {
         }
         // ラベル（タスク名＋担当）/ label
         const label = this.svgEl("text", { x: x + w + 6, y: cyText(i), class: "ogantt-bar-label" });
-        label.textContent = t.assignee ? `${t.name} · @${t.assignee}` : t.name;
+        label.textContent = t.assignee ? `${t.name} · @${linkLabel(t.assignee)}` : t.name;
         g.appendChild(label);
         this.attachDrag(g, rect, t);
         // 端ホバーで ↔ カーソル、中央は掴むカーソル / ew-resize near edges, grab in the middle
@@ -2147,10 +2149,38 @@ export class GanttView extends ItemView {
     }
     statusSel.addEventListener("change", () => void this.saveField(k.status, statusSel.value));
 
-    // 担当 / assignee
-    const asgIn = fieldRow(tr().fieldAssignee).createEl("input", { type: "text" });
-    asgIn.value = t.assignee ?? "";
-    asgIn.addEventListener("change", () => void this.saveField(k.assignee, asgIn.value));
+    // 担当 / assignee（wikilink はリンク表示。リンク以外の所をクリックで入力欄に、"[[" でノート候補）
+    // assignee: a wikilink shows as a link; click elsewhere in the field to edit, "[[" suggests notes
+    const asgField = fieldRow(tr().fieldAssignee);
+    asgField.addClass("ogantt-assignee-field");
+    const asgView = asgField.createDiv({ cls: "ogantt-assignee-view" });
+    const asgIn = asgField.createEl("input", { type: "text" });
+    const paintAsg = () => {
+      asgView.empty();
+      if (t.assignee) renderLinkValue(asgView, t.assignee, "ogantt-assignee-text");
+      else asgView.createSpan({ cls: "ogantt-muted", text: "—" });
+    };
+    paintAsg();
+    wireLinkHover(this.app, asgView, this, t.path);
+    asgView.addEventListener("click", (e) => {
+      if (handleLinkClick(this.app, e, t.path)) return;
+      asgIn.value = t.assignee ?? "";
+      asgField.addClass("is-editing");
+      asgIn.focus();
+    });
+    attachLinkSuggest(this.app, asgIn, t.path);
+    asgIn.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); asgIn.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); asgIn.value = t.assignee ?? ""; asgIn.blur(); }
+    });
+    asgIn.addEventListener("blur", () => void (async () => {
+      asgField.removeClass("is-editing");
+      const v = asgIn.value.trim();
+      if (v === (t.assignee ?? "")) return;
+      t.assignee = v || undefined; // 再描画前でも表示を合わせる / keep the view in step before the refresh
+      paintAsg();
+      await this.saveField(k.assignee, v);
+    })());
 
     // タグ（多値・チップ＋×で削除、入力＋Enterで追加。付与は D&D も可）/ tags: chips with × to remove, input+Enter to add (also via drag)
     const tagField = fieldRow(tr().fieldTags);
@@ -2272,13 +2302,18 @@ export class GanttView extends ItemView {
       bodyArea.setCssStyles({ height: "auto" });
       bodyArea.setCssStyles({ height: `${bodyArea.scrollHeight + 2}px` });
     };
-    preview.addEventListener("click", () => {
+    wireLinkHover(this.app, preview, this, t.path);
+    preview.addEventListener("click", (e) => {
+      // リンク・チェックボックスのクリックは編集モードに入らない / clicks on links or checkboxes don't enter edit mode
+      if (handleLinkClick(this.app, e, t.path)) return;
+      if ((e.target as HTMLElement).closest("input")) return;
       bodyArea.value = bodyText;
       bodyWrap.addClass("is-editing");
       autosize();
       bodyArea.focus();
     });
     bodyArea.addEventListener("input", autosize);
+    attachLinkSuggest(this.app, bodyArea, t.path);
     bodyArea.addEventListener("blur", () => void (async () => {
       const path = this.selectedPath;
       if (path && bodyArea.value !== bodyText) {

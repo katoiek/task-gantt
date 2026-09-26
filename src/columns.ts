@@ -15,6 +15,8 @@ import {
 } from "./model";
 import { formatDate, dayIndex, dayToStr, todayIndex } from "./timeline";
 import { endForDuration, parseDuration, scheduleOptions, taskDuration, workdaysBetween } from "./schedule";
+import { linkLabel } from "./links";
+import { attachLinkSuggest, handleLinkClick, renderLinkValue } from "./linkui";
 import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 
 // 並べ替えのキー（数値同士は差、それ以外は文字列比較）/ a sort key (numbers subtract, anything else compares as text)
@@ -197,19 +199,22 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
     label: () => tr().fieldAssignee,
     width: 96,
     optional: true,
-    sortKey: (t) => (t.assignee ?? "").toLowerCase(),
-    paint: (_ctx, td, row) => paintAssignee(td, row.task!),
+    sortKey: (t) => linkLabel(t.assignee ?? "").toLowerCase(),
+    paint: (ctx, td, row) => paintAssignee(ctx, td, row.task!),
     edit: (ctx, cell, row) => {
       const t = row.task!;
       ctx.inlineInput(
         cell,
         t.assignee ?? "",
-        () => paintAssignee(cell, t),
+        () => paintAssignee(ctx, cell, t),
         async (v) => {
           await ctx.mutate(tr().undoEdit(t.name), [t.path], () => writeField(ctx.app, t.path, ctx.settings.keys.assignee, v || undefined));
           await ctx.refresh();
         },
-        (inp) => attachAssigneeSuggestions(ctx, inp)
+        (inp) => {
+          attachAssigneeSuggestions(ctx, inp);
+          attachLinkSuggest(ctx.app, inp, t.path); // "[[" でノートを候補に / "[[" suggests notes
+        }
       );
     },
     editAria: () => tr().editAssignee,
@@ -391,10 +396,12 @@ async function commitProgress(ctx: BoardContext, t: Task, raw: string): Promise<
   await ctx.refresh();
 }
 
-// 担当者セル / assignee cell
-function paintAssignee(td: HTMLElement, t: Task): void {
+// 担当者セル（wikilink ならクリックでノートを開く）/ assignee cell (a wikilink opens its note on click)
+function paintAssignee(ctx: BoardContext, td: HTMLElement, t: Task): void {
   td.empty();
-  if (t.assignee) td.createSpan({ cls: "ogantt-td-text", text: t.assignee });
+  if (!t.assignee) return;
+  const el = renderLinkValue(td, t.assignee, "ogantt-td-text");
+  el.addEventListener("click", (e) => handleLinkClick(ctx.app, e, t.path));
 }
 
 // 既存の担当者を入力候補に出して表記ゆれを防ぐ / suggest existing assignees to avoid spelling drift

@@ -13,3 +13,9 @@ export function getAllTags() {
 // stubs for UI helpers columns.ts imports; tests never paint
 export function setIcon() {}
 export const moment = { locale: () => "en" };
+// wikilink UI（linkui.ts）が参照する API のスタブ / stubs for the APIs linkui.ts imports
+export class Component {}
+export const Keymap = { isModEvent: () => false };
+export function prepareFuzzySearch() {
+  return () => null;
+}
