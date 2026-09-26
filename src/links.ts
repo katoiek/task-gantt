@@ -49,5 +49,7 @@ export function fmText(v: unknown): string | undefined {
   if (Array.isArray(v) && v.length === 1 && Array.isArray(v[0]) && v[0].length === 1 && typeof v[0][0] === "string") {
     return `[[${v[0][0]}]]`;
   }
-  return String(v);
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return JSON.stringify(v); // 想定外の型（配列・オブジェクト）はそのまま見える形に / show unexpected shapes verbatim
 }
