@@ -156,7 +156,7 @@ The **Duration** column (turn it on from the gear menu) shows how many **workday
 
 - **Change the duration** (double-click the cell, or use the field in the detail panel) and the start stays put while the due date moves. A task with no start date starts today.
 - **Change only the start date** and the due date moves with it, so the duration stays the same — the bar slides. Changing the due date changes the duration instead. Dragging a bar's edge on the timeline resizes it as before.
-- Together with FS dependencies this gives Wrike-style scheduling: give each task a duration, chain them with FS links, and a slipping task pushes everything after it.
+- Together with FS dependencies you can schedule by duration: give each task a duration, chain them with FS links, and a slipping task pushes everything after it.
 
 ## Undo and redo
 
@@ -417,7 +417,7 @@ after:
 
 - **期間を変える**（セルのダブルクリック、または詳細パネルの欄）と、開始日はそのままで期限日が動きます。開始日が無いタスクは今日から始まります。
 - **開始日だけを変える**と、期限日も一緒に動き、期間が保たれます（バーが平行移動します）。期限日を変えた場合は期間が変わります。タイムラインでバーの端をドラッグしたときは、これまでどおり伸び縮みします。
-- FS 依存と組み合わせると Wrike 流のスケジュールになります。各タスクに期間を入れて FS でつなげば、遅れたタスクがその後ろをまとめて押し出します。
+- FS 依存と組み合わせると 期間でスケジュールを組めます。各タスクに期間を入れて FS でつなげば、遅れたタスクがその後ろをまとめて押し出します。
 
 ## 取り消し・やり直し
 
