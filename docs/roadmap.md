@@ -157,7 +157,7 @@ src/view/
 | 優先 | 機能 | メモ |
 |---|---|---|
 | A | 複数選択・一括編集 | Shift / Ctrl クリックで複数行を選択。ステータス・担当者・日付シフト・タグを一括で変更する。`mutate` に複数パスを渡す |
-| B | FS 依存の自動スケジュール＋クリティカルパス | 現状 `realignSuccessors` は SS/FF のみ。先行を動かしたら FS 後続を押し出すオプション（設定トグル・既定 OFF）。既存の依存違反判定の延長でクリティカルパスをハイライト |
+| B | FS 依存の自動スケジュール＋クリティカルパス（FS の押し出しと Duration 列は対応済み・Issue #4。残りはクリティカルパス） | 現状 `realignSuccessors` は SS/FF のみ。先行を動かしたら FS 後続を押し出すオプション（設定トグル・既定 OFF）。既存の依存違反判定の延長でクリティカルパスをハイライト |
 | B | 担当者ごとの負荷ビュー | 担当者行ごとに日別の担当タスク数をヒートマップ表示。既存の assignee データで描画を足すだけ |
 | B | ベースライン | 計画時点の日付をフロントマターに保存し、現在のバーの下に薄く重ねる。進捗線と組み合わせて遅れを可視化 |
 | B | Obsidian Bases ビュー対応 | Bases のカスタムビュー API で「Base → ガント表示」。フォルダ横断の集計（README の既知の制限）を解消する。`minAppVersion` を 1.10 以上へ引き上げる必要あり |
@@ -235,7 +235,7 @@ Phase 1 → Redo (1-5) → Phase 2 (column registry → custom fields) → multi
 | Priority | Feature | Notes |
 |---|---|---|
 | A | Multi-select & bulk edit | Shift/Ctrl-click rows; bulk status, assignee, date shift and tags via `mutate` with many paths |
-| B | FS auto-scheduling + critical path | `realignSuccessors` only handles SS/FF today. Add an opt-in (default off) push of FS successors; highlight the critical path, building on the existing violation check |
+| B | FS auto-scheduling + critical path | FS push and the Duration column are done (issue #4: `src/schedule.ts`, push-only, on by default, workday-based). Still to do: highlight the critical path, building on the existing violation check |
 | B | Workload view by assignee | A per-assignee heatmap of daily task counts, drawn from existing assignee data |
 | B | Baseline | Save the planned dates in frontmatter and draw them as a faint bar under the current one; pairs with the progress line |
 | B | Obsidian Bases view | Offer the Gantt as a Bases custom view, removing the cross-folder limitation in the README. Requires raising `minAppVersion` to 1.10+ |

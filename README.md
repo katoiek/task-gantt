@@ -25,7 +25,7 @@ Click a task to open the detail panel and edit its dates, status, assignee, prog
 1. In **Settings → Task Gantt**, set the **target folder** (e.g. `Projects/Cleanup`).
 2. Open the view from the **"Open Gantt" ribbon icon** in the left column (or the command **"Open Gantt"**). The ribbon opens the Gantt for the folder of the currently open note — or the folder selected in the file explorer — and falls back to the default folder in settings (the **vault root** when none is set). You can also right-click any folder → **Open as Gantt**.
 3. Direct subfolders become **groups**, and the `.md` files inside them become **tasks**.
-4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter. **Every column the table can show is editable in place — just double-click the cell.** Start and Due open a calendar, Progress takes a percentage (0–100; blank or 0 clears it), Status opens a dropdown, Assignee is a text field that suggests names already used in the board, and Tags opens a small editor with a chip per tag (× to remove) and an add field that suggests the vault's existing tags. Enter or clicking away saves, Esc cancels.
+4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter. **Every column the table can show is editable in place — just double-click the cell.** Start and Due open a calendar, Duration takes a number of workdays, Progress takes a percentage (0–100; blank or 0 clears it), Status opens a dropdown, Assignee is a text field that suggests names already used in the board, and Tags opens a small editor with a chip per tag (× to remove) and an add field that suggests the vault's existing tags. Enter or clicking away saves, Esc cancels.
 5. Click a task in the table — or **double-click its bar** — to slide in a **detail panel** (dates, status, assignee, progress, body) from the right.
 6. Use the **＋ New task** button to create a one-day task in the current folder and name it on the spot, and **Today** to scroll the timeline to the current date.
 7. Use the **Day / Week / Month / Fit** buttons to change the timeline scale. **Fit** auto-scales to the pane width and re-fits when you resize.
@@ -44,7 +44,7 @@ An options row above the table shapes how the board is displayed.
 
 ![Click a column header to sort, with an ↑/↓ indicator](docs/images/sort-en.png)
 
-**Choose columns** with the gear button — show or hide Start, Due, Progress, Assignee, Status, and Tags. Any column shown here can be edited by double-clicking its cell. The column layout and sort are remembered across sessions:
+**Choose columns** with the gear button — show or hide Start, Due, Duration, Progress, Assignee, Status, and Tags. Any column shown here can be edited by double-clicking its cell. The column layout and sort are remembered across sessions:
 
 ![Show or hide table columns from the gear menu](docs/images/column_en.png)
 
@@ -148,11 +148,19 @@ Sample data for a quick try lives in `examples/Cleaning Project お掃除プロ�
 
 ## Dependencies
 
-Drag from a bar's round handle to another bar to create a dependency. The connected ends decide the type: **FS** (finish→start), **SS** (start→start), **FF** (finish→finish). SS/FF successors snap to their predecessor when you reschedule. Click a dependency line to remove it (undo with **Ctrl/Cmd+Z** or the undo button).
+Drag from a bar's round handle to another bar to create a dependency. The connected ends decide the type: **FS** (finish→start), **SS** (start→start), **FF** (finish→finish). SS/FF successors snap to their predecessor when you reschedule. An FS successor is **pushed later when its predecessor slips into it** — it moves to the next workday after the predecessor's due date and keeps its duration — and the push carries on down the chain. Moving a predecessor earlier never pulls its successors back, so gaps you left on purpose stay. Turn this off with **Push FS successors automatically** in settings. Milestones never move through dependencies. Click a dependency line to remove it (undo with **Ctrl/Cmd+Z** or the undo button).
+
+## Duration
+
+The **Duration** column (turn it on from the gear menu) shows how many **workdays** a task spans, counting both ends and skipping the non-working days set in settings (Saturday and Sunday by default). It isn't stored anywhere: it's worked out from `start` and `end`, which stay the source of truth.
+
+- **Change the duration** (double-click the cell, or use the field in the detail panel) and the start stays put while the due date moves. A task with no start date starts today.
+- **Change only the start date** and the due date moves with it, so the duration stays the same — the bar slides. Changing the due date changes the duration instead. Dragging a bar's edge on the timeline resizes it as before.
+- Together with FS dependencies this gives Wrike-style scheduling: give each task a duration, chain them with FS links, and a slipping task pushes everything after it.
 
 ## Undo and redo
 
-Every change made on the board can be undone with **Ctrl/Cmd+Z** or the undo button, and redone with **Ctrl/Cmd+Shift+Z**, **Ctrl/Cmd+Y** or the redo button: cell edits, everything in the detail panel (including renames and body text), dragging bars, dependencies, moves and subtasks, tags, and creating or deleting a task. Undoing a delete re-creates the note in place. SS/FF successors that moved along with a task move back with it. While you are typing in a text field, the shortcuts undo your typing instead. Renaming or moving the board's tasks or folders from the file explorer joins the history too, so undo always walks back in the order things happened. The history lasts while the board is open.
+Every change made on the board can be undone with **Ctrl/Cmd+Z** or the undo button, and redone with **Ctrl/Cmd+Shift+Z**, **Ctrl/Cmd+Y** or the redo button: cell edits, everything in the detail panel (including renames and body text), dragging bars, dependencies, moves and subtasks, tags, and creating or deleting a task. Undoing a delete re-creates the note in place. Successors that moved along with a task move back with it. While you are typing in a text field, the shortcuts undo your typing instead. Renaming or moving the board's tasks or folders from the file explorer joins the history too, so undo always walks back in the order things happened. The history lasts while the board is open.
 
 Changes made **outside Obsidian** — renaming, moving or deleting notes in Windows Explorer or macOS Finder, or by a sync tool — are not part of the history: Obsidian only sees them as a file disappearing and another appearing. Undoing an earlier change to such a note does nothing, so rename and move tasks inside Obsidian (the title field, or Obsidian's own file explorer) if you want to be able to undo it.
 
@@ -163,6 +171,8 @@ Open **Settings → Task Gantt** to configure the default folder, subfolder recu
 The **Timezone** setting (system or a fixed GMT offset, listed with representative cities) controls how times of day are displayed and saved. Changing it re-displays stored times in the new offset.
 
 ![Timezone setting with representative cities](docs/images/timezone-en.png)
+
+**Non-working days** (Saturday & Sunday, Friday & Saturday, Sunday only, or none) are skipped when counting a task's duration and when dependencies move tasks. **Push FS successors automatically** (on by default) controls whether a slipping predecessor pushes its FS successors.
 
 The **Progress line color** setting sets the color of the jagged line drawn by the **Progress line** view option, with a button to reset it to the default amber.
 
@@ -276,7 +286,7 @@ MIT — see [`LICENSE`](./LICENSE).
 1. **設定 → Task Gantt** で**対象フォルダ**を指定（例: `Projects/お掃除`）。
 2. 左列の **「Gantt を開く」リボンアイコン**（またはコマンド「Gantt を開く」）でビューを開く。リボンは、**現在開いているノートのフォルダ**（またはエクスプローラで選択中のフォルダ）を Gantt 表示し、どちらも無ければ設定の既定フォルダ（未設定なら **Vault ルート**）を開きます。フォルダを右クリック →**「Open as Gantt」**でも開けます。
 3. 直下のサブフォルダが**グループ**、その中の `.md` が**タスク**になります。
-4. バーを**ドラッグ／端をリサイズ**すると、そのファイルの `start`/`end` に書き戻します。**テーブルに表示できる列はすべて、セルをダブルクリックすればその場で編集できます。** 開始・期限はカレンダー、進捗は % の直接入力（0–100。空欄または 0 で未設定）、ステータスはドロップダウン、担当者はボード内で既に使われている名前を候補に出すテキスト欄、タグは詳細パネルと同じエディタ（タグごとのチップと × による削除＋Vault 内の既存タグを候補に出す追加欄）が開きます。Enter またはフォーカスを外すと保存、Esc で取消します。
+4. バーを**ドラッグ／端をリサイズ**すると、そのファイルの `start`/`end` に書き戻します。**テーブルに表示できる列はすべて、セルをダブルクリックすればその場で編集できます。** 開始・期限はカレンダー、期間は稼働日数の入力、進捗は % の直接入力（0–100。空欄または 0 で未設定）、ステータスはドロップダウン、担当者はボード内で既に使われている名前を候補に出すテキスト欄、タグは詳細パネルと同じエディタ（タグごとのチップと × による削除＋Vault 内の既存タグを候補に出す追加欄）が開きます。Enter またはフォーカスを外すと保存、Esc で取消します。
 5. 表のタスクをクリック、または**バーをダブルクリック**すると、右から**詳細パネル**（日付・ステータス・担当者・進捗・本文）がスライドインします。
 6. **＋ 新規タスク**ボタンで現在のフォルダに1日タスクを作ってその場で命名、**今日**ボタンでタイムラインを今日へスクロールできます。
 7. **Day / Week / Month / Fit** ボタンで時間軸の拡大率を変更。**Fit** はペイン幅に自動で収め、リサイズにも追従します。
@@ -295,7 +305,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![列ヘッダのクリックでソート（↑/↓ 表示）](docs/images/sort-ja.png)
 
-**列の表示**は歯車ボタンから、開始・期限・進捗・担当者・ステータス・タグを出し分け。ここに出せる列はすべてセルのダブルクリックで編集できます。列レイアウトとソートはセッションをまたいで保存されます：
+**列の表示**は歯車ボタンから、開始・期限・期間・進捗・担当者・ステータス・タグを出し分け。ここに出せる列はすべてセルのダブルクリックで編集できます。列レイアウトとソートはセッションをまたいで保存されます：
 
 ![歯車メニューから列を表示／非表示](docs/images/column_ja.png)
 
@@ -399,11 +409,19 @@ after:
 
 ## 依存関係
 
-バーの丸ハンドルから別のバーへドラッグすると依存を作成します。つないだ端で種類が決まります：**FS**（終了→開始）・**SS**（開始→開始）・**FF**（終了→終了）。SS/FF の後続は、先行の日程変更に追従します。依存線をクリックで切断（**Ctrl/Cmd+Z** または取り消しボタンで戻せます）。
+バーの丸ハンドルから別のバーへドラッグすると依存を作成します。つないだ端で種類が決まります：**FS**（終了→開始）・**SS**（開始→開始）・**FF**（終了→終了）。SS/FF の後続は、先行の日程変更に追従します。FS の後続は、**先行が遅れて重なったときに後ろへ押し出されます**。先行の期限日の次の稼働日へ移り、期間はそのまま保たれます。押し出しはその先の後続へも連鎖します。先行を前倒ししても後続は引き戻されないので、わざと空けた間隔は残ります。この動作は設定の **FS の後続を自動で押し出す** でオフにできます。マイルストーンは依存では動きません。依存線をクリックで切断（**Ctrl/Cmd+Z** または取り消しボタンで戻せます）。
+
+## 期間（Duration）
+
+**期間**列（歯車メニューで表示）は、タスクが何**稼働日**かかるかを表示します。両端の日を含めて数え、設定した休日（既定は土・日）は数えません。期間はどこにも保存されず、`start` と `end` から計算します（日付が常に正です）。
+
+- **期間を変える**（セルのダブルクリック、または詳細パネルの欄）と、開始日はそのままで期限日が動きます。開始日が無いタスクは今日から始まります。
+- **開始日だけを変える**と、期限日も一緒に動き、期間が保たれます（バーが平行移動します）。期限日を変えた場合は期間が変わります。タイムラインでバーの端をドラッグしたときは、これまでどおり伸び縮みします。
+- FS 依存と組み合わせると Wrike 流のスケジュールになります。各タスクに期間を入れて FS でつなげば、遅れたタスクがその後ろをまとめて押し出します。
 
 ## 取り消し・やり直し
 
-ボード上の変更は、**Ctrl/Cmd+Z** または取り消しボタンで元に戻し、**Ctrl/Cmd+Shift+Z**・**Ctrl/Cmd+Y** またはやり直しボタンでやり直せます。対象はセルの編集、詳細パネルのすべての項目（名前の変更・本文を含む）、バーのドラッグ、依存、移動・サブタスク化、タグ、タスクの作成・削除です。削除を取り消すと、ノートが同じ場所に作り直されます。一緒に動いた SS/FF の後続も、まとめて元に戻ります。テキスト入力中は、ショートカットは入力内容の取り消しとして働きます。ファイルエクスプローラーでボードのタスクやフォルダをリネーム・移動した場合も履歴に入るので、取り消しは常に起きた順に遡ります。履歴はボードを開いている間保持されます。
+ボード上の変更は、**Ctrl/Cmd+Z** または取り消しボタンで元に戻し、**Ctrl/Cmd+Shift+Z**・**Ctrl/Cmd+Y** またはやり直しボタンでやり直せます。対象はセルの編集、詳細パネルのすべての項目（名前の変更・本文を含む）、バーのドラッグ、依存、移動・サブタスク化、タグ、タスクの作成・削除です。削除を取り消すと、ノートが同じ場所に作り直されます。一緒に動いた後続も、まとめて元に戻ります。テキスト入力中は、ショートカットは入力内容の取り消しとして働きます。ファイルエクスプローラーでボードのタスクやフォルダをリネーム・移動した場合も履歴に入るので、取り消しは常に起きた順に遡ります。履歴はボードを開いている間保持されます。
 
 **Obsidian の外**で行った変更（Windows のエクスプローラーや macOS の Finder、同期ツールでのノートのリネーム・移動・削除）は履歴に入りません。Obsidian からは「ファイルが消えて、別のファイルが現れた」としか見えないためです。そうしたノートに対するそれ以前の変更を取り消しても、何も起きません。取り消せるようにしたい場合は、リネームや移動を Obsidian の中（タイトル欄や Obsidian のファイルエクスプローラー）で行ってください。
 
@@ -414,6 +432,8 @@ after:
 **タイムゾーン**設定（システム / 固定GMTオフセット・代表都市付き一覧）で時刻の表示・保存に使うタイムゾーンを選べます。変更すると保存済みの時刻が新しいオフセットに換算されて表示されます。
 
 ![代表都市付きのタイムゾーン設定](docs/images/timezone-ja.png)
+
+**休日の曜日**（土・日／金・土／日のみ／なし）は、期間の計算と依存による移動のときに数えません。**FS の後続を自動で押し出す**（既定はオン）で、先行の遅れを FS の後続へ伝えるかを切り替えます。
 
 **稲妻線の色**設定で、表示オプションの**稲妻線**で描かれる折れ線の色を変更できます（既定の橙に戻すボタン付き）。
 

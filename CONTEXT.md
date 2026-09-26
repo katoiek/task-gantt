@@ -21,8 +21,16 @@ Task（ファイル）の本文。フロントマターを除いた Markdown 本
 _Avoid_: Description, Content, Note
 
 **Dependency**:
-Task 間の先行 / 後続関係。フロントマターの `after`（先行 Task への wikilink 配列）で表し、タイムライン上に矢印として描く。Subtask（親子）とは別概念。
+Task 間の先行 / 後続関係。フロントマターの `after`（先行 Task への wikilink 配列）で表し、タイムライン上に矢印として描く。先行の日付が変わると、SS/FF の後続は先行へ揃い、FS の後続は重なったときだけ後ろへ押し出される（設定でオフにできる・引き戻しはしない）。どちらも Duration を保つ。Subtask（親子）とは別概念。
 _Avoid_: Link, Relation, Blocker, Predecessor
+
+**Duration**:
+Task の期間。開始日から期限日までの**稼働日数**（両端を含む・休日の曜日は数えない）。フロントマターには持たず、`start` / `end` から都度計算する（日付が源泉）。期間を変えると開始日を保って期限日が動き、開始日だけを変えると期間を保って期限日も動く（Wrike 流）。マイルストーンは期間を持たない。
+_Avoid_: Length, Span, Estimate
+
+**Workday**:
+稼働日。設定の「休日の曜日」（既定は土・日）以外の日。Duration と、Dependency による後続の連動はすべて稼働日で数える。祝日（特定の日付）はまだ扱わない。
+_Avoid_: Business day, Working day
 
 **Subtask**:
 親 Task を持つ Task。フロントマターの `parent`（親 Task への単一 wikilink）で表し、表では親 Task の直下に入れ子表示する（サブサブ＝任意の深さ）。子は親と同じ Group（フォルダ）に同居し、ドラッグ＆ドロップで親へ寄せると親のフォルダへ移動する。Dependency（先行/後続）や Group（フォルダ）とは別の階層軸。
