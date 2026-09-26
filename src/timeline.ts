@@ -185,16 +185,15 @@ export interface Tick {
   major: boolean; // 月境界など / month boundary
 }
 
-// 上部の日付軸の目盛りを生成 / generate header ticks
-export function buildTicks(range: DateRange, zoom: ZoomMode, ppd: number): Tick[] {
+// 上部の日付軸の目盛りを生成。weekdays は日曜始まりの曜日ラベル / generate header ticks; weekdays = labels, Sunday first
+export function buildTicks(range: DateRange, zoom: ZoomMode, ppd: number, weekdays: string[]): Tick[] {
   const ticks: Tick[] = [];
-  const wk = ["日", "月", "火", "水", "木", "金", "土"];
   for (let day = range.min; day <= range.max; day++) {
     const d = new Date(day * MS_PER_DAY);
     const x = (day - range.min) * ppd;
     const isMonthStart = d.getUTCDate() === 1;
     if (zoom === "Day") {
-      ticks.push({ x, label: `${d.getUTCDate()} ${wk[d.getUTCDay()]}`, major: isMonthStart });
+      ticks.push({ x, label: `${d.getUTCDate()} ${weekdays[d.getUTCDay()]}`, major: isMonthStart });
     } else if (zoom === "Week") {
       if (d.getUTCDay() === 1 || isMonthStart) {
         ticks.push({ x, label: `${d.getUTCMonth() + 1}/${d.getUTCDate()}`, major: isMonthStart });

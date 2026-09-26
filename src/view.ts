@@ -1361,7 +1361,7 @@ export class GanttView extends ItemView {
     const tickZoom: ZoomMode =
       this.zoom !== "Fit" ? this.zoom : this.ppd >= 24 ? "Day" : this.ppd >= 10 ? "Week" : "Month";
     const axis = grid.createDiv({ cls: "ogantt-axis" });
-    for (const tick of buildTicks(this.range, tickZoom, this.ppd)) {
+    for (const tick of buildTicks(this.range, tickZoom, this.ppd, tr().weekdays)) {
       const t = axis.createDiv({ cls: "ogantt-tick" + (tick.major ? " is-major" : "") });
       t.style.left = `${tick.x}px`;
       t.setText(tick.label);

@@ -70,6 +70,7 @@ interface Strings {
   dfKindRelative: string; // 相対日 / relative date
   dfKindRange: string; // 期間 / date range
   dfDay: string;
+  weekdays: string[]; // 日付軸の曜日（日曜始まり）/ weekday labels on the date axis (Sunday first)
   dfWeek: string;
   dfMonth: string;
   dfAgo: string;
@@ -492,6 +493,7 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRelative: "相対的な日付",
     dfKindRange: "期間",
     dfDay: "日",
+    weekdays: ["日", "月", "火", "水", "木", "金", "土"],
     dfWeek: "週",
     dfMonth: "月",
     dfAgo: "前",
@@ -731,6 +733,7 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRelative: "relative date",
     dfKindRange: "date range",
     dfDay: "day",
+    weekdays: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
     dfWeek: "week",
     dfMonth: "month",
     dfAgo: "ago",
@@ -970,6 +973,7 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRelative: "相对日期",
     dfKindRange: "日期范围",
     dfDay: "天",
+    weekdays: ["日", "一", "二", "三", "四", "五", "六"],
     dfWeek: "周",
     dfMonth: "月",
     dfAgo: "前",
@@ -1209,6 +1213,7 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRelative: "相對日期",
     dfKindRange: "日期範圍",
     dfDay: "天",
+    weekdays: ["日", "一", "二", "三", "四", "五", "六"],
     dfWeek: "週",
     dfMonth: "月",
     dfAgo: "前",
@@ -1448,6 +1453,7 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRelative: "상대 날짜",
     dfKindRange: "기간",
     dfDay: "일",
+    weekdays: ["일", "월", "화", "수", "목", "금", "토"],
     dfWeek: "주",
     dfMonth: "개월",
     dfAgo: "전",
@@ -1687,6 +1693,7 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRelative: "date relative",
     dfKindRange: "plage de dates",
     dfDay: "jour",
+    weekdays: ["di", "lu", "ma", "me", "je", "ve", "sa"],
     dfWeek: "semaine",
     dfMonth: "mois",
     dfAgo: "auparavant",
@@ -1926,6 +1933,7 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRelative: "fecha relativa",
     dfKindRange: "rango de fechas",
     dfDay: "día",
+    weekdays: ["do", "lu", "ma", "mi", "ju", "vi", "sá"],
     dfWeek: "semana",
     dfMonth: "mes",
     dfAgo: "atrás",
@@ -2165,6 +2173,7 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRelative: "относительная дата",
     dfKindRange: "диапазон дат",
     dfDay: "день",
+    weekdays: ["вс", "пн", "вт", "ср", "чт", "пт", "сб"],
     dfWeek: "неделя",
     dfMonth: "месяц",
     dfAgo: "назад",

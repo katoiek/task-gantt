@@ -1,6 +1,6 @@
 // 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
 // Tests for date-filter resolution/matching and progress-line geometry
-import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine } from "./timeline.mjs";
+import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
