@@ -492,7 +492,10 @@ export class GanttSettingTab extends PluginSettingTab {
           })(),
         },
       ],
-      onDismiss: () => input.setValue(oldKey), // 選ばずに閉じたら元のキーへ / closing without a choice reverts the key
+      // 選ばずに閉じたら元のキーへ / closing without a choice reverts the key
+      onDismiss: () => {
+        input.setValue(oldKey);
+      },
     }).open();
   }
 
