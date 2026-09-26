@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, successorClosure, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
+import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -130,21 +130,7 @@ check("statusGroupOf: 空文字は undefined", statusGroupOf(statusDefs, "") ===
 // 設定に無い id は「分類不能」。完了に寄せると完了フィルタが嘘をつく / unknown ids stay unclassified
 check("statusGroupOf: 未定義 id は undefined", statusGroupOf(statusDefs, "ghost") === undefined);
 
-// successorClosure：SS/FF を推移的にたどり、FS・自分・循環は除く / follows SS/FF transitively; skips FS, self and cycles
-{
-  const mk = (path, deps = []) => ({ path, name: path, groups: [], deps, milestone: false, tags: [] });
-  const g = [
-    mk("A"),
-    mk("B", [{ path: "A", type: "SS" }]),
-    mk("C", [{ path: "B", type: "FF" }]),
-    mk("D", [{ path: "A", type: "FS" }]), // FS は連動しない / FS doesn't cascade
-    mk("E", [{ path: "D", type: "SS" }]), // FS の先なので到達しない / behind an FS edge, unreachable
-    mk("F", [{ path: "C", type: "SS" }, { path: "A", type: "FF" }]), // 2 経路でも 1 回 / reached twice, listed once
-  ];
-  g[0].deps.push({ path: "C", type: "SS" }); // 循環 A→B→C→A / a cycle
-  check("successorClosure: SS/FF を推移的に", JSON.stringify(successorClosure(g, "A").sort()) === JSON.stringify(["B", "C", "F"]));
-  check("successorClosure: 後続なしは空", successorClosure(g, "F").length === 0);
-}
+// successorClosure は schedule.test.mjs へ移動 / successorClosure moved to schedule.test.mjs
 
 // ── Custom field ──
 {

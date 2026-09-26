@@ -1317,6 +1317,14 @@ button.ogantt-cal-title:hover {
   opacity: 0.4;
 }
 
+/* 期間（稼働日数）の入力 / duration (workdays) input */
+.ogantt-duration-input {
+  width: 6em;
+}
+.ogantt-duration-input:disabled {
+  opacity: 0.4;
+}
+
 /* 時刻欄: 手動入力＋時計アイコン / time field: manual input + clock button */
 .ogantt-time-wrap {
   display: flex;

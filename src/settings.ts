@@ -68,6 +68,11 @@ export interface GanttSettings {
   // 時刻の表示/保存に使うタイムゾーン。"system"=端末、または "+09:00" 等の固定 GMT オフセット
   // timezone for displaying/saving times: "system" (device) or a fixed GMT offset like "+09:00"
   tz: string;
+  // 休日の曜日（0=日 … 6=土）。Duration と依存の連動は稼働日で数える
+  // non-working weekdays (0 = Sun … 6 = Sat); durations and dependency cascades count workdays only
+  nonWorkingDays: number[];
+  // 先行が遅れて FS の後続と重なったら後続を押し出す / push FS successors when a slipping predecessor overlaps them
+  autoScheduleFS: boolean;
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
   visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
   columnWidths: Record<string, number>; // 列幅の上書き(px)。未設定列は既定幅 / per-column width overrides (px); unset = default
@@ -153,6 +158,8 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   defaultZoom: "Week",
   dateFormat: "YYYY/MM/DD",
   tz: "system",
+  nonWorkingDays: [0, 6],
+  autoScheduleFS: true,
   detailWidth: 380,
   visibleColumns: ["start", "end"],
   columnWidths: {},
@@ -297,6 +304,39 @@ export class GanttSettingTab extends PluginSettingTab {
     // 旧バージョンで保存した一覧外のオフセットも選択肢に残す / keep a saved offset selectable even if it left the list
     if (s.tz !== "system" && !opts[s.tz]) opts[s.tz] = `GMT${s.tz}`;
     setting.addDropdown((d) => d.addOptions(opts).setValue(s.tz).onChange((v) => { s.tz = v; this.save(); }));
+  }
+
+  // 休日の曜日（よくある組み合わせから選ぶ。一覧外の保存値もそのまま残す）
+  // non-working weekdays, picked from common patterns (a saved value outside the list stays selectable)
+  private ctlNonWorkingDays(setting: Setting): void {
+    const s = this.plugin.settings;
+    // キーは数字だけにしない（整数風のキーはオブジェクトの先頭へ並び替わり、選択肢の順が崩れる）
+    // keys aren't bare digits: integer-like keys get hoisted to the front of an object and reorder the options
+    const presets: Record<string, number[]> = { satSun: [0, 6], friSat: [5, 6], sun: [0], none: [] };
+    const opts: Record<string, string> = {
+      satSun: tr().setWeekendSatSun,
+      friSat: tr().setWeekendFriSat,
+      sun: tr().setWeekendSun,
+      none: tr().setWeekendNone,
+    };
+    const same = (a: number[], b: number[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
+    let cur = Object.keys(presets).find((k) => same(presets[k], s.nonWorkingDays));
+    if (!cur) {
+      cur = "custom";
+      opts.custom = [...s.nonWorkingDays].sort((a, b) => a - b).join(",");
+      presets.custom = [...s.nonWorkingDays];
+    }
+    setting.addDropdown((d) =>
+      d.addOptions(opts).setValue(cur).onChange((v) => {
+        s.nonWorkingDays = [...(presets[v] ?? [])];
+        this.save();
+      })
+    );
+  }
+
+  private ctlAutoScheduleFS(setting: Setting): void {
+    const s = this.plugin.settings;
+    setting.addToggle((t) => t.setValue(s.autoScheduleFS).onChange((v) => { s.autoScheduleFS = v; this.save(); }));
   }
 
   // 稲妻線の色（色ピッカー＋既定に戻すボタン）/ progress line color (picker + reset to default)
@@ -763,6 +803,8 @@ export class GanttSettingTab extends PluginSettingTab {
       { name: tr().setDefaultZoomName, render: (x) => this.ctlZoom(x) },
       { name: tr().setDateFormatName, render: (x) => this.ctlDateFormat(x) },
       { name: tr().setTimezoneName, desc: tr().setTimezoneDesc, render: (x) => this.ctlTimezone(x) },
+      { name: tr().setNonWorkingDaysName, desc: tr().setNonWorkingDaysDesc, render: (x) => this.ctlNonWorkingDays(x) },
+      { name: tr().setAutoScheduleFSName, desc: tr().setAutoScheduleFSDesc, render: (x) => this.ctlAutoScheduleFS(x) },
       {
         name: tr().setProgressLineColorName,
         desc: tr().setProgressLineColorDesc,
@@ -984,6 +1026,8 @@ export class GanttSettingTab extends PluginSettingTab {
     this.ctlZoom(new Setting(containerEl).setName(tr().setDefaultZoomName));
     this.ctlDateFormat(new Setting(containerEl).setName(tr().setDateFormatName));
     this.ctlTimezone(new Setting(containerEl).setName(tr().setTimezoneName).setDesc(tr().setTimezoneDesc));
+    this.ctlNonWorkingDays(new Setting(containerEl).setName(tr().setNonWorkingDaysName).setDesc(tr().setNonWorkingDaysDesc));
+    this.ctlAutoScheduleFS(new Setting(containerEl).setName(tr().setAutoScheduleFSName).setDesc(tr().setAutoScheduleFSDesc));
     this.ctlProgressLineColor(
       new Setting(containerEl).setName(tr().setProgressLineColorName).setDesc(tr().setProgressLineColorDesc)
     );

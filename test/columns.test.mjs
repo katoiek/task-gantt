@@ -18,7 +18,7 @@ const ids = (cols) => cols.map((c) => c.id).join(",");
 const byId = (id) => BUILTIN_COLUMNS.find((c) => c.id === id);
 
 // ── 定義 / definitions ──
-check("built-in order", ids(BUILTIN_COLUMNS) === "name,start,end,progress,assignee,status,tags");
+check("built-in order", ids(BUILTIN_COLUMNS) === "name,start,end,duration,progress,assignee,status,tags");
 check("only name is non-optional", ids(BUILTIN_COLUMNS.filter((c) => !c.optional)) === "name");
 // 表示できる列はすべて Inline edit に対応（name 以外は edit を持つ）/ every non-name column has an editor
 check("every cell column has paint + edit + editAria", BUILTIN_COLUMNS.filter((c) => c.kind === "cell").every((c) =>
@@ -57,6 +57,8 @@ check("progress: unset before 0%", sorted(ALL, settings("progress")) === "c-task
 check("assignee: case-insensitive, unset first", sorted(ALL, settings("assignee")) === "c-task,mile,A-task,b-task");
 check("status: configured order, unknown/unset last", sorted([A, B, C], settings("status")) === "A-task,b-task,c-task");
 check("tags joined", sorted([A, B], settings("tags")) === "A-task,b-task");
+// 期間は稼働日で並ぶ（A=6 日、B=14 日、日付なしは先頭）/ duration sorts by workdays (A = 6, B = 14, undated first)
+check("duration: workdays, undated first", sorted([A, B, C], { ...settings("duration"), nonWorkingDays: [0, 6] }) === "c-task,b-task,A-task");
 check("desc flips", sorted(ALL, settings("name", "desc")) === "mile,c-task,b-task,A-task");
 check("unknown sort column falls back to start", sorted(ALL, settings("ghost")) === sorted(ALL, settings("start")));
 

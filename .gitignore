@@ -8,6 +8,7 @@ test/gcal-map.mjs
 test/timeline.mjs
 test/filter.mjs
 test/columns.mjs
+test/schedule.mjs
 
 # テスト用 Vault（リポジトリ直下・コミットしない）/ local dev vault, never committed
 Obsidian-Dev/

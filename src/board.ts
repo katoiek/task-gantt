@@ -19,6 +19,10 @@ export interface BoardContext {
   readonly rollup: boolean; // 親を子孫の範囲で描くか / whether parents are drawn as the span of their descendants
   // 書き込みはすべてここを通す（取り消し可能になる）/ every write goes through here (makes it undoable)
   mutate(label: string, paths: string[], fn: () => Promise<MutateResult>): Promise<boolean>;
+  // 開始・期限を書き、後続タスクへ連動する（取り消し可）。開始日だけの変更は期間を保って期限日も動かす。
+  // 戻り値は実際に書いた期限日 / write start & due and cascade to successors (undoable); a start-only change keeps
+  // the duration by moving the due date too. Returns the due date actually written
+  reschedule(path: string, next: { start: string; end: string }, times?: { start?: string; end?: string }): Promise<string>;
   refresh(): Promise<void>; // ディスクから読み直して再描画 / reload from disk and re-render
   rerender(): void; // メモリ上のタスクから再描画 / re-render from in-memory tasks
 

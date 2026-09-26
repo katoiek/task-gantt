@@ -8,7 +8,6 @@ import {
   createTask,
   reparentTask,
   subtreePaths,
-  successorClosure,
   validCustomFields,
   writeDates,
   combineDateTime,
@@ -25,6 +24,7 @@ import {
   anchorStart,
   anchorEnd,
 } from "./model";
+import { cascadeDates, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration } from "./schedule";
 import {
   DateRange,
   computeRange,
@@ -1723,14 +1723,15 @@ export class GanttView extends ItemView {
         } else {
           // 連動しうるのは target（新しい辺）と、source・target それぞれの SS/FF 後続
           // the cascade can reach target (via the new edge) plus the SS/FF successors of source and target
-          const paths = [target.path, ...successorClosure(this.tasks, source.path), ...successorClosure(this.tasks, target.path)];
+          const fs = this.plugin.settings.autoScheduleFS;
+          const paths = [target.path, ...successorClosure(this.tasks, source.path, fs), ...successorClosure(this.tasks, target.path, fs)];
           await this.mutate(tr().undoAddDep(type), paths, async () => {
             await addDependency(this.app, this.plugin.settings, target.path, source.path, type);
             // メモリにも依存を反映（metadataCache 更新前でも整列できるように）/ reflect dep in-memory
             target.deps = target.deps.filter((dd) => dd.path !== source.path);
             target.deps.push({ path: source.path, type });
-            // SS/FF は後続の日付を先行に揃える（連鎖も）/ snap SS/FF successors to the predecessor
-            await this.realignSuccessors(source.path);
+            // 新しい依存に沿って後続を動かす（連鎖も）/ move successors along the new dependency (and onward)
+            await this.cascade([source.path]);
           });
           this.rerender();
         }
@@ -1740,89 +1741,44 @@ export class GanttView extends ItemView {
     handle.addEventListener("pointerup", onUp);
   }
 
-  // SS/FF 依存に従って後続の日付を先行に揃える（期間は維持＝バーが移動）
-  // align a successor to its predecessor per SS/FF (duration kept → the bar moves)
-  private async applyAlign(target: Task, pred: Task, type: DepType): Promise<boolean> {
-    // マイルストーンは固定日なので依存で動かさない / milestones are fixed dates: never auto-moved
-    if (target.milestone) return false;
-    const ps = anchorStart(pred);
-    const pe = anchorEnd(pred);
-    let ns: string | undefined;
-    let ne: string | undefined;
-    if (type === "FS") {
-      // 先行の終了の翌日に後続の開始を合わせる / successor starts the day after predecessor's end
-      if (!pe) return false;
-      const startDay = dayIndex(pe) + 1;
-      if (target.milestone) ns = ne = dayToStr(startDay);
-      else {
-        if (!target.start || !target.end) return false;
-        const dur = dayIndex(target.end) - dayIndex(target.start);
-        ns = dayToStr(startDay);
-        ne = dayToStr(startDay + dur);
-      }
-    } else if (type === "SS") {
-      if (!ps) return false;
-      if (target.milestone) ns = ne = ps;
-      else {
-        if (!target.start || !target.end) return false;
-        const dur = dayIndex(target.end) - dayIndex(target.start);
-        ns = ps;
-        ne = dayToStr(dayIndex(ps) + dur);
-      }
-    } else if (type === "FF") {
-      if (!pe) return false;
-      if (target.milestone) ns = ne = pe;
-      else {
-        if (!target.start || !target.end) return false;
-        const dur = dayIndex(target.end) - dayIndex(target.start);
-        ne = pe;
-        ns = dayToStr(dayIndex(pe) - dur);
-      }
-    } else {
-      return false;
+  // roots の日付変更を依存に沿って後続へ伝える（SS/FF は揃える、FS は設定で押し出す・稼働日で期間を保つ）。
+  // ディスクへ書き、メモリ上のタスクも更新する。mutate の中から呼ぶこと
+  // propagate the roots' date changes to their successors (SS/FF snap, FS pushes when enabled; durations kept in
+  // workdays). Writes to disk and updates the in-memory tasks; call it from inside mutate
+  private async cascade(roots: string[]): Promise<void> {
+    const changes = cascadeDates(this.tasks, roots, scheduleOptions(this.plugin.settings));
+    for (const [path, d] of changes) {
+      const t = this.tasks.find((x) => x.path === path);
+      if (!t) continue;
+      await writeDates(this.app, this.plugin.settings, path, d.start, d.end, false);
+      t.start = d.start;
+      t.end = d.end;
     }
-
-    // 変化が無ければ何もしない / skip if unchanged
-    if (target.milestone) {
-      if (target.end === ne) return false;
-    } else if (target.start === ns && target.end === ne) {
-      return false;
-    }
-    await writeDates(this.app, this.plugin.settings, target.path, ns, ne, target.milestone);
-    // メモリ上も更新して連鎖整列に備える / update in-memory for cascading
-    if (target.milestone) target.end = ne;
-    else {
-      target.start = ns;
-      target.end = ne;
-    }
-    return true;
   }
 
-  // 指定タスクの SS/FF 後続を整列し、連鎖的に伝播（循環は seen で打ち切り）
-  // realign SS/FF successors of a task, propagating along chains (cycles stopped via `seen`)
-  private async realignSuccessors(rootPath: string): Promise<boolean> {
-    const queue = [rootPath];
-    const seen = new Set<string>();
-    let any = false;
-    let guard = 0;
-    while (queue.length && guard++ < 1000) {
-      const predPath = queue.shift()!;
-      const pred = this.tasks.find((t) => t.path === predPath);
-      if (!pred) continue;
-      for (const succ of this.tasks) {
-        if (succ.path === predPath) continue;
-        const dep = succ.deps.find((dd) => dd.path === predPath);
-        if (!dep) continue;
-        if (await this.applyAlign(succ, pred, dep.type)) {
-          any = true;
-          if (!seen.has(succ.path)) {
-            seen.add(succ.path);
-            queue.push(succ.path);
-          }
-        }
-      }
-    }
-    return any;
+  // 開始・期限を書いて後続へ連動する（BoardContext.reschedule の本体）/ write dates and cascade (backs BoardContext.reschedule)
+  private async reschedule(path: string, next: { start: string; end: string }, times: { start?: string; end?: string } = {}): Promise<string> {
+    const t = this.tasks.find((x) => x.path === path);
+    if (!t) return next.end;
+    const k = this.plugin.settings.keys;
+    const tz = this.plugin.settings.tz;
+    const end = keepDurationOnStartChange(t, next, scheduleOptions(this.plugin.settings).cal);
+    await this.mutate(tr().undoReschedule(t.name), [path, ...this.cascadePaths(path)], async () => {
+      await writeField(this.app, path, k.start, combineDateTime(next.start || undefined, times.start, tz));
+      await writeField(this.app, path, k.end, combineDateTime(end || undefined, times.end, tz));
+      // メモリにも反映して連動に備える（期限のみ＝マイルストーン）/ mirror in memory for the cascade (due only = milestone)
+      t.start = next.start || undefined;
+      t.end = end || undefined;
+      if (!t.start && t.end) t.milestone = true;
+      await this.cascade([path]);
+    });
+    await this.refresh();
+    return end;
+  }
+
+  // 日付変更で連動しうる後続（Undo のスナップショット対象）/ successors a date change may move (undo snapshot targets)
+  private cascadePaths(root: string): string[] {
+    return successorClosure(this.tasks, root, this.plugin.settings.autoScheduleFS);
   }
 
   private drawDependencies(svg: SVGElement): void {
@@ -1988,8 +1944,7 @@ export class GanttView extends ItemView {
         handle.removeEventListener("pointerup", onUp);
         const dxDays = Math.round((e.clientX - startX) / this.ppd);
         if (dxDays !== 0) {
-          const cascade = [task.path, ...successorClosure(this.tasks, task.path)];
-          await this.mutate(tr().undoReschedule(task.name), cascade, async () => {
+          await this.mutate(tr().undoReschedule(task.name), [task.path, ...this.cascadePaths(task.path)], async () => {
             if (milestone) {
               const nd = dayToStr(dayIndex(task.end ?? task.start!) + dxDays);
               await writeDates(this.app, this.plugin.settings, task.path, nd, nd, true);
@@ -2013,8 +1968,8 @@ export class GanttView extends ItemView {
               task.start = nsS; // メモリ更新 / update in-memory
               task.end = neS;
             }
-            // SS/FF 後続を連動（メモリ更新＋ディスク書き込み）/ cascade to SS/FF successors
-            await this.realignSuccessors(task.path);
+            // 後続を連動（メモリ更新＋ディスク書き込み）/ cascade to successors
+            await this.cascade([task.path]);
           });
           // メモリから即再描画（ディスク再読込前に正しい位置を表示）/ render from memory for instant correct positions
           this.rerender();
@@ -2372,7 +2327,6 @@ export class GanttView extends ItemView {
   // dates area: start & end chips side by side, each clearable with ×, click opens the range calendar
   private buildDates(meta: HTMLElement, t: Task): void {
     const fmt = this.plugin.settings.dateFormat;
-    const k = this.plugin.settings.keys;
     const state = { start: t.start ?? "", end: t.end ?? "" };
     // 時刻（任意）。日付があるときだけ編集できる / optional time of day, editable only when the date is set
     const times = { start: t.startTime ?? "", end: t.endTime ?? "" };
@@ -2395,13 +2349,8 @@ export class GanttView extends ItemView {
         times.end = times.start;
       }
       repaint(); // 補正を即時反映 / reflect any clamping right away
-      const path = this.selectedPath;
-      const tz = this.plugin.settings.tz;
-      await this.mutate(tr().undoReschedule(t.name), [path], async () => {
-        await writeField(this.app, path, k.start, combineDateTime(state.start || undefined, times.start, tz));
-        await writeField(this.app, path, k.end, combineDateTime(state.end || undefined, times.end, tz));
-      });
-      await this.refresh();
+      state.end = await this.reschedule(this.selectedPath, state, times);
+      repaint(); // 期間を保って動いた期限日を反映 / show a due date moved to keep the duration
     };
 
     const makeChip = (which: "start" | "end"): void => {
@@ -2475,6 +2424,33 @@ export class GanttView extends ItemView {
     };
     makeTime("start");
     makeTime("end");
+
+    // 期間（稼働日数）。変えると開始日を保って期限日が動く（開始日が無ければ今日から）
+    // duration in workdays: changing it keeps the start and moves the due date (from today when there's no start)
+    const cal = scheduleOptions(this.plugin.settings).cal;
+    const drow = meta.createDiv({ cls: "ogantt-detail-row" });
+    drow.createSpan({ cls: "ogantt-detail-label", text: tr().colDuration });
+    const dfield = drow.createDiv({ cls: "ogantt-detail-field" });
+    const dinp = dfield.createEl("input", { cls: "ogantt-duration-input", type: "number" });
+    dinp.min = "1";
+    dinp.step = "1";
+    dinp.setAttr("aria-label", tr().colDuration);
+    painters.push(() => {
+      const d = t.milestone ? undefined : taskDuration({ start: state.start || undefined, end: state.end || undefined, milestone: false }, cal);
+      dinp.value = d != null ? String(d) : "";
+      dinp.disabled = t.milestone;
+    });
+    dinp.addEventListener("change", () => {
+      const n = parseDuration(dinp.value);
+      if (n == null) {
+        repaint(); // 1 以上の整数でなければ元に戻す / revert anything but a whole number ≥ 1
+        return;
+      }
+      state.start = state.start || dayToStr(todayIndex());
+      state.end = dayToStr(endForDuration(dayIndex(state.start), n, cal));
+      repaint();
+      void save();
+    });
     repaint();
   }
 
@@ -2542,6 +2518,7 @@ export class GanttView extends ItemView {
         get tasks() { return tasks(); },
         get rollup() { return rollup(); },
         mutate: (label, paths, fn) => this.mutate(label, paths, fn),
+        reschedule: (path, next, times) => this.reschedule(path, next, times),
         refresh: () => this.refresh(),
         rerender: () => this.rerender(),
         inlineInput: (cell, value, repaint, commit, configure) => this.inlineInput(cell, value, repaint, commit, configure),

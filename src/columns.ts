@@ -7,14 +7,14 @@ import type { Row, Task, CustomField, CustomValue } from "./types";
 import {
   anchorStart,
   anchorEnd,
-  combineDateTime,
   writeField,
   addTag,
   removeTag,
   customValueText,
   parseCustomInput,
 } from "./model";
-import { formatDate } from "./timeline";
+import { formatDate, dayIndex, dayToStr, todayIndex } from "./timeline";
+import { endForDuration, parseDuration, scheduleOptions, taskDuration, workdaysBetween } from "./schedule";
 import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 
 // 並べ替えのキー（数値同士は差、それ以外は文字列比較）/ a sort key (numbers subtract, anything else compares as text)
@@ -112,6 +112,57 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
     },
     edit: (ctx, cell, row) => openCellDatePicker(ctx, cell, row.task!, "end"),
     editAria: () => tr().pickDate,
+  },
+  {
+    kind: "cell",
+    id: "duration",
+    label: () => tr().colDuration,
+    width: 64,
+    optional: true,
+    // 未設定（日付なし）は 0 日より前 / unset (no dates) sorts ahead of zero
+    sortKey: (t, s) => taskDuration(t, scheduleOptions(s).cal) ?? -1,
+    paint: (ctx, td, row) => {
+      td.empty();
+      td.addClass("ogantt-td-number");
+      const cal = scheduleOptions(ctx.settings).cal;
+      // ロールアップ ON の親は集約範囲の期間（編集不可）/ a rolled-up parent shows its span's duration (read-only)
+      const rolled = ctx.rollup && row.span ? row.span : null;
+      if (rolled) {
+        td.setText(tr().durationDays(workdaysBetween(dayIndex(rolled.start), dayIndex(rolled.end), cal)));
+        return false;
+      }
+      const t = row.task!;
+      // マイルストーンは期間を持たない（期限日だけの点）/ a milestone has no duration (a single due date)
+      if (t.milestone) return false;
+      paintDuration(ctx, td, t);
+    },
+    edit: (ctx, cell, row) => {
+      const t = row.task!;
+      const cal = scheduleOptions(ctx.settings).cal;
+      const cur = taskDuration(t, cal);
+      ctx.inlineInput(
+        cell,
+        cur != null ? String(cur) : "",
+        () => paintDuration(ctx, cell, t),
+        async (raw) => {
+          const n = parseDuration(raw);
+          if (n == null || n === cur) {
+            paintDuration(ctx, cell, t); // 1 以上の整数でなければ書かない / only a whole number ≥ 1 is written
+            return;
+          }
+          // 開始日は保ち期限日を動かす（開始日が無ければ今日から）/ keep the start and move the due date (from today when unset)
+          const start = t.start ?? dayToStr(todayIndex());
+          const end = dayToStr(endForDuration(dayIndex(start), n, cal));
+          await ctx.reschedule(t.path, { start, end }, { start: t.startTime, end: t.endTime });
+        },
+        (inp) => {
+          inp.type = "number";
+          inp.min = "1";
+          inp.step = "1";
+        }
+      );
+    },
+    editAria: () => tr().editDuration,
   },
   {
     kind: "cell",
@@ -294,7 +345,6 @@ export function taskComparator(defs: ColumnDef[], settings: GanttSettings): (a: 
 
 // テーブルのセルから範囲カレンダーを開いて日付を直接編集 / open the range calendar from a table cell
 function openCellDatePicker(ctx: BoardContext, anchor: HTMLElement, t: Task, which: "start" | "end"): void {
-  const k = ctx.settings.keys;
   const state = { start: t.start ?? "", end: t.end ?? "" };
   const save = async (): Promise<void> => {
     // 「開始のみ・終了なし」は無効ルール → 終了=開始 / "start only" isn't valid: fill end = start
@@ -304,15 +354,17 @@ function openCellDatePicker(ctx: BoardContext, anchor: HTMLElement, t: Task, whi
     const ts = t.startTime;
     let te = t.endTime;
     if (state.start && state.start === state.end && ts && te && te < ts) te = ts;
-    const tz = ctx.settings.tz;
-    await ctx.mutate(tr().undoReschedule(t.name), [t.path], async () => {
-      await writeField(ctx.app, t.path, k.start, combineDateTime(state.start || undefined, ts, tz));
-      await writeField(ctx.app, t.path, k.end, combineDateTime(state.end || undefined, te, tz));
-    });
-    await ctx.refresh();
+    await ctx.reschedule(t.path, state, { start: ts, end: te });
   };
   // repaint はテーブル側では不要（save→refresh で再描画される）/ no chip repaint needed here
   ctx.openRangePicker(anchor, state, which, () => {}, save);
+}
+
+// 期間セル（稼働日数）。日付が無いときは空欄 / duration cell in workdays; blank when the dates aren't set
+function paintDuration(ctx: BoardContext, td: HTMLElement, t: Task): void {
+  td.empty();
+  const d = taskDuration(t, scheduleOptions(ctx.settings).cal);
+  if (d != null) td.createSpan({ cls: "ogantt-td-text", text: tr().durationDays(d) });
 }
 
 // 進捗セルの中身（細いメーター＋%）。未設定でも空メーターと「—」を描き、

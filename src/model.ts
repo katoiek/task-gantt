@@ -626,25 +626,6 @@ export function subtreePaths(tasks: Task[], rootPath: string): string[] {
   return out;
 }
 
-// SS/FF 依存で連動しうる後続タスク（推移的・自分は含まない）。Undo のスナップショット対象を書き込み前に決めるために使う
-// SS/FF successors that may be realigned, transitively (excluding the root); used to pick undo snapshot targets before writing
-export function successorClosure(tasks: Task[], rootPath: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>([rootPath]);
-  const queue = [rootPath];
-  while (queue.length) {
-    const pred = queue.shift()!;
-    for (const t of tasks) {
-      if (seen.has(t.path)) continue;
-      if (!t.deps.some((d) => d.path === pred && (d.type === "SS" || d.type === "FF"))) continue;
-      seen.add(t.path);
-      out.push(t.path);
-      queue.push(t.path);
-    }
-  }
-  return out;
-}
-
 // タスクの親を設定/解除し、サブツリーごと destFolder へ移動する（D&D の本体）
 // set/clear a task's parent and move its whole subtree into destFolder (the D&D core)
 // 戻り値：移動履歴（from→to・Undo 用）/ returns the moves made (from → to, for undo)
