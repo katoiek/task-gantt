@@ -42,7 +42,25 @@ export interface Task {
   milestone: boolean;
   parent?: string; // 親タスクのパス（解決済み）/ resolved parent task path
   tags: string[]; // タグ（# 抜き・本文/フロントマター両方を統合）/ tags (without #, frontmatter + inline)
+  // Custom field の値（キーは CustomField.id）。未設定のフィールドは持たない
+  // custom field values keyed by CustomField.id; unset fields are absent
+  custom: Record<string, CustomValue>;
 }
+
+// ── Custom field（設定で宣言する任意のフロントマターキー。テーブルの列になる）──
+// ── custom fields: user-declared frontmatter keys, shown as table columns ──
+export type CustomFieldType = "text" | "number" | "date";
+export const CUSTOM_FIELD_TYPES: CustomFieldType[] = ["text", "number", "date"];
+export interface CustomField {
+  // 追加時に発番する不変の id。列 id（cf:<id>）に使うので、キー名を変えても列の表示・幅・並べ替えが外れない
+  // a stable id minted on creation; column ids (cf:<id>) use it, so renaming the key keeps visibility, width and sort
+  id: string;
+  key: string; // フロントマターのキー / frontmatter key
+  label: string; // 列見出し（空ならキー名）/ column header (falls back to the key)
+  type: CustomFieldType;
+}
+// text のリスト値は配列のまま持ち、表示はカンマ区切り・書き戻しは配列 / a text list stays an array: shown comma-joined, written back as a list
+export type CustomValue = string | number | string[];
 
 // ── 日付フィルタ（Wrike 風の 開始日/期限日 絞り込み）/ date filter (Wrike-style start/due filtering) ──
 // 対象フィールド（開始日 / 期限日）/ target field (start date / due date)

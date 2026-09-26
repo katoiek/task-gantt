@@ -593,6 +593,10 @@
   font-weight: 600;
 }
 /* 進捗列：細いメーター＋% 表記（未設定は空欄）/ progress cell: thin meter + % (blank when unset) */
+/* 数値の Custom field は右揃え / number custom fields align right */
+.ogantt-td-number {
+  text-align: right;
+}
 .ogantt-td-progress {
   display: flex;
   align-items: center;
@@ -973,6 +977,20 @@ input.ogantt-cell-input[type="number"] {
   text-align: left; /* 設定欄は既定で右寄せ / the settings control area right-aligns by default */
 }
 
+/* Custom field 行は 4 列のグリッド（キー / 表示名 / 種類 / 削除）。見出し行も同じグリッドに載せる
+   custom field rows are a 4-column grid (key / label / type / delete); the header row shares it */
+.setting-item.ogantt-cf-row .setting-item-control {
+  display: grid;
+  grid-template-columns: minmax(0, 10em) minmax(0, 11em) minmax(0, 8em) auto;
+  gap: var(--size-4-2);
+  align-items: center;
+  justify-items: start;
+}
+.setting-item.ogantt-cf-row .setting-item-control > input,
+.setting-item.ogantt-cf-row .setting-item-control > select {
+  width: 100%;
+  min-width: 0;
+}
 /* 設定タブの注意書き（例: 「完了」グループが空）/ an advisory line in the settings tab */
 .setting-item.ogantt-setting-warn {
   border-top: none;

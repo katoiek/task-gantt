@@ -9,6 +9,7 @@ import {
   reparentTask,
   subtreePaths,
   successorClosure,
+  validCustomFields,
   writeDates,
   combineDateTime,
   writeField,
@@ -42,7 +43,7 @@ import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変�
 import { schedulePush } from "./gcal/sync";
 import { applyFilters, regroup, GroupBy } from "./filter";
 import { BoardContext, Move, MutateResult } from "./board";
-import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnWidth, taskComparator, visibleColumns } from "./columns";
+import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnWidth, customColumn, taskComparator, visibleColumns } from "./columns";
 
 const ROW_H = 30; // 行の高さ（表とタイムラインで共通）/ shared row height
 const HEAD_H = 40; // ヘッダー高さ / header height
@@ -294,9 +295,16 @@ export class GanttView extends ItemView {
   private visibleColumns(): ColumnDef[] {
     return visibleColumns(this.columns(), this.plugin.settings.visibleColumns ?? []);
   }
-  // 全列の定義（定義順）/ every column definition, in definition order
+  // 全列の定義（組み込み→Custom field の順）。Custom field の構成が変わったときだけ作り直す
+  // every column definition (built-ins, then custom fields); rebuilt only when the custom fields change
+  private columnCache: { sig: string; cols: ColumnDef[] } | null = null;
   private columns(): ColumnDef[] {
-    return BUILTIN_COLUMNS;
+    const fields = validCustomFields(this.plugin.settings);
+    const sig = JSON.stringify(fields);
+    if (this.columnCache?.sig !== sig) {
+      this.columnCache = { sig, cols: [...BUILTIN_COLUMNS, ...fields.map(customColumn)] };
+    }
+    return this.columnCache.cols;
   }
   // 表全体の幅（表示中の列幅の合計）/ total table width (sum of visible column widths)
   private tableWidth(): number {
@@ -2537,7 +2545,7 @@ export class GanttView extends ItemView {
         rerender: () => this.rerender(),
         inlineInput: (cell, value, repaint, commit, configure) => this.inlineInput(cell, value, repaint, commit, configure),
         openPopover: (anchor, cls, build) => this.openPopover(anchor, cls, build),
-        openRangePicker: (anchor, state, active, repaint, save) => this.openRangePicker(anchor, state, active, repaint, save),
+        openRangePicker: (anchor, state, active, repaint, save, single) => this.openRangePicker(anchor, state, active, repaint, save, single),
         attachSuggestions: (inp, fill) => this.attachSuggestions(inp, fill),
         attachSingleTagSuggestions: (inp, exclude) => this.attachSingleTagSuggestions(inp, exclude),
         paintTagChip: (chip, tag) => this.paintTagChip(chip, tag),
@@ -2632,7 +2640,10 @@ export class GanttView extends ItemView {
     state: { start: string; end: string },
     active: "start" | "end",
     repaint: () => void,
-    save: () => void | Promise<void>
+    save: () => void | Promise<void>,
+    // 指定すると単一日付モード（start = end に同じ日を入れ、選んだら閉じる）。値は見出しに出す名前
+    // single-date mode when given: a pick sets start = end to that day and closes; the value names the field
+    single?: string
   ): void {
     activeDocument.querySelectorAll(".ogantt-cal").forEach((e) => e.remove());
     const todayStr = dayToStr(todayIndex());
@@ -2662,6 +2673,13 @@ export class GanttView extends ItemView {
     // 端点を1つ設定して交互に切り替え。逆転時は常に「終了=開始」へ補正（開始は変更しない）
     // set one endpoint, then alternate; on inversion always clamp end = start (never move the start)
     const pick = (ds: string) => {
+      if (single !== undefined) {
+        state.start = state.end = ds;
+        repaint();
+        void save();
+        close();
+        return;
+      }
       if (act === "start") {
         state.start = ds;
         if (state.end && ds > state.end) state.end = ds; // 終了が前に残ったら追従 / end follows forward
@@ -2689,7 +2707,7 @@ export class GanttView extends ItemView {
       setIcon(next, "chevron-right");
       next.onclick = () => { if (++m > 12) { m = 1; y++; } render(); };
 
-      cal.createDiv({ cls: "ogantt-cal-active", text: `▸ ${act === "start" ? tr().fieldStart : tr().fieldDue}` });
+      cal.createDiv({ cls: "ogantt-cal-active", text: `▸ ${single ?? (act === "start" ? tr().fieldStart : tr().fieldDue)}` });
 
       const wkRow = cal.createDiv({ cls: "ogantt-cal-wk" });
       wk.forEach((w) => wkRow.createSpan({ text: w }));
@@ -2716,7 +2734,19 @@ export class GanttView extends ItemView {
         pick(todayStr);
       };
       const clearBtn = foot.createEl("button", { text: tr().clearDate });
-      clearBtn.onclick = () => { state[act] = ""; repaint(); void save(); render(); };
+      clearBtn.onclick = () => {
+        if (single !== undefined) {
+          state.start = state.end = "";
+          repaint();
+          void save();
+          close();
+          return;
+        }
+        state[act] = "";
+        repaint();
+        void save();
+        render();
+      };
     };
 
     // 年ビュー（12ヶ月）/ year view (12 months)

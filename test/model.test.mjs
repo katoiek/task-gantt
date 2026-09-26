@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, successorClosure } from "./model.mjs";
+import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, successorClosure, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -144,6 +144,35 @@ check("statusGroupOf: 未定義 id は undefined", statusGroupOf(statusDefs, "gh
   g[0].deps.push({ path: "C", type: "SS" }); // 循環 A→B→C→A / a cycle
   check("successorClosure: SS/FF を推移的に", JSON.stringify(successorClosure(g, "A").sort()) === JSON.stringify(["B", "C", "F"]));
   check("successorClosure: 後続なしは空", successorClosure(g, "F").length === 0);
+}
+
+// ── Custom field ──
+{
+  const keys = { start: "start", end: "due", status: "status", assignee: "owner", after: "after", progress: "progress", milestone: "milestone", parent: "parent", gcalId: "gcalId", gcal: "gcal" };
+  const cf = (id, key, type = "text") => ({ id, key, label: "", type });
+  const settings = { keys, customFields: [cf("a", "client"), cf("b", " "), cf("c", "due"), cf("d", "tags"), cf("e", "client"), cf("f", "budget", "number")] };
+  const issues = customFieldIssues(settings);
+  check("cf: 空キーは empty", issues.get("b") === "empty");
+  check("cf: 設定済みの組み込みキー（期限＝due）は reserved", issues.get("c") === "reserved");
+  check("cf: tags は reserved", issues.get("d") === "reserved");
+  check("cf: 2 つ目の同じキーは duplicate", issues.get("e") === "duplicate" && !issues.has("a"));
+  check("cf: 有効なものだけ定義順に", validCustomFields(settings).map((f) => f.id).join(",") === "a,f");
+
+  check("cf read: text", readCustomValue("ACME", "text", "system") === "ACME");
+  check("cf read: text の数値は文字列に", readCustomValue(42, "text", "system") === "42");
+  check("cf read: text のリストは配列のまま", JSON.stringify(readCustomValue(["a", "", "b"], "text", "system")) === JSON.stringify(["a", "b"]));
+  check("cf read: 空・null は undefined", readCustomValue("", "text", "system") === undefined && readCustomValue(null, "number", "system") === undefined);
+  check("cf read: number", readCustomValue("12.5", "number", "system") === 12.5 && readCustomValue(3, "number", "system") === 3);
+  check("cf read: 数値にならないものは undefined", readCustomValue("abc", "number", "system") === undefined);
+  check("cf read: date は日付部分のみ", readCustomValue("2024-05-06T10:30", "date", "system") === "2024-05-06");
+  check("cf read: 日付にならないものは undefined", readCustomValue("someday", "date", "system") === undefined);
+
+  check("cf text: リストはカンマ区切り", customValueText(["a", "b"]) === "a, b" && customValueText(undefined) === "");
+  check("cf input: 空は削除", parseCustomInput("  ", "text", false) === undefined);
+  check("cf input: number", parseCustomInput(" 7 ", "number", false) === 7);
+  check("cf input: 数値にならない number は書かない(null)", parseCustomInput("x", "number", false) === null);
+  check("cf input: 元がリストの text はリストに戻す", JSON.stringify(parseCustomInput("a, b ,", "text", true)) === JSON.stringify(["a", "b"]));
+  check("cf input: 元が単一値の text はそのまま", parseCustomInput("a, b", "text", false) === "a, b");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

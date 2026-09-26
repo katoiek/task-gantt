@@ -1,6 +1,6 @@
 // 列定義の並び・表示・並べ替え（visibleColumns / columnWidth / taskComparator）の検証
 // Tests for column order, visibility, widths and sorting (visibleColumns / columnWidth / taskComparator)
-import { BUILTIN_COLUMNS, visibleColumns, columnWidth, taskComparator } from "./columns.mjs";
+import { BUILTIN_COLUMNS, visibleColumns, columnWidth, taskComparator, customColumn, customColumnId } from "./columns.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -59,6 +59,31 @@ check("status: configured order, unknown/unset last", sorted([A, B, C], settings
 check("tags joined", sorted([A, B], settings("tags")) === "A-task,b-task");
 check("desc flips", sorted(ALL, settings("name", "desc")) === "mile,c-task,b-task,A-task");
 check("unknown sort column falls back to start", sorted(ALL, settings("ghost")) === sorted(ALL, settings("start")));
+
+// ── Custom field の列 / custom field columns ──
+{
+  const fText = { id: "t1", key: "client", label: "", type: "text" };
+  const fNum = { id: "n1", key: "budget", label: "Budget", type: "number" };
+  const fDate = { id: "d1", key: "review", label: "", type: "date" };
+  const cols = [...BUILTIN_COLUMNS, customColumn(fText), customColumn(fNum), customColumn(fDate)];
+  check("custom column id", customColumnId(fText) === "cf:t1");
+  check("custom label falls back to the key", customColumn(fText).label() === "client" && customColumn(fNum).label() === "Budget");
+  check("custom columns are optional cells with an editor", [fText, fNum, fDate].map(customColumn).every((c) =>
+    c.kind === "cell" && c.optional && typeof c.edit === "function"));
+  check("custom columns follow the built-ins", ids(visibleColumns(cols, ["cf:n1", "start"])) === "name,start,cf:n1");
+
+  const X = task({ name: "x", custom: { t1: "beta", n1: 10, d1: "2024-02-01" } });
+  const Y = task({ name: "y", custom: { t1: "Alpha", n1: 2 } });
+  const Z = task({ name: "z", custom: {} });
+  const s2 = (sortBy) => ({ sortBy, sortDir: "asc", statuses: STATUSES });
+  const sortedC = (list, s) => list.slice().sort(taskComparator(cols, s)).map((t) => t.name).join(",");
+  check("custom text: case-insensitive, unset first", sortedC([X, Y, Z], s2("cf:t1")) === "z,y,x");
+  check("custom number: numeric, unset first", sortedC([X, Y, Z], s2("cf:n1")) === "z,y,x");
+  const W = task({ name: "w", custom: {} });
+  check("custom number: two unset values compare equal", taskComparator(cols, s2("cf:n1"))(Z, W) === 0);
+  // Y・Z はどちらも未設定なので安定ソートで入力順（z, y）のまま / Y and Z are both unset, so the stable sort keeps z before y
+  check("custom date: unset last", sortedC([Z, X, Y], s2("cf:d1")) === "x,z,y");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

@@ -111,6 +111,11 @@ Phase 1 → Redo（Phase 1-5）→ Phase 2（列レジストリ → Custom field
 - レジストリに動的な列として登録し、表示・ソート・Inline edit に対応させる（date 型は既存の日付ピッカーを流用）。書き込みは `mutate` 経由で Undo 可能にする。
 - 任意: フィルタにも対応させる（text → TextFilter 相当、number / date → 比較演算子）。
 - i18n の新規文言は 8 言語すべてに追加する。
+- **実装済み**（フィルタ対応は未着手）。上の案からの変更点:
+  - `CustomField` は不変の `id` を持ち、列 id は `cf:<id>`。キー名を変えても列の表示・幅・並べ替えが外れない。削除時は `visibleColumns` / `columnWidths` / `sortBy` から片付ける。
+  - `Task.custom` のキーは `CustomField.id`。text のリスト値は配列のまま持ち、表示はカンマ区切り、書き戻しはリスト。date は日付部分のみ扱う。
+  - キーが空・組み込みキー（`settings.keys` の値と `tags`）と衝突・重複するフィールドは列にせず、設定画面に注意書きを出す（`customFieldIssues`）。
+  - 日付の編集は範囲カレンダーに単一日付モード（`openRangePicker` の `single` 引数）を足して流用した。
 
 ---
 
@@ -217,6 +222,7 @@ Phase 1 → Redo (1-5) → Phase 2 (column registry → custom fields) → multi
    - Register as dynamic columns with display, sort and Inline edit (through `mutate`, so undoable); date fields reuse the existing picker.
    - Filters are optional.
    - Add new strings in all 8 languages.
+   - **Done** (filters not yet). Changes from the plan: each `CustomField` has a stable `id` and its column id is `cf:<id>`, so renaming the key keeps the column's visibility, width and sort; deleting a field tidies `visibleColumns` / `columnWidths` / `sortBy`. `Task.custom` is keyed by field id; a text list stays an array (shown comma-joined, written back as a list); dates keep the date part only. Fields with an empty key, a key the plugin already reads (`settings.keys` values and `tags`), or a duplicate key don't become columns, and the settings tab says so (`customFieldIssues`). Date editing reuses the range calendar through a new single-date mode (`openRangePicker`'s `single` argument).
 
 ## Phase 3 (v2.11): Split view.ts and persist per-board state
 

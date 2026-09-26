@@ -1,13 +1,13 @@
-import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting, TextComponent } from "obsidian";
 // 宣言的設定の型（@since 1.13.0）。型のみの参照で実行時 API は呼ばないため、
 // minAppVersion 1.7.2 のままでも no-unsupported-api には触れない。
 // declarative-settings types (@since 1.13.0); type-only references call no runtime API,
 // so they don't trip no-unsupported-api while minAppVersion stays at 1.7.2.
 import type { SettingDefinitionItem, SettingGroupItem } from "obsidian";
 import type GanttPlugin from "./main";
-import { StatusDef, StatusGroup, STATUS_GROUPS, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset } from "./types";
-import { collectAllTags } from "./model";
-import { ConfirmModal, TagSuggestModal } from "./modals";
+import { StatusDef, StatusGroup, STATUS_GROUPS, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset, CustomField, CustomFieldType } from "./types";
+import { collectAllTags, customFieldIssues, filesWithFrontmatterKey, renameFrontmatterKey } from "./model";
+import { ChoiceModal, ConfirmModal, TagSuggestModal } from "./modals";
 import { obsidianTagColor, toHex } from "./colors";
 import { t as tr, statusGroupLabel } from "./i18n";
 import { LEADS, leadLabel, sendTestNotification } from "./notify";
@@ -70,8 +70,10 @@ export interface GanttSettings {
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
   visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
   columnWidths: Record<string, number>; // 列幅の上書き(px)。未設定列は既定幅 / per-column width overrides (px); unset = default
-  sortBy: string; // ソート列 id（name/start/end/progress/assignee/status/tags）/ sort column id
+  sortBy: string; // ソート列 id（name/start/end/progress/assignee/status/tags、Custom field は cf:<id>）/ sort column id (custom fields: cf:<id>)
   sortDir: "asc" | "desc"; // ソート方向 / sort direction
+  // Custom field（任意のフロントマターキーをテーブルの列にする）/ custom fields: arbitrary frontmatter keys as table columns
+  customFields: CustomField[];
   // 統合フィルタ（ステータス/担当者/タグ/開始日/期限日）と結合方法 / unified filters + combine mode
   filters: Filter[];
   filterMatch: FilterMatch; // all=すべてに一致(AND) / any=いずれかに一致(OR)
@@ -155,6 +157,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   columnWidths: {},
   sortBy: "start",
   sortDir: "asc",
+  customFields: [],
   filters: [],
   filterMatch: "all",
   filterPresets: [],
@@ -365,6 +368,124 @@ export class GanttSettingTab extends PluginSettingTab {
           this.redraw();
         })
       );
+  }
+
+  // Custom field 一覧の列見出し（キー / 表示名 / 種類）/ column names for the custom field list (key / label / type)
+  private ctlCustomFieldHeader(setting: Setting): void {
+    setting.setClass("ogantt-setting-row").setClass("ogantt-cf-row").setClass("ogantt-setting-head");
+    const c = setting.controlEl;
+    c.createSpan({ text: tr().setCfKey });
+    c.createSpan({ text: tr().setCfLabel });
+    c.createSpan({ text: tr().setCfType });
+  }
+
+  // Custom field 1 行（キー・表示名・種類・削除）。キーは打つたびではなく確定時（Enter・フォーカス外れ）に反映する。
+  // 打ち替えの途中で列が別のプロパティを読んで空になるのを防ぎ、ノート側のキー変更も確定時に尋ねるため
+  // one custom field row (key, label, type, delete). The key applies on commit (Enter / blur), not per keystroke,
+  // so the column doesn't read some half-typed property and go blank, and renaming it in notes is asked once
+  private ctlCustomFieldRow(setting: Setting, f: CustomField): void {
+    setting
+      .addText((t) => {
+        t.setPlaceholder(tr().setCfKey).setValue(f.key);
+        t.inputEl.addEventListener("change", () => this.commitCustomFieldKey(f, t));
+      })
+      .addText((t) => t.setPlaceholder(tr().setCfLabel).setValue(f.label).onChange((v) => { f.label = v; this.save(); }))
+      .addDropdown((d) => {
+        d.addOption("text", tr().cfTypeText).addOption("number", tr().cfTypeNumber).addOption("date", tr().cfTypeDate);
+        d.setValue(f.type)
+          .onChange((v) => { f.type = v as CustomFieldType; this.save(); })
+          .selectEl.setAttr("aria-label", tr().setCfType);
+      })
+      .addExtraButton((b) =>
+        b.setIcon("trash").setTooltip(tr().setDeleteTooltip).onClick(() => {
+          // 列の表示・幅・並べ替えの設定も片付ける（ノートの値には触れない）
+          // tidy up the column's visibility, width and sort (the values in notes are left alone)
+          const s = this.plugin.settings;
+          const at = s.customFields.indexOf(f);
+          if (at >= 0) s.customFields.splice(at, 1);
+          const col = `cf:${f.id}`;
+          s.visibleColumns = s.visibleColumns.filter((c) => c !== col);
+          delete s.columnWidths[col];
+          if (s.sortBy === col) {
+            s.sortBy = "start";
+            s.sortDir = "asc";
+          }
+          this.save();
+          this.redraw();
+        })
+      );
+  }
+
+  // キーの確定。旧キーの値を持つノートがあれば、ノート側のキーも変えるか尋ねる（設定画面に取り消しは無いので確認を挟む）。
+  // 新旧どちらかが組み込みキー・他フィールドと重複するときは、ノートに触れず設定だけ変える
+  // commit a key change. If notes hold values under the old key, ask whether to rename it there too (the settings
+  // tab has no undo, hence the dialog). When either key clashes with a built-in or another field, only the setting changes
+  private commitCustomFieldKey(f: CustomField, input: TextComponent): void {
+    const s = this.plugin.settings;
+    const oldKey = f.key.trim();
+    const newKey = input.getValue().trim();
+    if (oldKey === newKey) return;
+    const apply = (): void => {
+      f.key = newKey;
+      this.save();
+      this.paintCustomFieldWarning();
+    };
+    const reserved = new Set([...Object.values(s.keys), "tags"]);
+    const clashes = (key: string): boolean => reserved.has(key) || s.customFields.some((o) => o !== f && o.key.trim() === key);
+    const files = oldKey && newKey && !clashes(oldKey) && !clashes(newKey) ? filesWithFrontmatterKey(this.app, oldKey) : [];
+    if (files.length === 0) {
+      apply();
+      return;
+    }
+    new ChoiceModal(this.app, {
+      title: tr().cfRenameTitle,
+      body: tr().cfRenameBody(files.length, oldKey, newKey),
+      sub: tr().cfRenameSub,
+      choices: [
+        { text: tr().cfRenameSettingOnly, onPick: apply },
+        {
+          text: tr().cfRenameInNotes,
+          cta: true,
+          onPick: () => void (async () => {
+            const r = await renameFrontmatterKey(this.app, files, oldKey, newKey);
+            apply();
+            new Notice(tr().cfRenamed(r.renamed) + (r.skipped ? `\n${tr().cfRenameSkipped(r.skipped, newKey)}` : ""));
+          })(),
+        },
+      ],
+      onDismiss: () => input.setValue(oldKey), // 選ばずに閉じたら元のキーへ / closing without a choice reverts the key
+    }).open();
+  }
+
+  // Custom field を 1 件追加。id は不変（キーを変えても列の設定が外れない）。追加した列は最初から表示する
+  // add a custom field; its id never changes (renaming the key keeps the column's settings), and its column starts out visible
+  private addCustomField(): void {
+    const s = this.plugin.settings;
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    s.customFields.push({ id, key: "", label: "", type: "text" });
+    s.visibleColumns = [...s.visibleColumns, `cf:${id}`];
+    this.save();
+    this.redraw();
+  }
+
+  // Custom field の注意書き（空キー・組み込みキーとの衝突・重複）を差し替える
+  // refresh the custom field advisory (empty keys, clashes with built-in keys, duplicates)
+  private cfWarn: Setting | null = null;
+  private paintCustomFieldWarning(): void {
+    if (!this.cfWarn) return;
+    const el = this.cfWarn.descEl;
+    el.empty();
+    const s = this.plugin.settings;
+    const issues = customFieldIssues(s);
+    const lines = new Set<string>();
+    for (const f of s.customFields) {
+      const issue = issues.get(f.id);
+      if (issue === "empty") lines.add(tr().setCfEmpty);
+      else if (issue === "reserved") lines.add(tr().setCfReserved(f.key.trim()));
+      else if (issue === "duplicate") lines.add(tr().setCfDuplicate(f.key.trim()));
+    }
+    for (const line of lines) el.createDiv({ text: line });
+    this.cfWarn.settingEl.toggle(lines.size > 0); // 何も無ければ行ごと隠す / hide the whole row when there's nothing to say
   }
 
   // 「完了」が空だと完了プリセットが常に 0 件になるので、その旨だけ伝える（禁止はしない）
@@ -684,6 +805,33 @@ export class GanttSettingTab extends PluginSettingTab {
       ...(statusWarn
         ? [{ name: "", desc: statusWarn, render: (x: Setting) => { x.setClass("ogantt-setting-warn"); } }]
         : []),
+      // Custom field（説明→列見出し→行、追加はフレームワークの list、削除は行内のゴミ箱）
+      // custom fields: description, column header, rows; the list owns add, rows own delete
+      {
+        type: "list",
+        heading: tr().setCustomFieldsHeading,
+        items: [
+          { name: "", desc: tr().setCustomFieldsDesc },
+          ...(s.customFields.length > 0 ? [{ name: "", render: (x: Setting) => this.ctlCustomFieldHeader(x) }] : []),
+          ...s.customFields.map((f): SettingGroupItem => ({
+            name: "",
+            render: (x) => {
+              x.setClass("ogantt-setting-row").setClass("ogantt-cf-row");
+              this.ctlCustomFieldRow(x, f);
+            },
+          })),
+        ],
+        addItem: { name: tr().setAddCustomField, action: () => this.addCustomField() },
+      },
+      // 注意書き（中身はキー入力のたびにその場で差し替える）/ the advisory, repainted in place as keys are typed
+      {
+        name: "",
+        render: (x: Setting) => {
+          x.setClass("ogantt-setting-warn");
+          this.cfWarn = x;
+          this.paintCustomFieldWarning();
+        },
+      },
       // タグの色（フォルダの色は表で右クリック）/ tag colors (folder colors via right-click in the table)
       // 見出しの無い単独項目は直前のグループ（ステータス）に吸い寄せられて見えるので、
       // 既定色は「タグの色」見出しを持つグループの中に置く
@@ -857,6 +1005,17 @@ export class GanttSettingTab extends PluginSettingTab {
     );
     const statusWarn = this.statusGroupWarning();
     if (statusWarn) new Setting(containerEl).setClass("ogantt-setting-warn").setDesc(statusWarn);
+
+    // Custom field（キー / 表示名 / 種類＋削除、末尾に追加ボタンと注意書き）
+    // custom fields: key / label / type + delete, then the add button and the advisory
+    new Setting(containerEl).setName(tr().setCustomFieldsHeading).setDesc(tr().setCustomFieldsDesc).setHeading();
+    if (s.customFields.length > 0) this.ctlCustomFieldHeader(new Setting(containerEl));
+    for (const f of s.customFields) {
+      this.ctlCustomFieldRow(new Setting(containerEl).setClass("ogantt-setting-row").setClass("ogantt-cf-row"), f);
+    }
+    new Setting(containerEl).addButton((b) => b.setButtonText(tr().setAddCustomField).onClick(() => this.addCustomField()));
+    this.cfWarn = new Setting(containerEl).setClass("ogantt-setting-warn");
+    this.paintCustomFieldWarning();
 
     // タグの色（名前＋色＋削除。フォルダの色は表で右クリック）/ tag colors (name + color + delete; folder colors via right-click in the table)
     new Setting(containerEl).setName(tr().setTagColorsHeading).setHeading();

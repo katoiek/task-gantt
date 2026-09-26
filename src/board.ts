@@ -40,7 +40,8 @@ export interface BoardContext {
     state: { start: string; end: string },
     active: "start" | "end",
     repaint: () => void,
-    save: () => void | Promise<void>
+    save: () => void | Promise<void>,
+    single?: string // 単一日付モード（見出しに出す名前）/ single-date mode (the field name shown)
   ): void;
   // 入力欄に datalist の候補を付ける / attach datalist suggestions to an input
   attachSuggestions(inp: HTMLInputElement, fill: (list: HTMLDataListElement) => void): HTMLDataListElement;

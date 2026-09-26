@@ -1,6 +1,6 @@
 import { App, TFile, TFolder, getAllTags, normalizePath } from "obsidian";
 import { GanttSettings } from "./settings";
-import { Task, Row, Dep, DepType, StatusDef, StatusGroup } from "./types";
+import { Task, Row, Dep, DepType, StatusDef, StatusGroup, CustomField, CustomFieldType, CustomValue } from "./types";
 
 // ── ステータスグループ / status groups ──
 // 移行用の推測に使うキーワード（id・ラベルを小文字化して部分一致）。上から順に評価し、
@@ -29,6 +29,110 @@ export function inferStatusGroup(id: string, label: string): StatusGroup {
 export function statusGroupOf(statuses: StatusDef[], status?: string): StatusGroup | undefined {
   if (!status) return undefined;
   return statuses.find((s) => s.id === status)?.group;
+}
+
+// Custom field の不備（列にしない理由）/ why a custom field can't become a column
+export type CustomFieldIssue = "empty" | "reserved" | "duplicate";
+
+// 各 Custom field の不備を調べる。キーが空、組み込みキー（開始・期限などの設定キーと tags）と同じ、
+// または先に同じキーのフィールドがある場合は列にしない
+// check each custom field: an empty key, a key the plugin already reads (the configured built-in keys and
+// `tags`), or a key an earlier field already uses keeps it from becoming a column
+export function customFieldIssues(settings: GanttSettings): Map<string, CustomFieldIssue> {
+  const reserved = new Set([...Object.values(settings.keys), "tags"]);
+  const seen = new Set<string>();
+  const out = new Map<string, CustomFieldIssue>();
+  for (const f of settings.customFields ?? []) {
+    const key = f.key.trim();
+    if (!key) out.set(f.id, "empty");
+    else if (reserved.has(key)) out.set(f.id, "reserved");
+    else if (seen.has(key)) out.set(f.id, "duplicate");
+    seen.add(key);
+  }
+  return out;
+}
+
+// 列にできる Custom field（定義順）/ the custom fields that can be columns, in definition order
+export function validCustomFields(settings: GanttSettings): CustomField[] {
+  const issues = customFieldIssues(settings);
+  return (settings.customFields ?? []).filter((f) => !issues.has(f.id));
+}
+
+// フロントマターの生の値を Custom field の型に合わせて読む。読めない・空は undefined
+// read a raw frontmatter value as the field's type; unreadable or empty gives undefined
+export function readCustomValue(raw: unknown, type: CustomFieldType, tz: string): CustomValue | undefined {
+  if (raw == null || raw === "") return undefined;
+  if (type === "number") {
+    const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+    return Number.isFinite(n) ? n : undefined;
+  }
+  if (type === "date") return parseStored(raw, tz)?.date; // 日付部分のみ / the date part only
+  if (Array.isArray(raw)) {
+    const list = (raw as unknown[]).filter((x) => x != null && x !== "").map((x) => String(x));
+    return list.length ? list : undefined;
+  }
+  return String(raw);
+}
+
+// 表示用の文字列（リストはカンマ区切り）/ display text (a list is comma-joined)
+export function customValueText(v: CustomValue | undefined): string {
+  if (v == null) return "";
+  return Array.isArray(v) ? v.join(", ") : String(v);
+}
+
+// 入力欄の文字列を書き込む値へ。空は削除（undefined）。text は元がリストならカンマで区切ってリストに戻す。
+// number で数値にならない入力は null（＝書き込まない）
+// turn an input string into the value to write: blank deletes (undefined); a text field that held a list is split
+// back into a list on commas; a number field given a non-number yields null (= don't write)
+export function parseCustomInput(input: string, type: CustomFieldType, wasList: boolean): CustomValue | undefined | null {
+  const v = input.trim();
+  if (v === "") return undefined;
+  if (type === "number") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (type === "text" && wasList) {
+    const list = v.split(",").map((x) => x.trim()).filter((x) => x !== "");
+    return list.length ? list : undefined;
+  }
+  return v;
+}
+
+// そのキーをフロントマターに持つノート（Vault 全体）/ notes whose frontmatter has the key (whole vault)
+export function filesWithFrontmatterKey(app: App, key: string): TFile[] {
+  if (!key) return [];
+  return app.vault.getMarkdownFiles().filter((f) => {
+    const fm = app.metadataCache.getFileCache(f)?.frontmatter;
+    return !!fm && Object.prototype.hasOwnProperty.call(fm, key);
+  });
+}
+
+// フロントマターのキー名を変える（Custom field のキー変更に合わせてノート側も移す）。
+// 新しいキーに既に値があるノートは上書きせずに飛ばす
+// rename a frontmatter key (moves notes along with a custom field's key change); a note that already
+// has a value under the new key is skipped rather than overwritten
+export async function renameFrontmatterKey(
+  app: App,
+  files: TFile[],
+  oldKey: string,
+  newKey: string
+): Promise<{ renamed: number; skipped: number }> {
+  let renamed = 0;
+  let skipped = 0;
+  for (const file of files) {
+    await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+      if (!Object.prototype.hasOwnProperty.call(fm, oldKey)) return;
+      const cur = fm[newKey];
+      if (cur != null && cur !== "") {
+        skipped++;
+        return;
+      }
+      fm[newKey] = fm[oldKey];
+      delete fm[oldKey];
+      renamed++;
+    });
+  }
+  return { renamed, skipped };
 }
 
 // after の生エントリから型と リンクを分離 / split a raw `after` entry into type + link
@@ -149,6 +253,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
   walk(root);
 
   const k = settings.keys;
+  const fields = validCustomFields(settings);
   const rawAfter = new Map<string, string[]>(); // path -> 生の after / raw after entries
   const rawParent = new Map<string, string>(); // path -> 生の parent リンク / raw parent link
   const tasks: Task[] = files.map((file) => {
@@ -177,6 +282,12 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       const link = Array.isArray(pv) ? (pv as unknown[])[0] : pv;
       rawParent.set(file.path, String(link));
     }
+    // Custom field（値のあるものだけ）/ custom fields (only those with a value)
+    const custom: Record<string, CustomValue> = {};
+    for (const f of fields) {
+      const v = readCustomValue(fm[f.key.trim()], f.type, settings.tz);
+      if (v !== undefined) custom[f.id] = v;
+    }
     return {
       path: file.path,
       name: file.basename,
@@ -192,6 +303,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       milestone,
       parent: undefined,
       tags,
+      custom,
     };
   });
 

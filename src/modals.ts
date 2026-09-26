@@ -35,6 +35,41 @@ export class ConfirmModal extends Modal {
   }
 }
 
+// ボタンで 1 つ選ばせるダイアログ。どれも選ばずに閉じたら（Esc・×・外側クリック）onDismiss
+// a dialog that asks for one of several buttons; closing without choosing (Esc, ×, outside click) calls onDismiss
+export interface ChoiceOpts {
+  title: string;
+  body: string;
+  sub?: string;
+  choices: { text: string; cta?: boolean; onPick: () => void }[];
+  onDismiss: () => void;
+}
+export class ChoiceModal extends Modal {
+  private picked = false;
+  constructor(app: App, private opts: ChoiceOpts) {
+    super(app);
+  }
+  onOpen(): void {
+    this.titleEl.setText(this.opts.title);
+    this.contentEl.createEl("p", { text: this.opts.body });
+    if (this.opts.sub) this.contentEl.createEl("p", { cls: "ogantt-confirm-sub", text: this.opts.sub });
+    const btns = this.contentEl.createDiv({ cls: "ogantt-confirm-btns" });
+    for (const c of this.opts.choices) {
+      const b = btns.createEl("button", { cls: c.cta ? "mod-cta" : "", text: c.text });
+      b.onclick = () => {
+        this.picked = true;
+        this.close();
+        c.onPick();
+      };
+      if (c.cta) window.setTimeout(() => b.focus(), 0); // Enter で主な選択肢 / Enter picks the main choice
+    }
+  }
+  onClose(): void {
+    this.contentEl.empty();
+    if (!this.picked) this.opts.onDismiss();
+  }
+}
+
 // 候補一覧から1件選ばせる小さなピッカー（タグ名の手入力ミスを避けるために使う）
 // a small picker over a fixed list of choices, used so tag names never have to be typed by hand
 export class TagSuggestModal extends SuggestModal<string> {

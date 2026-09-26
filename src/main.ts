@@ -144,6 +144,7 @@ export default class GanttPlugin extends Plugin {
     this.settings.tagColors = (this.settings.tagColors ?? []).map((c) => ({ ...c }));
     this.settings.folderColors = (this.settings.folderColors ?? []).map((c) => ({ ...c }));
     this.settings.columnWidths = { ...(this.settings.columnWidths ?? {}) };
+    this.settings.customFields = (this.settings.customFields ?? []).map((f) => ({ ...f }));
     // 通知設定も既定とマージ＆複製 / merge notify settings with defaults and clone containers
     this.settings.notify = Object.assign({}, DEFAULT_SETTINGS.notify, this.settings.notify);
     this.settings.notify.leads = [...(this.settings.notify.leads ?? [])];

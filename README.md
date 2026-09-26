@@ -56,6 +56,16 @@ An options row above the table shapes how the board is displayed.
 
 ![The Progress column and the progress line, both enabled from the view options](docs/images/progressline_en.png)
 
+## Custom fields
+
+Show any frontmatter key as a table column. In **Settings → Task Gantt → Custom fields**, click **Add field** and give it a **key** (the frontmatter property, e.g. `client`), an optional **label** for the column header, and a **type**:
+
+- **Text** — shown as is. A list value is shown comma-separated, and editing it writes a list back.
+- **Number** — right-aligned and sorted numerically.
+- **Date** — shown in your date format and edited with the same calendar as Start / Due (the date part only).
+
+A new field's column is shown right away; hide or show it from the gear menu like any other column. Custom columns sort by clicking their header and are edited by double-clicking a cell, and every edit can be undone. Changing a field's key keeps its column's visibility, width and sort, and takes effect when you press Enter or leave the box. If notes still hold values under the old key, you're asked whether to rename that property in those notes too (a note that already has a value under the new key is never overwritten) or only to point the column at the new key. Keys the plugin already reads (the Start / Due / Status / … keys under **Frontmatter keys**, and `tags`) can't be used, and if two fields share a key only the first becomes a column — the settings tab says so.
+
 ## Filters
 
 A **filter row** below the options narrows the board. Click **Add filter** and pick a field — **Name**, **Status**, **Status group**, **Assignee**, **Tag**, **Start date**, or **Due date** — then set its condition. Each filter shows as a chip you can click to edit or remove with **×**.
@@ -231,7 +241,7 @@ See [`docs/adr/`](./docs/adr/) for the rationale behind design decisions (latest
 
 ## Limitations
 
-Auto-scheduling (critical path), sub-day time granularity, and cross-folder aggregation are not implemented. Custom-field columns are planned.
+Auto-scheduling (critical path), sub-day time granularity, and cross-folder aggregation are not implemented. Custom fields can't be used in filters yet.
 
 ## License
 
@@ -296,6 +306,16 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 **稲妻線**は、今日を基準にした垂線を各タスクの実績到達点まで折り曲げた折れ線です。**今日より左に折れれば遅れ、右なら進み**を意味します。各行の点は、タスクの `progress` に対応するバー上の位置に置かれます（先週が期限なのに 40% のタスクは、線をその 40% 地点まで引き戻します）。100% のタスク、まだ開始日が来ていない未着手タスク、フォルダ行、ロールアップ中の親バーは今日線上を素通りします。開始日を過ぎているのに進捗 0% のタスクは、線を開始日まで引き戻します。線の色は**設定 → Task Gantt → 稲妻線の色**で変更できます。
 
 ![進捗列と稲妻線（どちらも表示オプションから有効化）](docs/images/progressline_ja.png)
+
+## カスタムフィールド
+
+任意のフロントマターのキーを、テーブルの列として表示できます。**設定 → Task Gantt → カスタムフィールド**で**フィールドを追加**を押し、**キー**（フロントマターのプロパティ名。例: `client`）、列見出しに使う**表示名**（省略可）、**種類**を指定します。
+
+- **テキスト** — そのまま表示します。リストの値はカンマ区切りで表示し、編集するとリストのまま書き戻します。
+- **数値** — 右揃えで表示し、数値として並べ替えます。
+- **日付** — 設定の日付形式で表示し、開始・期限と同じカレンダーで編集します（日付部分のみ）。
+
+追加したフィールドの列はすぐに表示され、ほかの列と同じく歯車メニューで表示を切り替えられます。見出しのクリックで並べ替え、セルのダブルクリックで編集でき、編集はすべて取り消せます。キー名を変えても、列の表示・幅・並べ替えの設定はそのまま残ります。キーの変更は Enter を押すか入力欄を離れたときに反映され、旧キーの値を持つノートがあれば、ノート側のプロパティ名も変えるか（新しいキーに既に値があるノートは上書きしません）、列が読むキーだけを変えるかを尋ねます。プラグインが既に使っているキー（**フロントマターのキー名**にある開始・期限・ステータスなどのキーと `tags`）は使えません。また、同じキーのフィールドが複数あるときは最初の 1 つだけが列になります。どちらも設定画面に注意書きが出ます。
 
 ## フィルタ
 
@@ -472,7 +492,7 @@ npm test         # ヘッドレスのモデルテスト
 
 ## 既知の制限
 
-自動スケジューリング（クリティカルパス）・時刻粒度・複数フォルダ横断は未実装。カスタムフィールド列は予定。
+自動スケジューリング（クリティカルパス）・時刻粒度・複数フォルダ横断は未実装。カスタムフィールドはまだフィルタに使えません。
 
 ## ライセンス
 

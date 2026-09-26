@@ -3,8 +3,17 @@
 import { setIcon } from "obsidian";
 import type { BoardContext } from "./board";
 import type { GanttSettings } from "./settings";
-import type { Row, Task } from "./types";
-import { anchorStart, anchorEnd, combineDateTime, writeField, addTag, removeTag } from "./model";
+import type { Row, Task, CustomField, CustomValue } from "./types";
+import {
+  anchorStart,
+  anchorEnd,
+  combineDateTime,
+  writeField,
+  addTag,
+  removeTag,
+  customValueText,
+  parseCustomInput,
+} from "./model";
 import { formatDate } from "./timeline";
 import { t as tr } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 
@@ -184,6 +193,76 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
     editAria: () => tr().editTags,
   },
 ];
+
+// ----- Custom field の列 / custom field columns -----
+
+// Custom field の列 id / the column id of a custom field
+export function customColumnId(f: CustomField): string {
+  return `cf:${f.id}`;
+}
+
+// Custom field 1 件を列にする（組み込み列の後ろに定義順で並ぶ）/ turn one custom field into a column (after the built-ins, in definition order)
+export function customColumn(f: CustomField): CellColumn {
+  const name = (): string => f.label.trim() || f.key.trim();
+  return {
+    kind: "cell",
+    id: customColumnId(f),
+    label: name,
+    width: f.type === "text" ? 120 : 96,
+    optional: true,
+    // text は大文字小文字無視・未設定が先頭、number は未設定が先頭、date は未設定が末尾（開始・期限と同じ）
+    // text: case-insensitive, unset first; number: unset first; date: unset last (like start / due)
+    sortKey: (t) => {
+      const v = t.custom[f.id];
+      if (f.type === "number") return typeof v === "number" ? v : -Number.MAX_VALUE; // -Infinity 同士の差は NaN になるため / -Infinity - -Infinity is NaN
+      if (f.type === "date") return typeof v === "string" ? v : NO_DATE;
+      return customValueText(v).toLowerCase();
+    },
+    paint: (ctx, td, row) => {
+      td.empty();
+      const v = row.task!.custom[f.id];
+      if (v == null) return;
+      const text = f.type === "date" && typeof v === "string" ? formatDate(v, ctx.settings.dateFormat) : customValueText(v);
+      td.createSpan({ cls: "ogantt-td-text", text });
+      if (f.type === "number") td.addClass("ogantt-td-number");
+    },
+    edit: (ctx, cell, row) => {
+      const t = row.task!;
+      const v = t.custom[f.id];
+      // 書き込み＋再読込（取り消し可）/ write, then reload (undoable)
+      const write = async (next: CustomValue | undefined): Promise<void> => {
+        await ctx.mutate(tr().undoEdit(t.name), [t.path], () => writeField(ctx.app, t.path, f.key.trim(), next));
+        await ctx.refresh();
+      };
+      if (f.type === "date") {
+        const d = typeof v === "string" ? v : "";
+        const state = { start: d, end: d };
+        ctx.openRangePicker(cell, state, "start", () => {}, () => (state.start === d ? undefined : write(state.start || undefined)), name());
+        return;
+      }
+      const repaint = (): void => {
+        cell.empty();
+        const text = customValueText(v);
+        if (text) cell.createSpan({ cls: "ogantt-td-text", text });
+      };
+      ctx.inlineInput(
+        cell,
+        customValueText(v),
+        repaint,
+        async (raw) => {
+          const next = parseCustomInput(raw, f.type, Array.isArray(v));
+          if (next === null) {
+            repaint(); // 数値にならない入力は書き込まない / a non-number isn't written
+            return;
+          }
+          await write(next);
+        },
+        f.type === "number" ? (inp) => { inp.type = "number"; } : undefined
+      );
+    },
+    editAria: () => tr().editCustomField(name()),
+  };
+}
 
 // ----- 並び・表示・比較（純粋関数）/ order, visibility and comparison (pure) -----
 
