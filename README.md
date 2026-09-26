@@ -234,6 +234,10 @@ The plugin has no server, so it uses **your own Google Cloud project**:
 - **Account & credentials**: requires a Google account and your own Google Cloud OAuth client. The plugin requests only the `calendar.events` and `calendar.calendarlist.readonly` scopes. The OAuth **client secret and refresh token are stored in Obsidian's secret storage** (the OS keychain), not in the plugin's `data.json`, so they don't travel with vault sync, backups, or git. Only the client ID stays in `data.json`. Secret storage is per device, so connect again on each device. Upgrading from 2.9.3 or earlier moves the old plain-text values out of `data.json` automatically; if that file was ever committed to git or shared, reset the client secret in Google Cloud Console and reconnect.
 - Mobile is not supported (the OAuth loopback needs a desktop); other features work on mobile as usual.
 
+## Vault access
+
+To build the board, the plugin lists the Markdown files in your vault and reads their frontmatter through Obsidian's metadata cache. When the board is opened on a folder, only notes under that folder are shown, but notifications look at the whole vault, and renaming a custom field's key searches every note for that key. Nothing read this way leaves your device; the only network use is the optional notifications and Google Calendar sync described above.
+
 ## Development
 
 ```bash
@@ -494,6 +498,10 @@ after:
 - **ネットワーク利用について**：接続すると Google の OAuth / Calendar API とのみ通信し、同期対象タスクの名前・日付・本文抜粋（先頭500文字）とノートへ戻るリンクを送信します。未設定（既定）の場合、ネットワークアクセスは一切行いません。
 - **アカウントと認証情報**：Google アカウントと自身の Google Cloud OAuth クライアントが必要です。要求スコープは `calendar.events` と `calendar.calendarlist.readonly` のみです。OAuth の**クライアントシークレットとリフレッシュトークンは Obsidian のシークレットストレージ（OS のキーチェーン）に保存**され、プラグインの `data.json` には書き込まれません。そのため Vault の同期・バックアップ・git には含まれません。`data.json` に残るのはクライアント ID のみです。シークレットストレージは端末ごとの保存なので、端末ごとに接続し直してください。2.9.3 以前から更新すると、`data.json` に平文で残っていた値は自動で移行・削除されます。過去に `data.json` を git へコミット・共有したことがある場合は、Google Cloud Console でクライアントシークレットを再発行し、接続し直してください。
 - モバイルは非対応です（OAuth のループバック受信にデスクトップが必要）。他の機能は従来どおりモバイルでも動作します。
+
+## Vault へのアクセス
+
+ボードを組み立てるため、プラグインは Vault 内の Markdown ファイルを一覧し、Obsidian のメタデータキャッシュを通してフロントマターを読み取ります。フォルダを開いたときに表示されるのはそのフォルダ配下のノートだけです。ただし、通知は Vault 全体を対象にし、カスタムフィールドのキー名を変えるときは全ノートからそのキーを探します。読み取った内容が端末の外へ出ることはありません。ネットワークを使うのは、上に書いた任意の通知と Google カレンダー同期だけです。
 
 ## 開発
 
