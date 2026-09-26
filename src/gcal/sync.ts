@@ -8,6 +8,7 @@ import { Task } from "../types";
 import { t as tr } from "../i18n";
 import { GcalApiError, GEvent, deleteEvent, insertEvent, listEvents, patchEvent } from "./api";
 import { buildEvent, fromEvent, hasDates, taskHash, TaskLike } from "./map";
+import { isConnected } from "./auth";
 
 // 初回フル取得の下限（過去90日）/ initial full sync lower bound (90 days back)
 const FULL_SYNC_DAYS = 90;
@@ -22,7 +23,7 @@ let pushTimer = 0;
 // 同期を実行できる状態か / can we sync at all?
 function ready(plugin: GanttPlugin): boolean {
   const g = plugin.settings.gcal;
-  return Platform.isDesktop && !!g.refreshToken && !!g.calendarId && (g.pushEnabled || g.pullEnabled);
+  return Platform.isDesktop && isConnected(plugin) && !!g.calendarId && (g.pushEnabled || g.pullEnabled);
 }
 
 // 同期スコープのタスク（設定フォルダ・日付あり・オプトイン条件）/ tasks in the sync scope

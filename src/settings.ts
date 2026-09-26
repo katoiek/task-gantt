@@ -1,8 +1,8 @@
 import { App, Notice, Platform, PluginSettingTab, Setting, TextComponent } from "obsidian";
 // 宣言的設定の型（@since 1.13.0）。型のみの参照で実行時 API は呼ばないため、
-// minAppVersion 1.7.2 のままでも no-unsupported-api には触れない。
+// minAppVersion 1.11.4 のままでも no-unsupported-api には触れない。
 // declarative-settings types (@since 1.13.0); type-only references call no runtime API,
-// so they don't trip no-unsupported-api while minAppVersion stays at 1.7.2.
+// so they don't trip no-unsupported-api while minAppVersion stays at 1.11.4.
 import type { SettingDefinitionItem, SettingGroupItem } from "obsidian";
 import type GanttPlugin from "./main";
 import { StatusDef, StatusGroup, STATUS_GROUPS, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset, CustomField, CustomFieldType } from "./types";
@@ -14,6 +14,7 @@ import { LEADS, leadLabel, sendTestNotification } from "./notify";
 import { connectGoogle, disconnectGoogle, isConnected } from "./gcal/auth";
 import { listCalendars } from "./gcal/api";
 import { syncGcal } from "./gcal/sync";
+import { getClientSecret, setClientSecret } from "./gcal/secrets";
 
 // タイムゾーン一覧（実在するオフセットのみ・代表都市付き）/ timezone list (real offsets only, with representative cities)
 const TZ_CITIES: [string, string][] = [
@@ -98,8 +99,8 @@ export interface GanttSettings {
   // Google カレンダー双方向同期 / Google Calendar two-way sync
   gcal: {
     clientId: string; // ユーザー自身の GCP OAuth クライアント / the user's own GCP OAuth client
-    clientSecret: string;
-    refreshToken: string; // 空=未接続。data.json に平文保存（README で開示）/ empty = not connected; stored in plain text
+    // クライアントシークレットとリフレッシュトークンは SecretStorage に置く（gcal/secrets.ts）
+    // the client secret and refresh token live in SecretStorage (gcal/secrets.ts)
     calendarId: string; // 同期先カレンダー / target calendar
     calendarName: string; // 表示用 / display only
     pushEnabled: boolean; // タスク → GCal / task → GCal
@@ -176,8 +177,6 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   },
   gcal: {
     clientId: "",
-    clientSecret: "",
-    refreshToken: "",
     calendarId: "",
     calendarName: "",
     pushEnabled: true,
@@ -245,9 +244,9 @@ export class GanttSettingTab extends PluginSettingTab {
     else this.draw();
   }
 
-  // update() は @since 1.13.0。minAppVersion 1.7.2 を保つため型付きの直接呼び出しを避け、
+  // update() は @since 1.13.0。minAppVersion 1.11.4 を保つため型付きの直接呼び出しを避け、
   // 実行時に存在するときだけ呼ぶ（1.12 以下では declarative が false なのでそもそも通らない）。
-  // update() is @since 1.13.0; to keep minAppVersion at 1.7.2 we avoid a typed direct call and
+  // update() is @since 1.13.0; to keep minAppVersion at 1.11.4 we avoid a typed direct call and
   // invoke it only when it exists at runtime (on 1.12 and older, `declarative` is never true).
   private updateDeclarative(): void {
     (this as unknown as { update?: () => void }).update?.();
@@ -600,11 +599,11 @@ export class GanttSettingTab extends PluginSettingTab {
     setting.addText((t) => t.setValue(g.clientId).onChange((v) => { g.clientId = v.trim(); this.save(); }));
   }
 
+  // 入力値は data.json ではなく SecretStorage へ保存 / saved to SecretStorage, not data.json
   private ctlGcalClientSecret(setting: Setting): void {
-    const g = this.plugin.settings.gcal;
     setting.addText((t) => {
       t.inputEl.type = "password";
-      t.setValue(g.clientSecret).onChange((v) => { g.clientSecret = v.trim(); this.save(); });
+      t.setValue(getClientSecret(this.plugin)).onChange((v) => setClientSecret(this.plugin, v.trim()));
     });
   }
 
@@ -612,9 +611,9 @@ export class GanttSettingTab extends PluginSettingTab {
   private ctlGcalAccount(setting: Setting): void {
     setting.addButton((b) => {
       if (isConnected(this.plugin)) {
-        // setDestructive() は @since 1.13.0 で minAppVersion 1.7.2 と両立しない（no-unsupported-api エラー）。
+        // setDestructive() は @since 1.13.0 で minAppVersion 1.11.4 と両立しない（no-unsupported-api エラー）。
         // 非推奨の setWarning() も避け、それが付けるのと同じ mod-warning クラスを直接付ける。
-        // setDestructive() requires @since 1.13.0, incompatible with minAppVersion 1.7.2 (trips no-unsupported-api);
+        // setDestructive() requires @since 1.13.0, incompatible with minAppVersion 1.11.4 (trips no-unsupported-api);
         // instead of the deprecated setWarning(), add the same mod-warning class it applies.
         b.buttonEl.addClass("mod-warning");
         b.setButtonText(tr().setGcalDisconnect).onClick(() => void (async () => {
@@ -964,12 +963,12 @@ export class GanttSettingTab extends PluginSettingTab {
   }
 
   // ===== display()（1.13 未満向けのフォールバック）=====
-  // 1.13 以降は getSettingDefinitions() が使われ、このメソッドは呼ばれない。minAppVersion 1.7.2 を
+  // 1.13 以降は getSettingDefinitions() が使われ、このメソッドは呼ばれない。minAppVersion 1.11.4 を
   // 保つ間は 1.12.x のために残す必要があり、公式ガイドもこの併設（Path B）を案内している。
   // 非推奨 API の「呼び出し」を避けるため、再描画は this.draw() に委譲し this.display() は内部から呼ばない。
   // ===== display(): the fallback for Obsidian older than 1.13 =====
   // From 1.13 on, getSettingDefinitions() renders the tab and this method is never called. It has to
-  // stay for 1.12.x while minAppVersion is 1.7.2; the official guide calls this dual setup "Path B".
+  // stay for 1.12.x while minAppVersion is 1.11.4; the official guide calls this dual setup "Path B".
   // To avoid invoking the deprecated API, redraws go via this.draw(); we never call this.display() ourselves.
   display(): void {
     this.draw();

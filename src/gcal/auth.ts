@@ -6,6 +6,7 @@
 import { Notice, Platform, requestUrl } from "obsidian";
 import type GanttPlugin from "../main";
 import { t as tr } from "../i18n";
+import { getClientSecret, getRefreshToken, setRefreshToken } from "./secrets";
 
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -15,8 +16,8 @@ const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const SCOPES =
   "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 
-// アクセストークンはメモリ保持のみ（リフレッシュトークンだけ data.json に永続化）
-// the access token lives in memory only (just the refresh token is persisted in data.json)
+// アクセストークンはメモリ保持のみ（リフレッシュトークンだけ SecretStorage に永続化）
+// the access token lives in memory only (just the refresh token is persisted, in SecretStorage)
 let accessToken = "";
 let accessTokenExp = 0; // 失効時刻 / expiry (epoch ms)
 
@@ -79,7 +80,7 @@ async function tokenRequest(params: Record<string, string>): Promise<{ status: n
 
 // 接続済みか / connected?
 export function isConnected(plugin: GanttPlugin): boolean {
-  return !!plugin.settings.gcal.refreshToken;
+  return !!getRefreshToken(plugin);
 }
 
 // 接続フロー：ローカルサーバー起動 → ブラウザで同意 → コード交換 → リフレッシュトークン保存
@@ -91,7 +92,8 @@ export async function connectGoogle(plugin: GanttPlugin): Promise<boolean> {
     new Notice(tr().gcalDesktopOnly);
     return false;
   }
-  if (!g.clientId || !g.clientSecret) {
+  const clientSecret = getClientSecret(plugin);
+  if (!g.clientId || !clientSecret) {
     new Notice(tr().gcalNeedClient);
     return false;
   }
@@ -156,7 +158,7 @@ export async function connectGoogle(plugin: GanttPlugin): Promise<boolean> {
   const { status, json } = await tokenRequest({
     code,
     client_id: g.clientId,
-    client_secret: g.clientSecret,
+    client_secret: clientSecret,
     redirect_uri: redirectUri,
     grant_type: "authorization_code",
     code_verifier: verifier,
@@ -182,7 +184,7 @@ export async function connectGoogle(plugin: GanttPlugin): Promise<boolean> {
     await plugin.saveData(plugin.settings);
     return false;
   }
-  g.refreshToken = json.refresh_token;
+  setRefreshToken(plugin, json.refresh_token);
   accessToken = String(json.access_token ?? "");
   accessTokenExp = Date.now() + (Number(json.expires_in ?? 0) - 60) * 1000;
   await plugin.saveData(plugin.settings);
@@ -193,21 +195,21 @@ export async function connectGoogle(plugin: GanttPlugin): Promise<boolean> {
 // 有効なアクセストークンを返す（必要ならリフレッシュ）/ return a valid access token (refreshing when needed)
 export async function getAccessToken(plugin: GanttPlugin, force = false): Promise<string> {
   const g = plugin.settings.gcal;
-  if (!g.refreshToken) throw new Error("Google Calendar: not connected");
+  const refreshToken = getRefreshToken(plugin);
+  if (!refreshToken) throw new Error("Google Calendar: not connected");
   if (!force && accessToken && Date.now() < accessTokenExp) return accessToken;
   const { status, json } = await tokenRequest({
     client_id: g.clientId,
-    client_secret: g.clientSecret,
-    refresh_token: g.refreshToken,
+    client_secret: getClientSecret(plugin),
+    refresh_token: refreshToken,
     grant_type: "refresh_token",
   });
   if (status !== 200 || typeof json.access_token !== "string") {
     // リフレッシュトークン失効＝再接続が必要（接続情報を落として設定画面に表示）
     // an expired/revoked refresh token means the user must reconnect
     if (json.error === "invalid_grant") {
-      g.refreshToken = "";
+      setRefreshToken(plugin, "");
       accessToken = "";
-      await plugin.saveData(plugin.settings);
       throw new Error("Google Calendar: reconnect required");
     }
     throw new Error(`Google Calendar: token refresh failed (${status})`);
@@ -221,10 +223,11 @@ export async function getAccessToken(plugin: GanttPlugin, force = false): Promis
 // disconnect: revoke (best effort) and clear the connection + sync state
 export async function disconnectGoogle(plugin: GanttPlugin): Promise<void> {
   const g = plugin.settings.gcal;
-  if (g.refreshToken) {
+  const refreshToken = getRefreshToken(plugin);
+  if (refreshToken) {
     try {
       await requestUrl({
-        url: `${REVOKE_URL}?token=${encodeURIComponent(g.refreshToken)}`,
+        url: `${REVOKE_URL}?token=${encodeURIComponent(refreshToken)}`,
         method: "POST",
         contentType: "application/x-www-form-urlencoded",
         throw: false,
@@ -233,7 +236,7 @@ export async function disconnectGoogle(plugin: GanttPlugin): Promise<void> {
       /* 失効失敗は無視（ローカルは消す）/ ignore revoke failures; still clear locally */
     }
   }
-  g.refreshToken = "";
+  setRefreshToken(plugin, "");
   g.syncToken = "";
   g.state = {};
   g.lastError = "";

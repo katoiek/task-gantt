@@ -41,6 +41,7 @@ import { hashColor, resolveTagColor } from "./colors";
 import { ConfirmModal } from "./modals";
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
+import { isConnected } from "./gcal/auth";
 import { applyFilters, regroup, GroupBy } from "./filter";
 import { BoardContext, Move, MutateResult } from "./board";
 import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnWidth, customColumn, taskComparator, visibleColumns } from "./columns";
@@ -2273,7 +2274,7 @@ export class GanttView extends ItemView {
 
     // Google カレンダー同期（接続済みのときのみ表示）/ Google Calendar sync (shown only while connected)
     const g = this.plugin.settings.gcal;
-    if (g.refreshToken && g.calendarId) {
+    if (g.calendarId && isConnected(this.plugin)) {
       const gf = fieldRow(tr().fieldGcal);
       const box = gf.createEl("input", { type: "checkbox" });
       const file = this.app.vault.getAbstractFileByPath(t.path);

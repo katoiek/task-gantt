@@ -4,7 +4,7 @@
 
 An interactive project-management Gantt for Obsidian. **One Markdown file = one task**; a configured folder is shown and edited as a "table + timeline" Gantt — drag bars to reschedule, link dependencies, set milestones, sort and filter, and move tasks between folders by dragging.
 
-> Requires **Obsidian 1.7.2 or later**.
+> Requires **Obsidian 1.11.4 or later**.
 
 ## Screenshots
 
@@ -221,7 +221,7 @@ The plugin has no server, so it uses **your own Google Cloud project**:
 ### Disclosure
 
 - **Network use**: when connected, the plugin talks to Google's OAuth and Calendar APIs only, sending the synced tasks' name, dates, and a body excerpt (first 500 characters) with a link back to the note. Leaving the feature unconfigured (the default) makes no network requests.
-- **Account & credentials**: requires a Google account and your own Google Cloud OAuth client. The plugin requests only the `calendar.events` and `calendar.calendarlist.readonly` scopes. The OAuth **refresh token, client ID, and secret are stored in plain text** in the plugin's `data.json` inside your vault — treat that file accordingly (be careful when the vault itself is synced or shared).
+- **Account & credentials**: requires a Google account and your own Google Cloud OAuth client. The plugin requests only the `calendar.events` and `calendar.calendarlist.readonly` scopes. The OAuth **client secret and refresh token are stored in Obsidian's secret storage** (the OS keychain), not in the plugin's `data.json`, so they don't travel with vault sync, backups, or git. Only the client ID stays in `data.json`. Secret storage is per device, so connect again on each device. Upgrading from 2.9.3 or earlier moves the old plain-text values out of `data.json` automatically; if that file was ever committed to git or shared, reset the client secret in Google Cloud Console and reconnect.
 - Mobile is not supported (the OAuth loopback needs a desktop); other features work on mobile as usual.
 
 ## Development
@@ -255,7 +255,7 @@ MIT — see [`LICENSE`](./LICENSE).
 
 プロジェクト管理ツールのようなタスク管理 UI を Obsidian で実現するプラグインです。**1 ファイル = 1 タスク**とし、指定フォルダ配下を **「表＋タイムライン」ガント**で表示・編集します。バーのドラッグで日程変更、依存の作成、マイルストーン、ソート・フィルタ、ドラッグでのフォルダ移動などができます。
 
-> **Obsidian 1.7.2 以降**が必要です。
+> **Obsidian 1.11.4 以降**が必要です。
 
 ## スクリーンショット
 
@@ -472,7 +472,7 @@ after:
 ### 開示事項
 
 - **ネットワーク利用について**：接続すると Google の OAuth / Calendar API とのみ通信し、同期対象タスクの名前・日付・本文抜粋（先頭500文字）とノートへ戻るリンクを送信します。未設定（既定）の場合、ネットワークアクセスは一切行いません。
-- **アカウントと認証情報**：Google アカウントと自身の Google Cloud OAuth クライアントが必要です。要求スコープは `calendar.events` と `calendar.calendarlist.readonly` のみです。OAuth の**リフレッシュトークン・クライアント ID・シークレットは Vault 内の `data.json` に平文保存**されます。Vault 自体を同期・共有している場合はご注意ください。
+- **アカウントと認証情報**：Google アカウントと自身の Google Cloud OAuth クライアントが必要です。要求スコープは `calendar.events` と `calendar.calendarlist.readonly` のみです。OAuth の**クライアントシークレットとリフレッシュトークンは Obsidian のシークレットストレージ（OS のキーチェーン）に保存**され、プラグインの `data.json` には書き込まれません。そのため Vault の同期・バックアップ・git には含まれません。`data.json` に残るのはクライアント ID のみです。シークレットストレージは端末ごとの保存なので、端末ごとに接続し直してください。2.9.3 以前から更新すると、`data.json` に平文で残っていた値は自動で移行・削除されます。過去に `data.json` を git へコミット・共有したことがある場合は、Google Cloud Console でクライアントシークレットを再発行し、接続し直してください。
 - モバイルは非対応です（OAuth のループバック受信にデスクトップが必要）。他の機能は従来どおりモバイルでも動作します。
 
 ## 開発

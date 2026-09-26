@@ -6,6 +6,8 @@ import { t } from "./i18n";
 import { inferStatusGroup } from "./model";
 import { checkNotifications } from "./notify";
 import { migrateRenamedPath, schedulePush, syncGcal } from "./gcal/sync";
+import { isConnected } from "./gcal/auth";
+import { migrateLegacySecrets } from "./gcal/secrets";
 
 export default class GanttPlugin extends Plugin {
   settings!: GanttSettings;
@@ -88,7 +90,7 @@ export default class GanttPlugin extends Plugin {
           // Google カレンダー：Pull は設定間隔で、Push は毎分の掃き出し（差分が無ければ何もしない）
           // Google Calendar: pull at the configured interval, push sweeps every minute (no-op without changes)
           const g = this.settings.gcal;
-          if (g.refreshToken && g.calendarId) {
+          if (g.calendarId && isConnected(this)) {
             const pull = g.pullEnabled && now - this.lastGcalPull >= g.pullIntervalMin * 60_000;
             if (pull) this.lastGcalPull = now;
             void syncGcal(this, { pull });
@@ -154,6 +156,9 @@ export default class GanttPlugin extends Plugin {
     const st: typeof this.settings.gcal.state = {};
     for (const [p, v] of Object.entries(this.settings.gcal.state ?? {})) st[p] = { ...v };
     this.settings.gcal.state = st;
+    // 旧バージョンが平文で残した秘匿情報を SecretStorage へ移し、data.json から消す（Issue #6）
+    // move secrets older versions left in plain text into SecretStorage and scrub data.json (issue #6)
+    if (migrateLegacySecrets(this)) await this.saveData(this.settings);
   }
 
   async saveSettings(): Promise<void> {
