@@ -64,7 +64,11 @@ Show any frontmatter key as a table column. In **Settings → Task Gantt → Cus
 - **Number** — right-aligned and sorted numerically.
 - **Date** — shown in your date format and edited with the same calendar as Start / Due (the date part only).
 
+![Custom fields in the settings tab: a key, a label and a type per field](docs/images/custom-fields-settings-en.png)
+
 A new field's column is shown right away; hide or show it from the gear menu like any other column. Custom columns sort by clicking their header and are edited by double-clicking a cell, and every edit can be undone. Changing a field's key keeps its column's visibility, width and sort, and takes effect when you press Enter or leave the box. If notes still hold values under the old key, you're asked whether to rename that property in those notes too (a note that already has a value under the new key is never overwritten) or only to point the column at the new key. Keys the plugin already reads (the Start / Due / Status / … keys under **Frontmatter keys**, and `tags`) can't be used, and if two fields share a key only the first becomes a column — the settings tab says so.
+
+![Custom field columns in the table, after the built-in columns](docs/images/custom-fields-table-en.png)
 
 ## Filters
 
@@ -329,7 +333,11 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 - **数値** — 右揃えで表示し、数値として並べ替えます。
 - **日付** — 設定の日付形式で表示し、開始・期限と同じカレンダーで編集します（日付部分のみ）。
 
+![設定画面のカスタムフィールド。フィールドごとにキー・表示名・種類を指定](docs/images/custom-fields-settings-ja.png)
+
 追加したフィールドの列はすぐに表示され、ほかの列と同じく歯車メニューで表示を切り替えられます。見出しのクリックで並べ替え、セルのダブルクリックで編集でき、編集はすべて取り消せます。キー名を変えても、列の表示・幅・並べ替えの設定はそのまま残ります。キーの変更は Enter を押すか入力欄を離れたときに反映され、旧キーの値を持つノートがあれば、ノート側のプロパティ名も変えるか（新しいキーに既に値があるノートは上書きしません）、列が読むキーだけを変えるかを尋ねます。プラグインが既に使っているキー（**フロントマターのキー名**にある開始・期限・ステータスなどのキーと `tags`）は使えません。また、同じキーのフィールドが複数あるときは最初の 1 つだけが列になります。どちらも設定画面に注意書きが出ます。
+
+![テーブルのカスタムフィールド列。組み込みの列の後ろに並ぶ](docs/images/custom-fields-table-ja.png)
 
 ## フィルタ
 

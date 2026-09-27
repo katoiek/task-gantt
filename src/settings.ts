@@ -465,9 +465,12 @@ export class GanttSettingTab extends PluginSettingTab {
     const newKey = input.getValue().trim();
     if (oldKey === newKey) return;
     const apply = (): void => {
+      const before = this.customFieldWarnings().join("|");
       f.key = newKey;
       this.save();
-      this.paintCustomFieldWarning();
+      // 注意書きの有無・中身が変わったときだけ描き直す（確定時なので入力中のフォーカスは奪わない）
+      // redraw only when the advisory changes (this runs on commit, so no typing is interrupted)
+      if (this.customFieldWarnings().join("|") !== before) this.redraw();
     };
     const reserved = new Set([...Object.values(s.keys), "tags"]);
     const clashes = (key: string): boolean => reserved.has(key) || s.customFields.some((o) => o !== f && o.key.trim() === key);
@@ -510,13 +513,11 @@ export class GanttSettingTab extends PluginSettingTab {
     this.redraw();
   }
 
-  // Custom field の注意書き（空キー・組み込みキーとの衝突・重複）を差し替える
-  // refresh the custom field advisory (empty keys, clashes with built-in keys, duplicates)
-  private cfWarn: Setting | null = null;
-  private paintCustomFieldWarning(): void {
-    if (!this.cfWarn) return;
-    const el = this.cfWarn.descEl;
-    el.empty();
+  // Custom field の注意書き（空キー・組み込みキーとの衝突・重複）。何も無ければ空配列＝行を置かない。
+  // 行を置いて隠すだけだと、宣言版では外枠（空のグループ）が残るため
+  // the custom field advisory (empty keys, clashes with built-in keys, duplicates); empty means no row at all —
+  // placing a row and hiding it leaves an empty group frame behind in the declarative tab
+  private customFieldWarnings(): string[] {
     const s = this.plugin.settings;
     const issues = customFieldIssues(s);
     const lines = new Set<string>();
@@ -526,8 +527,13 @@ export class GanttSettingTab extends PluginSettingTab {
       else if (issue === "reserved") lines.add(tr().setCfReserved(f.key.trim()));
       else if (issue === "duplicate") lines.add(tr().setCfDuplicate(f.key.trim()));
     }
-    for (const line of lines) el.createDiv({ text: line });
-    this.cfWarn.settingEl.toggle(lines.size > 0); // 何も無ければ行ごと隠す / hide the whole row when there's nothing to say
+    return [...lines];
+  }
+
+  // 注意書きの行の中身（1 件 1 行）/ fill the advisory row, one line per issue
+  private ctlCustomFieldWarning(setting: Setting, lines: string[]): void {
+    setting.setClass("ogantt-setting-warn");
+    for (const line of lines) setting.descEl.createDiv({ text: line });
   }
 
   // 「完了」が空だと完了プリセットが常に 0 件になるので、その旨だけ伝える（禁止はしない）
@@ -799,6 +805,7 @@ export class GanttSettingTab extends PluginSettingTab {
     const connected = (): boolean => Platform.isDesktop && isConnected(this.plugin);
 
     const statusWarn = this.statusGroupWarning();
+    const cfWarnings = this.customFieldWarnings();
 
     const items: SettingDefinitionItem[] = [
       { name: tr().setDefaultFolderName, desc: tr().setDefaultFolderDesc, render: (x) => this.ctlRootFolder(x) },
@@ -867,15 +874,8 @@ export class GanttSettingTab extends PluginSettingTab {
         ],
         addItem: { name: tr().setAddCustomField, action: () => this.addCustomField() },
       },
-      // 注意書き（中身はキー入力のたびにその場で差し替える）/ the advisory, repainted in place as keys are typed
-      {
-        name: "",
-        render: (x: Setting) => {
-          x.setClass("ogantt-setting-warn");
-          this.cfWarn = x;
-          this.paintCustomFieldWarning();
-        },
-      },
+      // 注意書きがあるときだけ置く / the advisory, only when there is something to say
+      ...(cfWarnings.length > 0 ? [{ name: "", render: (x: Setting) => this.ctlCustomFieldWarning(x, cfWarnings) }] : []),
       // タグの色（フォルダの色は表で右クリック）/ tag colors (folder colors via right-click in the table)
       // 見出しの無い単独項目は直前のグループ（ステータス）に吸い寄せられて見えるので、
       // 既定色は「タグの色」見出しを持つグループの中に置く
@@ -1060,8 +1060,8 @@ export class GanttSettingTab extends PluginSettingTab {
       this.ctlCustomFieldRow(new Setting(containerEl).setClass("ogantt-setting-row").setClass("ogantt-cf-row"), f);
     }
     new Setting(containerEl).addButton((b) => b.setButtonText(tr().setAddCustomField).onClick(() => this.addCustomField()));
-    this.cfWarn = new Setting(containerEl).setClass("ogantt-setting-warn");
-    this.paintCustomFieldWarning();
+    const cfWarnings = this.customFieldWarnings();
+    if (cfWarnings.length > 0) this.ctlCustomFieldWarning(new Setting(containerEl), cfWarnings);
 
     // タグの色（名前＋色＋削除。フォルダの色は表で右クリック）/ tag colors (name + color + delete; folder colors via right-click in the table)
     new Setting(containerEl).setName(tr().setTagColorsHeading).setHeading();
