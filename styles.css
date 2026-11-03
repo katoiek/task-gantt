@@ -200,6 +200,23 @@ button.ogantt-opt-gear {
   opacity: 0.5;
   cursor: default;
 }
+/* 列の 1 行：切り替え＋上下の矢印。隠した列は一覧の下に薄く残り、そのまま操作できる
+   one column row: the switch plus up/down arrows; hidden columns stay at the bottom, dimmed but still usable */
+.ogantt-colmenu-col {
+  display: flex;
+  align-items: center;
+}
+.ogantt-colmenu-col .ogantt-colmenu-item {
+  flex: 1;
+}
+.ogantt-colmenu-col.is-off .ogantt-colmenu-item span,
+.ogantt-col-off .setting-item-name {
+  color: var(--text-faint);
+}
+.ogantt-colmenu-col .clickable-icon:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
 .ogantt-colmenu-note {
   padding: 0 8px 4px 30px;
   max-width: 220px;
@@ -1664,7 +1681,10 @@ button.ogantt-cal-title:hover {
   grid-template-columns: repeat(9, 22px);
   gap: 6px;
 }
-.ogantt-swatch {
+/* button・input を付けて Obsidian の button:not(.clickable-icon) と同じ強さにする（後に読むので勝つ）
+   element-qualified so it matches the strength of Obsidian's button:not(.clickable-icon), and wins by loading later */
+button.ogantt-swatch,
+input.ogantt-swatch {
   width: 22px;
   height: 22px;
   padding: 0;
@@ -1692,11 +1712,38 @@ button.ogantt-cal-title:hover {
   border: none;
   opacity: 0;
 }
+/* 自動の色に戻すボタン（色見本と同じ大きさ）/ the back-to-automatic button, sized like a swatch */
+.ogantt-swatch-reset {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
 /* 設定画面の色見本ボタン / the swatch button in the settings tab */
 .setting-item-control button.ogantt-swatch {
   width: 24px;
   height: 24px;
   min-width: 24px;
+}
+/* 設定画面：表の列の幅と、自動ステータスの「未着手」のチェック / settings: the table columns' width box and the automatic status's not-started checks */
+.setting-item.ogantt-col-row {
+  align-items: center;
+}
+.setting-item.ogantt-col-row .setting-item-description:empty {
+  display: none;
+}
+.ogantt-col-width {
+  width: 72px;
+}
+.ogantt-setting-checks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+}
+.ogantt-setting-checks label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .ogantt-iconpick {
   width: 268px;

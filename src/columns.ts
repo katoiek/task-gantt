@@ -152,7 +152,7 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
             return;
           }
           // 開始日は保ち期限日を動かす（開始日が無ければ今日から）/ keep the start and move the due date (from today when unset)
-          const start = t.start ?? dayToStr(todayIndex());
+          const start = t.start ?? dayToStr(todayIndex(undefined, ctx.settings.tz));
           const end = dayToStr(endForDuration(dayIndex(start), n, cal));
           await ctx.reschedule(t.path, { start, end }, { start: t.startTime, end: t.endTime });
         },
@@ -315,11 +315,50 @@ export function customColumn(f: CustomField): CellColumn {
 
 // ----- 並び・表示・比較（純粋関数）/ order, visibility and comparison (pure) -----
 
-// 表示中の列（name は常時、その他は visibleColumns に含まれるもの・定義順）
-// visible columns: name always, the rest when listed in visibleColumns, in definition order
-export function visibleColumns(defs: ColumnDef[], visible: string[]): ColumnDef[] {
+// 列の並び：name が先頭、任意列は保存した順。順に無い列（以前の保存データ・新しい Custom field）は定義順で後ろへ、知らない id は無視
+// the column order: name first, optional columns as saved; columns missing from it (older saved data, a new custom field)
+// follow in definition order, and unknown ids are ignored
+export function orderedColumns(defs: ColumnDef[], order: string[]): ColumnDef[] {
+  const rank = new Map(order.map((id, i) => [id, i]));
+  const at = (c: ColumnDef): number => (c.optional ? rank.get(c.id) ?? order.length + defs.indexOf(c) : -1);
+  return defs.slice().sort((a, b) => at(a) - at(b));
+}
+
+// 表示中の列（name は常時、その他は visibleColumns に含まれるもの・保存した順）
+// visible columns: name always, the rest when listed in visibleColumns, in the saved order
+export function visibleColumns(defs: ColumnDef[], visible: string[], order: string[] = []): ColumnDef[] {
   const vis = new Set(visible);
-  return defs.filter((c) => !c.optional || vis.has(c.id));
+  return orderedColumns(defs, order).filter((c) => !c.optional || vis.has(c.id));
+}
+
+// 列の一覧（表示メニューと設定画面）：表示中の任意列が順に、その下に隠した列。隠した列も並べ替え・再表示・幅の変更ができる
+// the column list (Display menu and settings): shown optional columns in order, then the hidden ones, which can still be reordered, re-shown and resized
+export function columnList(defs: ColumnDef[], visible: string[], order: string[]): { col: ColumnDef; on: boolean }[] {
+  const vis = new Set(visible);
+  const opt = orderedColumns(defs, order).filter((c) => c.optional);
+  return [...opt.filter((c) => vis.has(c.id)), ...opt.filter((c) => !vis.has(c.id))].map((col) => ({ col, on: vis.has(col.id) }));
+}
+
+// 列の表示を切り替える。順は一覧の見たままで保存する（隠した列は隠した列の先頭へ、戻した列は表示中の最後へ）
+// show or hide a column; the order is saved as the list shows it (a hidden column goes to the top of the hidden ones, a re-shown one to the end of the shown)
+// 返す形は設定のキーと同じ（そのまま Object.assign できる）/ returned under the settings' own keys, ready for Object.assign
+export function toggleColumn(defs: ColumnDef[], visible: string[], order: string[], id: string, on: boolean): { visibleColumns: string[]; columnOrder: string[] } {
+  const list = columnList(defs, visible, order);
+  const vis = new Set(visible);
+  if (on) vis.add(id);
+  else vis.delete(id);
+  return { visibleColumns: list.filter((x) => vis.has(x.col.id)).map((x) => x.col.id), columnOrder: list.map((x) => x.col.id) };
+}
+
+// 一覧の中で 1 つ上（dir=-1）か下（+1）へ。表示中と隠した列の境目は越えない（越えられなければ null）
+// move a column one up (dir = -1) or down (+1) in the list, never across the shown/hidden boundary (null when it can't move)
+export function moveColumn(defs: ColumnDef[], visible: string[], order: string[], id: string, dir: -1 | 1): string[] | null {
+  const list = columnList(defs, visible, order);
+  const i = list.findIndex((x) => x.col.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length || list[j].on !== list[i].on) return null;
+  [list[i], list[j]] = [list[j], list[i]];
+  return list.map((x) => x.col.id);
 }
 
 // 列の実効幅（ユーザー上書き > 既定）/ effective column width (user override > default)

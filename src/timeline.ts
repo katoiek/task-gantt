@@ -17,10 +17,14 @@ export function dayToStr(day: number): string {
   return new Date(day * MS_PER_DAY).toISOString().slice(0, 10);
 }
 
-// 端末の暦で今日（UTC で数えると、日本では朝 9 時まで前日になる）/ today on the device's calendar (counting in UTC would
-// give yesterday until 9 am in Japan, and tomorrow on a US evening)
-export function todayIndex(now = new Date()): number {
-  return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / MS_PER_DAY);
+// 設定タイムゾーン（"system"＝端末の暦、"+09:00" などの固定オフセット）で今日。UTC で数えると、日本では朝 9 時まで前日になる
+// today in the configured timezone ("system" = the device's calendar, or a fixed offset like "+09:00"); counting in UTC would
+// give yesterday until 9 am in Japan, and tomorrow on a US evening
+export function todayIndex(now = new Date(), tz = "system"): number {
+  const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
+  if (!m) return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / MS_PER_DAY);
+  const offset = (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]);
+  return Math.floor((now.getTime() + offset * 60000) / MS_PER_DAY);
 }
 
 // ISO（YYYY-MM-DD）を表示用フォーマットへ整形 / format an ISO date for display
@@ -110,7 +114,7 @@ export interface DateRange {
 }
 
 // タスク群から表示範囲を決める（前後に余白）/ compute the visible range with padding
-export function computeRange(tasks: Task[]): DateRange {
+export function computeRange(tasks: Task[], today = todayIndex()): DateRange {
   const days: number[] = [];
   // 不正な日付（NaN）は範囲計算から除外して全体崩壊を防ぐ / drop NaN day indices so a bad date can't break the whole range
   const push = (s?: string) => {
@@ -123,7 +127,6 @@ export function computeRange(tasks: Task[]): DateRange {
     push(t.end);
   }
   if (days.length === 0) {
-    const today = todayIndex();
     return { min: today - 7, max: today + 30 };
   }
   return { min: Math.min(...days) - 3, max: Math.max(...days) + 7 };

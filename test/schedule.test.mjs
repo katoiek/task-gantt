@@ -15,6 +15,8 @@ import {
   depViolated,
   wouldLoop,
   offDayGradient,
+  autoStatusChanges,
+  autoStatusTargets,
 } from "./schedule.mjs";
 import { dayIndex, dayToStr } from "./timeline.mjs";
 
@@ -165,6 +167,33 @@ const OPTS = { cal: CAL, fs: true };
 const g = offDayGradient(dayIndex("2026-10-21"), { off: [0, 6] }, 10, "red");
 check("休日の帯: 土(30-40px)と日(40-50px)が 70px 周期（0px 始まり）", g === "repeating-linear-gradient(to right, transparent 0px, transparent 30px, red 30px, red 40px, transparent 40px, transparent 40px, red 40px, red 50px, transparent 50px, transparent 70px)");
 check("休日の帯: 休日なしは none", offDayGradient(0, { off: [] }, 10, "red") === "none");
+
+// ── 日付による自動ステータス / automatic status by date ──
+{
+  const ST = [
+    { id: "todo", label: "To do", color: "", group: "active" },
+    { id: "in-progress", label: "In progress", color: "", group: "active" },
+    { id: "review", label: "Review", color: "", group: "active" },
+    { id: "blocked", label: "Blocked", color: "", group: "deferred" },
+    { id: "done", label: "Done", color: "", group: "completed" },
+    { id: "dropped", label: "Dropped", color: "", group: "cancelled" },
+  ];
+  const DEF = { started: "", finished: "", notStarted: [] };
+  const today = dayIndex("2026-11-03");
+  const T = (path, status, start, end) => ({ path, status, start, end, deps: [] });
+  const run = (tasks, cfg = DEF, st = ST) => Object.fromEntries(autoStatusChanges(tasks, st, cfg, today));
+  const t = autoStatusTargets(ST, DEF);
+  check("自動: 既定は in-progress / done / 最初の active", t.started === "in-progress" && t.finished === "done" && t.notStarted.join() === "todo");
+  check("自動: 開始日になった未着手は開始後へ（当日を含む）", JSON.stringify(run([T("a", "todo", "2026-11-03", "2026-11-10"), T("b", "todo", "2026-11-04", "2026-11-10")])) === '{"a":"in-progress"}');
+  check("自動: 期限日を過ぎた未完了は完了後へ（当日は含まない）", JSON.stringify(run([T("a", "in-progress", "2026-10-01", "2026-11-02"), T("b", "todo", undefined, "2026-11-01"), T("c", "review", "2026-10-01", "2026-11-03")])) === '{"a":"done","b":"done"}');
+  check("自動: 延期・完了・中止・未設定・不明には触れない", JSON.stringify(run([T("a", "blocked", "2026-10-01", "2026-10-02"), T("b", "done", "2026-10-01", "2026-10-02"), T("c", "dropped", "2026-10-01", "2026-10-02"), T("d", undefined, "2026-10-01", "2026-10-02"), T("e", "ghost", "2026-10-01", "2026-10-02")])) === "{}");
+  check("自動: 日付が無ければ触れない", JSON.stringify(run([T("a", "todo", undefined, undefined), T("b", "in-progress", "2026-10-01", undefined)])) === "{}");
+  check("自動: 後戻りしない（開始後や未着手以外の active は開始後へ戻さない）", JSON.stringify(run([T("a", "review", "2026-11-01", "2026-11-20"), T("b", "in-progress", "2026-11-01", "2026-11-20")])) === "{}");
+  check("自動: 未着手の一覧と行き先を選べる", JSON.stringify(run([T("a", "review", "2026-11-01", "2026-11-20"), T("b", "todo", "2026-11-01", "2026-11-20")], { started: "in-progress", finished: "done", notStarted: ["review"] })) === '{"a":"in-progress"}');
+  check("自動: 行き先がグループ違い・存在しないなら動かさない", JSON.stringify(run([T("a", "todo", "2026-10-01", "2026-10-02"), T("b", "todo", "2026-11-01", "2026-11-20")], { started: "blocked", finished: "todo", notStarted: [] })) === "{}");
+  check("自動: 組み込みが無ければ既定の行き先も無い", JSON.stringify(run([T("a", "open", "2026-10-01", "2026-10-02")], DEF, [{ id: "open", label: "Open", color: "", group: "active" }, { id: "closed", label: "Closed", color: "", group: "completed" }])) === "{}");
+  check("自動: 開始後は未着手に数えない", autoStatusTargets(ST, { started: "in-progress", finished: "", notStarted: ["in-progress", "todo"] }).notStarted.join() === "todo");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

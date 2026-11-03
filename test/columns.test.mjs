@@ -1,6 +1,6 @@
 // 列定義の並び・表示・並べ替え（visibleColumns / columnWidth / taskComparator）の検証
 // Tests for column order, visibility, widths and sorting (visibleColumns / columnWidth / taskComparator)
-import { BUILTIN_COLUMNS, visibleColumns, columnWidth, taskComparator, customColumn, customColumnId } from "./columns.mjs";
+import { BUILTIN_COLUMNS, visibleColumns, columnWidth, taskComparator, customColumn, customColumnId, columnList, toggleColumn, moveColumn } from "./columns.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -85,6 +85,26 @@ check("unknown sort column falls back to start", sorted(ALL, settings("ghost")) 
   check("custom number: two unset values compare equal", taskComparator(cols, s2("cf:n1"))(Z, W) === 0);
   // Y・Z はどちらも未設定なので安定ソートで入力順（z, y）のまま / Y and Z are both unset, so the stable sort keeps z before y
   check("custom date: unset last", sortedC([Z, X, Y], s2("cf:d1")) === "x,z,y");
+}
+
+// ── 列の並び・隠した列 / column order and hidden columns ──
+{
+  const cols = [...BUILTIN_COLUMNS, customColumn({ id: "n1", key: "budget", label: "", type: "number" })];
+  const list = (vis, order) => columnList(cols, vis, order).map((x) => (x.on ? x.col.id : `(${x.col.id})`)).join(",");
+  check("no saved order = definition order", ids(visibleColumns(cols, ["tags", "start"], [])) === "name,start,tags");
+  check("saved order wins, name stays first", ids(visibleColumns(cols, ["tags", "start"], ["tags", "end", "start"])) === "name,tags,start");
+  check("order: unknown ids ignored, missing ones (a new custom field) follow in definition order",
+    ids(visibleColumns(cols, ["cf:n1", "start", "end"], ["ghost", "end", "start"])) === "name,end,start,cf:n1");
+  check("list: shown in order, then hidden ones", list(["end", "start"], ["end", "start"]) === "end,start,(duration),(progress),(assignee),(status),(tags),(cf:n1)");
+  const off = toggleColumn(cols, ["start", "end", "status"], [], "start", false);
+  check("hiding moves a column to the top of the hidden ones", off.visibleColumns.join(",") === "end,status" && list(off.visibleColumns, off.columnOrder) === "end,status,(start),(duration),(progress),(assignee),(tags),(cf:n1)");
+  const on = toggleColumn(cols, off.visibleColumns, off.columnOrder, "tags", true);
+  check("re-showing puts it last among the shown", ids(visibleColumns(cols, on.visibleColumns, on.columnOrder)) === "name,end,status,tags");
+  check("move up within the shown", moveColumn(cols, ["start", "end"], [], "end", -1)?.slice(0, 2).join(",") === "end,start");
+  check("cannot move past the top", moveColumn(cols, ["start", "end"], [], "start", -1) === null);
+  check("cannot cross into the hidden ones", moveColumn(cols, ["start", "end"], [], "end", 1) === null);
+  const hidden = moveColumn(cols, ["start"], [], "tags", -1);
+  check("hidden columns reorder among themselves", list(["start"], hidden) === "start,(end),(duration),(progress),(assignee),(tags),(status),(cf:n1)");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

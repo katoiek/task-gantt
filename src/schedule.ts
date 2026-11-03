@@ -1,6 +1,6 @@
 // 稼働日カレンダー・Duration（期間）・依存による後続の連動（すべて純粋関数）
 // workday calendar, task duration, and dependency cascading (all pure functions)
-import type { Task, DepType } from "./types";
+import type { Task, DepType, StatusDef } from "./types";
 import { dayIndex, dayToStr } from "./timeline";
 
 // 稼働日カレンダー。off＝休日の曜日（0=日 … 6=土）/ workday calendar; off = non-working weekdays (0 = Sun … 6 = Sat)
@@ -176,7 +176,14 @@ export function wouldLoop(tasks: Task[], predPath: string, succPath: string): bo
 // roots から連動する依存でたどれる範囲に循環があるか / whether a loop can be reached from the roots along dependencies that cascade
 function hasLoop(tasks: Task[], roots: string[], fs: boolean): boolean {
   const next = new Map<string, string[]>();
-  for (const t of tasks) for (const d of t.deps) if (cascades(d.type, fs)) next.set(d.path, [...(next.get(d.path) ?? []), t.path]);
+  for (const t of tasks) {
+    for (const d of t.deps) {
+      if (!cascades(d.type, fs)) continue;
+      const list = next.get(d.path);
+      if (list) list.push(t.path);
+      else next.set(d.path, [t.path]);
+    }
+  }
   const state = new Map<string, "open" | "done">();
   const visit = (p: string): boolean => {
     if (state.get(p) === "open") return true;
@@ -271,4 +278,46 @@ export function cascadeDates(tasks: Task[], roots: string[], opts: ScheduleOptio
     }
   }
   return changes;
+}
+
+// ── 日付による自動ステータス / automatic status by date ──
+
+// 自動ステータスの設定（空の id・空の一覧は既定）/ the automatic-status setup (an empty id or list means the default)
+export interface AutoStatusConfig {
+  started: string;
+  finished: string;
+  notStarted: string[];
+}
+
+// 設定を今のステータス一覧で解決する。開始後は「進行中」グループ、完了後は「完了」グループのステータスだけ（既定は組み込みの in-progress / done）、
+// 未着手は「進行中」グループのうち開始後以外（既定は最初の 1 つ）。一覧に無い id は使わない
+// resolve the setup against the current statuses: the started target must be an active status and the finished one a completed status
+// (defaults: the built-in in-progress / done); not-started statuses are active ones other than the started target (default: the first one).
+// Ids the list doesn't know are dropped
+export function autoStatusTargets(statuses: StatusDef[], cfg: AutoStatusConfig): { started?: string; finished?: string; notStarted: string[] } {
+  const inGroup = (id: string, group: StatusDef["group"]) => statuses.some((s) => s.id === id && s.group === group);
+  const started = [cfg.started || "in-progress"].find((id) => inGroup(id, "active"));
+  const finished = [cfg.finished || "done"].find((id) => inGroup(id, "completed"));
+  const firstActive = statuses.find((s) => s.group === "active" && s.id !== started)?.id;
+  const wanted = cfg.notStarted.length ? cfg.notStarted : firstActive ? [firstActive] : [];
+  return { started, finished, notStarted: wanted.filter((id) => id !== started && inGroup(id, "active")) };
+}
+
+// 日付が来た・過ぎたタスクの新しいステータス（パス → ステータス id）。today は設定タイムゾーンでの今日。
+// 期限日を過ぎた（today > 期限日）未完了のタスクは完了後へ、開始日になった（today >= 開始日）未着手のタスクは開始後へ。
+// 「進行中」グループ以外（延期・完了・中止）、ステータス未設定・不明、該当する日付の無いタスクには触れず、後戻りもしない
+// the new statuses (path → status id) for tasks whose dates have come or gone; `today` is today in the configured timezone.
+// A task past its due date (today > due) that isn't finished moves to the finished status; a not-started task whose start has come
+// (today >= start) moves to the started status. Tasks outside the active group (deferred, completed, cancelled), with no or an
+// unknown status, or without the date in question are left alone, and nothing moves backwards
+export function autoStatusChanges(tasks: Task[], statuses: StatusDef[], cfg: AutoStatusConfig, today: number): Map<string, string> {
+  const { started, finished, notStarted } = autoStatusTargets(statuses, cfg);
+  const active = new Set(statuses.filter((s) => s.group === "active").map((s) => s.id));
+  const out = new Map<string, string>();
+  for (const t of tasks) {
+    if (!t.status || !active.has(t.status)) continue;
+    if (finished && t.end && today > dayIndex(t.end)) out.set(t.path, finished);
+    else if (started && t.start && today >= dayIndex(t.start) && notStarted.includes(t.status)) out.set(t.path, started);
+  }
+  return out;
 }

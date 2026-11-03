@@ -454,7 +454,12 @@ export function buildRows(
     // ── 親子ネスト：同一フォルダ内のタスクを parent でフォレスト化 / nest by parent within this folder ──
     const paths = new Set(node.tasks.map((t) => t.path));
     const kids = new Map<string, Task[]>();
-    for (const t of node.tasks) if (t.parent && paths.has(t.parent)) kids.set(t.parent, [...(kids.get(t.parent) ?? []), t]);
+    for (const t of node.tasks) {
+      if (!t.parent || !paths.has(t.parent)) continue;
+      const list = kids.get(t.parent);
+      if (list) list.push(t);
+      else kids.set(t.parent, [t]);
+    }
     for (const list of kids.values()) list.sort(taskCompare);
     const childrenOf = (p: string): Task[] => kids.get(p) ?? [];
     // 自分＋子孫の集約（ロールアップ用）/ self + descendants span (for rollup)
@@ -567,9 +572,11 @@ export function listWith(raw: unknown, value: string, add: boolean): unknown {
 // 本文（フロントマターを除く）を取得 / read the body (without frontmatter)
 export async function readBody(app: App, path: string): Promise<string> {
   const file = app.vault.getAbstractFileByPath(path);
-  if (!(file instanceof TFile)) return "";
-  const text = await app.vault.cachedRead(file);
-  // 先頭の --- ... --- を除去 / strip leading frontmatter block
+  return file instanceof TFile ? bodyOf(await app.vault.cachedRead(file)) : "";
+}
+
+// ノートの中身から本文だけ（先頭の --- ... --- を除去）/ a note's body: its text without the leading frontmatter block
+export function bodyOf(text: string): string {
   return text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
 }
 
@@ -610,8 +617,16 @@ export async function createTask(app: App, settings: GanttSettings, folderPath: 
   // フロントマターのリンクは wikilink（Obsidian がリネームに追従できる形）。キー名は設定で変えられるので YAML は API に書かせる
   // the frontmatter link is a wikilink (Obsidian keeps those updated on rename); the key is configurable, so the API writes the YAML
   const link = `[[${app.metadataCache.fileToLinktext(cv, md, false)}]]`;
-  const note = await app.vault.create(md, `!${link}\n`);
-  await app.fileManager.processFrontMatter(note, (fm: Record<string, unknown>) => { fm[settings.keys.canvas] = link; });
+  let note: TFile | null = null;
+  try {
+    note = await app.vault.create(md, `!${link}\n`);
+    await app.fileManager.processFrontMatter(note, (fm: Record<string, unknown>) => { fm[settings.keys.canvas] = link; });
+  } catch (e) {
+    // ノートが作れなければ、ここで作ったキャンバス（とノート）を消す（取り消しの記録に載らず残ってしまうため）
+    // when the note can't be made, delete the canvas (and note) made here: they'd be left behind, outside the undo record
+    for (const f of [note, cv]) if (f) await app.vault.delete(f);
+    throw e;
+  }
   return [md, cv.path];
 }
 

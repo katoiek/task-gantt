@@ -6,7 +6,9 @@ import { App, Notice, Platform, PluginSettingTab, Setting, TextComponent } from 
 import type { SettingDefinitionItem, SettingDefinitionList, SettingGroupItem } from "obsidian";
 import type GanttPlugin from "./main";
 import { StatusDef, StatusGroup, STATUS_GROUPS, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset, CustomField, CustomFieldType } from "./types";
-import { collectAllTags, customFieldIssues, filesWithFrontmatterKey, newStatus, renameFrontmatterKey } from "./model";
+import { collectAllTags, customFieldIssues, filesWithFrontmatterKey, newStatus, renameFrontmatterKey, validCustomFields } from "./model";
+import { BUILTIN_COLUMNS, ColumnDef, columnList, customColumn, moveColumn, toggleColumn } from "./columns";
+import { autoStatusTargets } from "./schedule";
 import { ChoiceModal, ConfirmModal, PickModal } from "./modals";
 import { obsidianTagColor, toHex } from "./colors";
 import { pickColor } from "./popover";
@@ -74,8 +76,13 @@ export interface GanttSettings {
   nonWorkingDays: number[];
   // 先行が遅れて FS の後続と重なったら後続を押し出す / push FS successors when a slipping predecessor overlaps them
   autoScheduleFS: boolean;
+  // 日付で自動的にステータスを進める（既定 OFF）。空の id・空の一覧は既定（組み込みの in-progress / done、最初の「進行中」グループのステータス）
+  // move statuses on by date (off by default); an empty id or list means the default (the built-in in-progress / done, the first active status)
+  autoStatus: { enabled: boolean; started: string; finished: string; notStarted: string[] };
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
   visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
+  // 任意列の並び（列 id。無い列は定義順で後ろ）/ the optional columns' order (column ids; missing ones follow in definition order)
+  columnOrder: string[];
   columnWidths: Record<string, number>; // 列幅の上書き(px)。未設定列は既定幅 / per-column width overrides (px); unset = default
   sortBy: string; // ソート列 id（name/start/end/progress/assignee/status/tags、Custom field は cf:<id>）/ sort column id (custom fields: cf:<id>)
   sortDir: "asc" | "desc"; // ソート方向 / sort direction
@@ -181,8 +188,10 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   tz: "system",
   nonWorkingDays: [0, 6],
   autoScheduleFS: true,
+  autoStatus: { enabled: false, started: "", finished: "", notStarted: [] },
   detailWidth: 380,
   visibleColumns: ["start", "end"],
+  columnOrder: [],
   columnWidths: {},
   sortBy: "start",
   sortDir: "asc",
@@ -237,12 +246,10 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   },
 };
 
-// 設定タブは従来の display() で描画する。後継の getSettingDefinitions() は Obsidian 1.13.0
-// （現在 Early Access）専用で、採用すると安定版 1.12.x では設定タブが表示されなくなるため、
-// 1.13.0 が正式版になるまで移行しない（この警告は非ブロッキングなので許容する）。
-// The settings tab uses the classic display(). Its successor getSettingDefinitions() needs
-// Obsidian 1.13.0 (currently Early Access) and would blank the tab on the stable 1.12.x line,
-// so we don't migrate until 1.13.0 is GA (the resulting lint warning is non-blocking).
+// 設定タブは宣言的な getSettingDefinitions()（1.13 以降）で描き、それより前の Obsidian では同じ定義を
+// display() が従来の Setting で描く（両方とも definitions() から作るのでずれない）。
+// The settings tab renders declaratively through getSettingDefinitions() (1.13+); older Obsidian falls back to
+// display(), which draws the same definitions with classic Settings (both come from definitions(), so they can't drift).
 export class GanttSettingTab extends PluginSettingTab {
   plugin: GanttPlugin;
 
@@ -364,6 +371,118 @@ export class GanttSettingTab extends PluginSettingTab {
     setting.addToggle((t) => t.setValue(s.autoScheduleFS).onChange((v) => { s.autoScheduleFS = v; this.save(); }));
   }
 
+  // ===== 日付による自動ステータス / automatic status by date =====
+  private ctlAutoStatus(setting: Setting): void {
+    const a = this.plugin.settings.autoStatus;
+    setting.addToggle((t) => t.setValue(a.enabled).onChange((v) => {
+      a.enabled = v;
+      this.save();
+      this.redraw(); // 行き先などの行を出し分ける / show or hide the target rows
+    }));
+  }
+
+  // 開始後（「進行中」グループ）・完了後（「完了」グループ）のステータス。表示する値は既定を解決したもの
+  // the started (active group) or finished (completed group) status; the shown value is the resolved default
+  private ctlAutoStatusTarget(setting: Setting, which: "started" | "finished"): void {
+    const s = this.plugin.settings;
+    const group = which === "started" ? "active" : "completed";
+    const cur = autoStatusTargets(s.statuses, s.autoStatus)[which];
+    setting.addDropdown((d) => {
+      if (!cur) d.addOption("", "—"); // 当てはまるステータスがまだ無い / no matching status yet
+      for (const st of s.statuses.filter((x) => x.group === group)) d.addOption(st.id, st.label);
+      d.setValue(cur ?? "").onChange((v) => {
+        s.autoStatus[which] = v;
+        this.save();
+        if (which === "started") this.redraw(); // 未着手の候補が変わる / the not-started choices change
+      });
+    });
+  }
+
+  // 未着手とみなすステータス（「進行中」グループのうち開始後以外）。最後の 1 つは外せない（空は既定に戻ってしまうため）
+  // the statuses that count as not started (active ones other than the started target); the last one can't be unticked (empty means the default)
+  private ctlAutoStatusNotStarted(setting: Setting): void {
+    const s = this.plugin.settings;
+    const { started, notStarted } = autoStatusTargets(s.statuses, s.autoStatus);
+    const host = setting.controlEl.createDiv({ cls: "ogantt-setting-checks" });
+    const boxes: HTMLInputElement[] = [];
+    for (const st of s.statuses.filter((x) => x.group === "active" && x.id !== started)) {
+      const item = host.createEl("label");
+      const cb = item.createEl("input", { type: "checkbox", value: st.id });
+      cb.checked = notStarted.includes(st.id);
+      item.appendText(st.label);
+      boxes.push(cb);
+      cb.addEventListener("change", () => {
+        s.autoStatus.notStarted = boxes.filter((b) => b.checked).map((b) => b.value);
+        sync();
+        this.save();
+      });
+    }
+    const sync = () => {
+      const on = boxes.filter((b) => b.checked);
+      for (const b of boxes) b.disabled = on.length === 1 && b.checked;
+    };
+    sync();
+  }
+
+  // ===== 表の列 / table columns =====
+  // 列の定義（組み込み＋Custom field）/ the column definitions (built-ins + custom fields)
+  private columnDefs(): ColumnDef[] {
+    return [...BUILTIN_COLUMNS, ...validCustomFields(this.plugin.settings).map(customColumn)];
+  }
+
+  // 列 1 行：表に表示・上下の矢印・幅。隠した列は一覧の下に薄く並び、同じように操作できる（幅などの設定は消えない）
+  // one column row: show in the table, up/down arrows and the width; hidden columns sit dimmed at the bottom and work the same (their settings are kept)
+  private ctlColumnRow(setting: Setting, col: ColumnDef, on: boolean, canUp: boolean, canDown: boolean): void {
+    const s = this.plugin.settings;
+    setting.setName(col.label()).setClass("ogantt-col-row");
+    if (!on) setting.setClass("ogantt-col-off");
+    setting.addToggle((t) => {
+      t.setValue(on).onChange((v) => this.changeColumns(`${col.id}|0`, () => Object.assign(s, toggleColumn(this.columnDefs(), s.visibleColumns, s.columnOrder, col.id, v))));
+      t.toggleEl.setAttr("aria-label", `${tr().setColumnShown}: ${col.label()}`);
+      t.toggleEl.dataset.col = `${col.id}|0`;
+    });
+    for (const dir of [-1, 1] as const) {
+      setting.addButton((b) => {
+        b.setIcon(dir < 0 ? "arrow-up" : "arrow-down")
+          .setTooltip(dir < 0 ? tr().colMoveUp(col.label()) : tr().colMoveDown(col.label()))
+          .setDisabled(dir < 0 ? !canUp : !canDown)
+          .onClick(() => this.changeColumns(`${col.id}|${dir}`, () => {
+            s.columnOrder = moveColumn(this.columnDefs(), s.visibleColumns, s.columnOrder, col.id, dir) ?? s.columnOrder;
+          }));
+        b.buttonEl.addClass("clickable-icon");
+        b.buttonEl.dataset.col = `${col.id}|${dir}`;
+      });
+    }
+    // 幅（空欄＝既定幅）。隠した列も変えられる / the width (blank = the default); hidden columns can be changed too
+    setting.addText((t) => {
+      t.inputEl.type = "number";
+      t.inputEl.min = "40";
+      t.inputEl.addClass("ogantt-col-width");
+      t.inputEl.setAttr("aria-label", `${tr().setColumnWidth}: ${col.label()}`);
+      const w = s.columnWidths[col.id];
+      t.setPlaceholder(String(col.width)).setValue(w != null ? String(w) : "").onChange((v) => {
+        const n = Math.round(Number(v));
+        if (!v.trim()) delete s.columnWidths[col.id];
+        else if (n >= 40) s.columnWidths[col.id] = n;
+        else return;
+        this.save();
+      });
+    });
+  }
+
+  // 列の表示・並びを変えて描き直し、フォーカスを同じ操作へ戻す（端で押せなくなった矢印なら反対向きへ）
+  // change the columns' visibility or order, redraw, and put focus back on the same control (on the other arrow once one is disabled at an end)
+  private changeColumns(focus: string, change: () => void): void {
+    change();
+    this.save();
+    this.redraw();
+    window.setTimeout(() => {
+      const el = this.containerEl.querySelector<HTMLElement>(`[data-col="${CSS.escape(focus)}"]`);
+      const row = el?.closest(".setting-item");
+      (el?.matches(":disabled") ? row?.querySelector<HTMLElement>("button:not(:disabled)") : el)?.focus();
+    }, 0);
+  }
+
   // 色の選択欄：色見本のボタンでパレット（＋カスタム）を開く / a colour control: a swatch button that opens the palette (+ custom)
   private ctlColor(setting: Setting, get: () => string, set: (color: string) => void): Setting {
     return setting.addButton((b) => {
@@ -412,7 +531,16 @@ export class GanttSettingTab extends PluginSettingTab {
   private ctlStatusRow(setting: Setting, st: StatusDef): void {
     setting
       .addText((t) => t.setPlaceholder(tr().setStatusId).setValue(st.id).onChange((v) => { st.id = v.trim(); this.save(); }))
-      .addText((t) => t.setPlaceholder(tr().setStatusLabel).setValue(st.label).onChange((v) => { st.label = v; this.save(); }))
+      .addText((t) => {
+        t.setPlaceholder(tr().setStatusLabel).setValue(st.label).onChange((v) => { st.label = v; this.save(); });
+        // 名前で覚えている見出しのアイコン・畳み状態は、打ち終えたとき（確定時）にまとめて付け替える / the heading icon and collapse state kept by name move once, on commit
+        let was = st.label;
+        t.inputEl.addEventListener("change", () => {
+          this.plugin.renameStatusKeys(was, st.label);
+          was = st.label;
+          this.save();
+        });
+      })
       // グループ（完了/未完了の判定に使う。種類は Wrike と同じ 4 固定）
       // the group behind the completed/incomplete distinction; the four are fixed, as in Wrike
       .addDropdown((d) => {
@@ -477,6 +605,7 @@ export class GanttSettingTab extends PluginSettingTab {
           if (at >= 0) s.customFields.splice(at, 1);
           const col = `cf:${f.id}`;
           s.visibleColumns = s.visibleColumns.filter((c) => c !== col);
+          s.columnOrder = s.columnOrder.filter((c) => c !== col);
           delete s.columnWidths[col];
           if (s.sortBy === col) {
             s.sortBy = "start";
@@ -863,7 +992,7 @@ export class GanttSettingTab extends PluginSettingTab {
         type: "list",
         heading: tr().setCustomFieldsHeading,
         items: [
-          { name: "", desc: tr().setCustomFieldsDesc },
+          { name: "", desc: tr().setCustomFieldsDesc, render: () => {} },
           ...(s.customFields.length > 0 ? [{ name: "", render: (x: Setting) => this.ctlCustomFieldHeader(x) }] : []),
           ...s.customFields.map((f): SettingGroupItem => ({
             name: "",
@@ -877,6 +1006,29 @@ export class GanttSettingTab extends PluginSettingTab {
       },
       // 注意書きがあるときだけ置く / the advisory, only when there is something to say
       ...(cfWarnings.length > 0 ? [{ name: "", render: (x: Setting) => this.ctlCustomFieldWarning(x, cfWarnings) }] : []),
+      // 表の列：表示中の列を表の順に、その下に隠した列 / table columns: the shown ones in table order, the hidden ones below
+      {
+        type: "group",
+        heading: tr().setColumnsHeading,
+        items: [
+          { name: "", desc: tr().setColumnsDesc, render: () => {} }, // render が無いと宣言版は名前の無い行を描かない / without a render the declarative tab skips a nameless row
+          ...columnList(this.columnDefs(), s.visibleColumns, s.columnOrder).map(({ col, on }, i, list): SettingGroupItem => ({
+            name: "",
+            render: (x) => this.ctlColumnRow(x, col, on, list[i - 1]?.on === on, list[i + 1]?.on === on),
+          })),
+        ],
+      },
+      // 日付による自動ステータス（行き先などは ON のときだけ）/ automatic status by date (the targets only while it's on)
+      {
+        type: "group",
+        heading: tr().setAutoStatusHeading,
+        items: [
+          { name: tr().setAutoStatusName, desc: tr().setAutoStatusDesc, render: (x) => this.ctlAutoStatus(x) },
+          { name: tr().setAutoStatusStarted, visible: () => s.autoStatus.enabled, render: (x) => this.ctlAutoStatusTarget(x, "started") },
+          { name: tr().setAutoStatusNotStarted, visible: () => s.autoStatus.enabled, render: (x) => this.ctlAutoStatusNotStarted(x) },
+          { name: tr().setAutoStatusFinished, visible: () => s.autoStatus.enabled, render: (x) => this.ctlAutoStatusTarget(x, "finished") },
+        ],
+      },
       // タグの色（フォルダの色は表で右クリック）/ tag colors (folder colors via right-click in the table)
       // 見出しの無い単独項目は直前のグループ（ステータス）に吸い寄せられて見えるので、
       // 既定色は「タグの色」見出しを持つグループの中に置く

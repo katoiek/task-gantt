@@ -50,13 +50,15 @@ export function openPopover(anchor: HTMLElement, cls: string, build: (menu: HTML
   if (scope) keys!.keymap.pushScope(scope);
   let closed = false;
   const before = doc.activeElement as HTMLElement | null; // 閉じたらここへフォーカスを返す / focus returns here on close
+  // 代わりの要素を探す範囲：開いた元のビュー（か設定画面）の中だけ / where a replacement is looked for: only inside the view (or settings window) it was opened from
+  const home: ParentNode = before?.closest(".workspace-leaf-content, .modal-container") ?? doc;
   // 開いた元が描き直されて消えていたら、同じ役の新しい要素へ返す（data-focus、無ければ同じタグ・クラス・文字の要素）
   // when the element that opened it was redrawn away, focus goes to its replacement (same data-focus, else the same tag, classes and text)
   const twin = (el: HTMLElement): HTMLElement | null => {
     if (el.isConnected) return el;
     const key = el.dataset.focus;
-    if (key) return doc.querySelector<HTMLElement>(`[data-focus="${CSS.escape(key)}"]`);
-    return Array.from(doc.querySelectorAll<HTMLElement>(el.tagName)).find((x) => x.className === el.className && x.textContent === el.textContent) ?? null;
+    if (key) return home.querySelector<HTMLElement>(`[data-focus="${CSS.escape(key)}"]`);
+    return Array.from(home.querySelectorAll<HTMLElement>(el.tagName)).find((x) => x.className === el.className && x.textContent === el.textContent) ?? null;
   };
   const close = () => {
     if (closed) return;
@@ -68,6 +70,7 @@ export function openPopover(anchor: HTMLElement, cls: string, build: (menu: HTML
     menu.remove();
     doc.removeEventListener("pointerdown", onOutside, true);
     win.removeEventListener("keydown", onKey, true);
+    win.removeEventListener("unload", close);
     if (inside && before) twin(before)?.focus();
   };
   const onOutside = (e: PointerEvent) => {
@@ -75,12 +78,12 @@ export function openPopover(anchor: HTMLElement, cls: string, build: (menu: HTML
     // 中から開いたメニューや [[ の候補を押すのは外側ではない / pressing a menu or a "[[" suggestion opened from inside isn't outside
     if (!menu.contains(tg) && !anchor.contains(tg) && !tg.closest?.(".menu, .ogantt-link-suggest")) close();
   };
-  // Esc で閉じ、Tab はポップオーバーの中を巡回させる（キーボードで外へ迷い出ない）。変換中のキーと、[[ の候補が出ているときのキーはそちらへ
-  // Esc closes; Tab cycles inside the popover so keyboard focus can't wander off behind it. Keys during a conversion, or while "[[" suggestions are open, go to those
+  // Tab はポップオーバーの中を巡回させる（キーボードで外へ迷い出ない）。Esc は上の Scope だけが受ける（重なったポップオーバーは一番上だけが閉じる）。
+  // 変換中のキーと、[[ の候補が出ているときのキーはそちらへ
+  // Tab cycles inside the popover so keyboard focus can't wander off behind it. Esc is handled only by the Scope above (with popovers stacked,
+  // only the top one closes). Keys during a conversion, or while "[[" suggestions are open, go to those
   const onKey = (e: KeyboardEvent) => {
     if (composing(e) || doc.querySelector(".ogantt-link-suggest")) return;
-    // 後ろの設定画面などの Esc まで閉じないよう、ここで止める / stopped here, so the settings window behind doesn't close on the same Esc
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); return; }
     if (e.key !== "Tab" || !menu.contains(doc.activeElement)) return;
     const items = focusable();
     const edge = e.shiftKey ? items[0] : items[items.length - 1];
@@ -102,7 +105,6 @@ export function openPopover(anchor: HTMLElement, cls: string, build: (menu: HTML
   menu.style.maxHeight = `${win.innerHeight - top - 4}px`;
   menu.style.left = `${Math.max(8, Math.min(r.left, win.innerWidth - menu.offsetWidth - 8))}px`;
   doc.addEventListener("pointerdown", onOutside, true);
-  // 窓で先に受ける（後ろの設定画面などが同じ Esc で閉じないよう、文書より前で止める）/ taken at the window first, so the same Esc is stopped before a settings window behind can close on it
   win.addEventListener("keydown", onKey, true);
   // 窓ごと閉じられても（設定画面など）キーの割り当てを外す / release the key binding even when the whole window closes (the settings window, …)
   win.addEventListener("unload", close, { once: true });
@@ -111,9 +113,9 @@ export function openPopover(anchor: HTMLElement, cls: string, build: (menu: HTML
   if (!menu.contains(doc.activeElement)) (focusable().find((el) => el.matches("input, select, textarea")) ?? focusable()[0])?.focus();
 }
 
-// パレットの色見本＋カスタム（ネイティブの色選択＝色相から自由に選べる）を host に並べる
-// lay the palette swatches into `host`, plus a custom swatch that opens the native picker (any hue)
-export function paletteInto(host: HTMLElement, current: string, onPick: (color: string) => void): void {
+// パレットの色見本＋カスタム（ネイティブの色選択＝色相から自由に選べる）を host に並べる。reset があれば「自動の色に戻す」ボタンも
+// lay the palette swatches into `host`, plus a custom swatch that opens the native picker (any hue); with `reset`, a back-to-automatic button too
+export function paletteInto(host: HTMLElement, current: string, onPick: (color: string) => void, reset?: () => void): void {
   const grid = host.createDiv({ cls: "ogantt-palette-grid" });
   const cur = toHex(current).toLowerCase();
   for (const c of PALETTE) {
@@ -125,11 +127,15 @@ export function paletteInto(host: HTMLElement, current: string, onPick: (color: 
   const custom = grid.createEl("input", { type: "color", cls: "ogantt-swatch ogantt-swatch-custom", attr: { "aria-label": tr().customColor } });
   custom.value = cur;
   custom.onchange = () => onPick(custom.value);
+  if (!reset) return;
+  const back = grid.createEl("button", { cls: "clickable-icon ogantt-swatch-reset", attr: { "aria-label": tr().menuResetColor } });
+  setIcon(back, "rotate-ccw");
+  back.onclick = reset;
 }
 
-// 色のピッカー（パレットのポップオーバー）/ colour picker: the palette in a popover
-export function pickColor(anchor: HTMLElement, current: string, onPick: (color: string) => void): void {
-  openPopover(anchor, "ogantt-palette", (menu, close) => paletteInto(menu, current, (c) => { close(); onPick(c); }));
+// 色のピッカー（パレットのポップオーバー）。reset を渡すと自動の色に戻すボタンが付く / colour picker: the palette in a popover; `reset` adds a back-to-automatic button
+export function pickColor(anchor: HTMLElement, current: string, onPick: (color: string) => void, reset?: () => void): void {
+  openPopover(anchor, "ogantt-palette", (menu, close) => paletteInto(menu, current, (c) => { close(); onPick(c); }, reset && (() => { close(); reset(); })));
 }
 
 // アイコンのピッカー：候補の一覧と、Obsidian の全アイコンからの検索 / icon picker: suggestions, plus a search over all of Obsidian's icons

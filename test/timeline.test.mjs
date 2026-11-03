@@ -138,5 +138,12 @@ check("帯: すぐ月が替わるなら左端の見出しは省く", tight.map((
 // 今日は端末の暦で数える（UTC だと時差のぶん前後にずれる）/ today follows the device calendar, not UTC
 check("todayIndex はローカルの日付", [0, 30, 23 * 60 + 30].every((min) => dayToStr(todayIndex(new Date(2026, 9, 23, 0, min))) === "2026-10-23"));
 
+// 設定タイムゾーンの今日：固定オフセットなら端末に関係なくその地域の日付 / with a fixed offset, today is that zone's date whatever the device says
+const instant = new Date(Date.UTC(2026, 10, 3, 20, 30)); // 2026-11-03 20:30 UTC
+check("todayIndex: +09:00 は翌日", dayToStr(todayIndex(instant, "+09:00")) === "2026-11-04");
+check("todayIndex: -05:00 は同日", dayToStr(todayIndex(instant, "-05:00")) === "2026-11-03");
+check("todayIndex: -09:30 の朝", dayToStr(todayIndex(new Date(Date.UTC(2026, 10, 4, 5, 0)), "-09:30")) === "2026-11-03");
+check("todayIndex: system は端末の暦", todayIndex(new Date(2026, 9, 23, 23, 30), "system") === todayIndex(new Date(2026, 9, 23, 23, 30)));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

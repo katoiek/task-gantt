@@ -78,12 +78,12 @@ export default class GanttPlugin extends Plugin {
         if (file.extension === "md") schedulePush(this);
       })
     );
-    // リネーム・移動は同期状態のキーを付け替え、フォルダならボードの表示設定もついて行かせる
-    // renames re-key the sync state; a folder rename carries its boards' view setup along
+    // リネーム・移動は同期状態のキーを付け替え、フォルダならボードの表示設定もついて行かせる。畳んだ親タスクは閉じたボードでも追いかける
+    // renames re-key the sync state; a folder rename carries its boards' view setup along, and collapsed parent tasks follow on closed boards too
     this.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
         if (file instanceof TFile) migrateRenamedPath(this, oldPath, file.path);
-        else if (file instanceof TFolder) this.moveBoards(oldPath, file.path);
+        if (file instanceof TFile || file instanceof TFolder) this.moveBoards(oldPath, file.path);
       })
     );
     // 削除はイベントの孤児掃除を予約 / deletions schedule the orphan cleanup
@@ -133,7 +133,34 @@ export default class GanttPlugin extends Plugin {
       delete boards[key];
       moved = true;
     }
+    // フォルダの見出しのアイコン（キーは "folder:<パス>"）もついて行く / folder heading icons ("folder:<path>") follow too
+    const icons = this.settings.icons;
+    for (const key of Object.keys(icons)) {
+      const path = key.startsWith("folder:") ? key.slice(7) : null;
+      if (path == null || (path !== from && !path.startsWith(from + "/"))) continue;
+      icons[`folder:${to}${path.slice(from.length)}`] = icons[key];
+      delete icons[key];
+      moved = true;
+    }
     if (moved) void this.saveData(this.settings);
+  }
+
+  // ステータスの名前を変えたら、名前で覚えている見出しのアイコンと畳んだ見出し（"status:<名前>"）を付け替える。行き先が埋まっていれば触らない。保存は呼び出し側
+  // after a status is renamed, re-key what is remembered by its name: the heading icon and collapsed headings ("status:<name>");
+  // a target already in use is left alone. The caller saves
+  renameStatusKeys(from: string, to: string): void {
+    const a = `status:${from}`;
+    const b = `status:${to}`;
+    if (a === b) return;
+    const { icons, boards } = this.settings;
+    if (icons[a] && !icons[b]) {
+      icons[b] = icons[a];
+      delete icons[a];
+    }
+    for (const board of Object.values(boards)) {
+      if (board.collapsed?.includes(a) && !board.collapsed.includes(b)) board.collapsed = board.collapsed.map((k) => (k === a ? b : k));
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_GANTT)) if (leaf.view instanceof GanttView) leaf.view.renameCollapsed(a, b);
   }
 
   // フォーカス中フォルダを推定 / best-effort current folder
@@ -185,6 +212,9 @@ export default class GanttPlugin extends Plugin {
     this.settings.icons = { ...(this.settings.icons ?? {}) };
     this.settings.boards = { ...(this.settings.boards ?? {}) };
     this.settings.columnWidths = { ...(this.settings.columnWidths ?? {}) };
+    this.settings.columnOrder = [...(this.settings.columnOrder ?? [])];
+    this.settings.autoStatus = Object.assign({}, DEFAULT_SETTINGS.autoStatus, this.settings.autoStatus);
+    this.settings.autoStatus.notStarted = [...(this.settings.autoStatus.notStarted ?? [])];
     this.settings.customFields = (this.settings.customFields ?? []).map((f) => ({ ...f }));
     this.settings.nonWorkingDays = [...(this.settings.nonWorkingDays ?? DEFAULT_SETTINGS.nonWorkingDays)];
     // 通知設定も既定とマージ＆複製 / merge notify settings with defaults and clone containers
