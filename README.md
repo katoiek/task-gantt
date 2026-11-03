@@ -47,7 +47,7 @@ Each group heading has an icon for its grouping — a folder, a person, a status
 
 ![Click a column header to sort, with an ↑/↓ indicator](docs/images/sort-en.webp)
 
-**Choose columns** in the **Display** menu — show or hide Start, Due, Duration, Progress, Assignee, Status, and Tags. Any column shown here can be edited by double-clicking its cell. The column layout and sort are remembered across sessions:
+**Choose columns** in the **Display** menu — show or hide Start, Due, Duration, Progress, Assignee, Status, and Tags, and **reorder them** with the ↑/↓ arrows next to each (keyboard too; the task name always stays first). Hidden columns stay in the list, greyed out below the shown ones, so they can be re-shown or reordered at any time; their width and settings are kept. **Settings → Task Gantt → Table columns** offers the same list, plus each column's width. Any column shown here can be edited by double-clicking its cell. The column layout and sort are remembered across sessions:
 
 ![Show or hide table columns from the Display menu](docs/images/column_en.webp)
 
@@ -196,11 +196,13 @@ Changes made **outside Obsidian** — renaming, moving or deleting notes in Wind
 
 Open **Settings → Task Gantt** to configure the default folder, subfolder recursion, default zoom, and the **date display format** (`YYYY/MM/DD`, `DD/MM/YYYY`, or `MM/DD/YYYY`; stored dates always stay ISO `YYYY-MM-DD`).
 
-The **Timezone** setting (system or a fixed GMT offset, listed with representative cities) controls how times of day are displayed and saved. Changing it re-displays stored times in the new offset.
+The **Timezone** setting (system or a fixed GMT offset, listed with representative cities) controls how times of day are displayed and saved, and which day counts as today (the today line, date filters, new tasks' dates). Changing it re-displays stored times in the new offset.
 
 ![Timezone setting with representative cities](docs/images/timezone-en.webp)
 
 **Non-working days** (Saturday & Sunday, Friday & Saturday, Sunday only, or none) are skipped when counting a task's duration and when dependencies move tasks. **Push FS successors automatically** (on by default) controls whether a slipping predecessor pushes its FS successors.
+
+**Automatic status** (off by default) moves statuses on by date: once a task's start date arrives, a task in a *not-started* status (by default the first Active status, e.g. To do) moves to the *started* status (default: In progress); once its due date has passed, any task still in an Active status moves to the *finished* status (default: Done). Pick all three under **Settings → Task Gantt → Automatic status**. Tasks in a Deferred, Completed or Cancelled status, tasks with no status, and tasks without the date in question are never touched, and nothing moves backwards. It runs when a board opens or reloads and when the day changes while it's open, counting "today" in the **Timezone** above. All the changes of one run are a single step in the undo history; a notice says how many tasks changed and offers **Undo**, and a change you undo isn't applied again that day.
 
 The **Progress line color** setting sets the color of the jagged line drawn by the **Progress line** view option, with a button to reset it to the default amber.
 
