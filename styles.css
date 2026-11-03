@@ -605,6 +605,10 @@ button.ogantt-legend-chip {
 }
 .ogantt-grid {
   display: grid;
+  /* 幅は中身（表＋タイムライン）に合わせる。枠の幅のままだと、表の sticky がその幅の分しか効かず、長いタイムラインを横に送ると表が流れてしまう
+     as wide as its content (table + timeline): left at the scroll box's width, the table's sticky only holds for that width and a long timeline scrolls the table away */
+  width: max-content;
+  min-width: 100%;
   /* columns/rows are set inline from JS */
 }
 

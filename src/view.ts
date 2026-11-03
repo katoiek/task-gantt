@@ -41,6 +41,12 @@ import {
   buildBands,
   todayIndex,
   formatDate,
+  growPad,
+  nearEdge,
+  padRange,
+  padToCover,
+  RangePad,
+  shiftScroll,
   buildProgressLine,
   ProgressLineRow,
   Tick,
@@ -149,7 +155,12 @@ export class GanttView extends ItemView {
   private zoom: ZoomMode;
   private tasks: Task[] = [];
   private rows: Row[] = [];
-  private range: DateRange = { min: 0, max: 0 };
+  private range: DateRange = { min: 0, max: 0 }; // 表示範囲（タスクの範囲＋余白）/ the shown range (the tasks' range plus the pad)
+  private baseRange: DateRange = { min: 0, max: 0 }; // タスクの範囲 / the tasks' range
+  // 終わりの無いタイムライン：スクロールで足した前後の日数（縮尺を変える・ボードを替えると戻る）と、のばしている最中か
+  // the endless timeline: days added before and after by scrolling (reset by a zoom or board change), and whether a grow is under way
+  private pad: RangePad = { before: 0, after: 0 };
+  private extending = false;
   private ppd = 16;
   private selectedPath: string | null = null;
   private folder = ""; // 表示対象フォルダ / scoped folder path
@@ -459,6 +470,7 @@ export class GanttView extends ItemView {
     if (this.boardKey !== this.folder) {
       this.boardKey = this.folder;
       this.loadBoard();
+      this.pad = { before: 0, after: 0 };
       this.boardMain = null;
       this.cursor = 0;
       this.closeDetail();
@@ -589,21 +601,36 @@ export class GanttView extends ItemView {
     const prev = this.boardMain;
     const keep = prev && (prev.clientHeight ? this.scrollOf(prev) : this.pendingScroll ?? this.scrollMemo);
     const hadFocus = !!this.tbodyEl?.contains(activeDocument.activeElement); // キーボードで行にいたら描き直した後も行へ / keep keyboard focus on the rows
-    this.range = computeRange(view, this.today());
+    this.baseRange = computeRange(view, this.today());
+    // Fit は範囲を幅に合わせるのでのばさない。ほかは描き直しの前に見ていた日が範囲に残るよう余白を足す
+    // Fit fits the range to the width, so it never grows; otherwise the pad keeps the day in view before the redraw inside the range
+    if (this.zoom === "Fit") this.range = this.baseRange;
+    else {
+      // 見ていた日が範囲の外に出たときだけ（縮尺の変更・タスクの移動）。中にあれば余白は変えない（描き直しのたびに上限を超えて育たない）
+      // only when that day fell outside the range (a zoom change, a task moved); otherwise the pad stays, so redraws can't grow it past the limit
+      const shown = padRange(this.baseRange, this.pad);
+      if (keep && (keep.day < shown.min || keep.day > shown.max + 1)) this.pad = padToCover(this.baseRange, this.pad, keep.day, this.zoom);
+      this.range = padRange(this.baseRange, this.pad);
+    }
     this.ppd = this.computePpd();
 
-    this.gridHost.empty();
+    // のばすときは同じスクロール枠を使い続ける（つまみのドラッグや慣性のスクロールが途切れない）/ a grow keeps the same scroll box, so a thumb drag or momentum scroll carries on
+    const reuse = this.extending && prev?.isConnected ? prev : null;
+    if (!reuse) this.gridHost.empty();
     this.boardMain = null;
     this.cursor = Math.max(0, Math.min(this.cursor, this.rows.length - 1));
     // 何も出ないとき：絞り込みのせいならそう伝えて解除ボタンを、フォルダが本当に空なら新規作成ボタンを出す
     // nothing to show: when the filters hide everything say so and offer Clear filters; when the folder is truly empty offer New task
     const filtered = view.length === 0 && this.tasks.length > 0;
     if (this.rows.length === 0 || filtered) return this.renderEmpty(filtered);
-    const main = this.gridHost.createDiv({ cls: "ogantt-main" });
+    const main = reuse ?? this.gridHost.createDiv({ cls: "ogantt-main" });
+    reuse?.empty();
     this.boardMain = main;
     this.renderGrid(main);
     if (keep) this.applyScroll(main, keep);
     this.paintWindow?.(true);
+    // 端に着いたまま描き直したとき（開いた直後など）は、スクロールを待たずにのばす / when drawn right at an edge (just opened, say), grow without waiting for a scroll
+    if (!this.extending) main.win.requestAnimationFrame(() => this.growNearEdge());
     // キーボードで行にいたら描き直した後も行へ（スクロールはさせない。行が描かれていなければ表の本体へ）
     // keyboard focus stays on the rows after a redraw, without scrolling (on the table body when that row isn't drawn)
     if (hadFocus) (this.tbodyEl.querySelector<HTMLElement>(`.ogantt-tr[data-index="${this.cursor}"]`) ?? this.tbodyEl).focus({ preventScroll: true });
@@ -1226,6 +1253,7 @@ export class GanttView extends ItemView {
       btn.toggleClass("is-active", z === this.zoom);
       btn.onclick = () => {
         this.zoom = z; // ppd は rerender 内の computePpd() が決める / ppd is set by computePpd() in rerender
+        this.pad = { before: 0, after: 0 }; // 足した日は捨てる（中央の日は rerender が範囲に入れる）/ drop the added days (rerender keeps the centre day in range)
         seg.querySelectorAll("button").forEach((b) => {
           b.toggleClass("is-active", b === btn);
           b.setAttr("aria-pressed", String(b === btn));
@@ -1593,6 +1621,12 @@ export class GanttView extends ItemView {
 
   // 今日の線が中央に来るよう横スクロール / scroll horizontally so the today marker is centered
   private scrollToToday(): void {
+    // 今日が表示範囲の外なら、範囲をのばしてから（Fit はのばさない）/ when today is outside the shown range, grow it first (not in Fit)
+    const today = this.today();
+    if (this.zoom !== "Fit" && this.boardMain && (today < this.range.min || today > this.range.max)) {
+      this.pad = padToCover(this.baseRange, this.pad, today, this.zoom);
+      this.rerender();
+    }
     const main = this.boardMain;
     const todayLine = main?.querySelector<SVGElement>(".ogantt-today");
     if (!main || !todayLine) return; // 今日が範囲外＝線が無い / no marker when today is out of range
@@ -1958,6 +1992,9 @@ export class GanttView extends ItemView {
       } else if (hadFocus) body.querySelector<HTMLElement>(`.ogantt-tr[data-index="${this.cursor}"]`)?.focus({ preventScroll: true });
       highlight(null);
     };
+    // スクロールの受け手は枠ごとに 1 回だけ（のばすときは同じ枠を使い続ける）/ one scroll listener per scroll box (a grow keeps the box)
+    if (main.dataset.scroll) return;
+    main.dataset.scroll = "1";
     let ticking = false;
     main.addEventListener("scroll", () => {
       if (ticking) return;
@@ -1966,8 +2003,35 @@ export class GanttView extends ItemView {
         ticking = false;
         if (main.clientHeight) this.scrollMemo = this.scrollOf(main);
         this.paintWindow?.();
+        this.growNearEdge();
       });
     });
+  }
+
+  // 横スクロールが端から画面 1 つ分以内に来たら、その側に日を足す（左に足したら同じ日付を見せたまま）。Fit・ドラッグ中・セルの編集中・書き出し中はしない
+  // when the horizontal scroll comes within one screen of an edge, add days on that side (keeping the same dates in view when adding on the left);
+  // not in Fit, during a drag, while a cell is being edited, or during an export
+  private growNearEdge(): void {
+    const main = this.boardMain;
+    if (!main?.clientWidth || this.zoom === "Fit" || this.dragging || this.exporting || this.extending) return;
+    const ae = activeDocument.activeElement;
+    if (ae && this.tbodyEl?.contains(ae) && ae.matches("input, select, textarea")) return;
+    const side = nearEdge(main.scrollLeft, main.clientWidth, main.scrollWidth, main.clientWidth);
+    const next = side && growPad(this.pad, side, this.zoom);
+    if (!side || !next) return;
+    const added = next[side] - this.pad[side];
+    const { scrollLeft, scrollTop } = main;
+    this.pad = next;
+    this.extending = true;
+    try {
+      this.rerender();
+    } finally {
+      this.extending = false;
+    }
+    if (this.boardMain !== main) return;
+    main.scrollTop = scrollTop;
+    main.scrollLeft = side === "before" ? shiftScroll(scrollLeft, added, this.ppd) : scrollLeft;
+    this.scrollMemo = this.scrollOf(main);
   }
 
   // 表ヘッダー（表示中の列・クリックか Enter でソート・右端グリップで幅）/ the table header: visible columns, sort by click or Enter, width grip
@@ -3957,6 +4021,9 @@ export class GanttView extends ItemView {
     const screenFont = this.fontFamily;
     this.fontFamily = EXPORT_FONT;
     this.bare = true;
+    // 書き出しはタスクの範囲だけ（スクロールで足した日は含めない）/ the export covers the tasks' range only (not the days added by scrolling)
+    const shown = this.range;
+    this.range = this.baseRange;
     try {
       const PAD = 16;
       const TITLE_H = 34;
@@ -4063,6 +4130,7 @@ export class GanttView extends ItemView {
     } finally {
       this.fontFamily = screenFont;
       this.bare = false;
+      this.range = shown;
     }
   }
 

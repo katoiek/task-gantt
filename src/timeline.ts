@@ -132,6 +132,57 @@ export function computeRange(tasks: Task[], today = todayIndex()): DateRange {
   return { min: Math.min(...days) - 3, max: Math.max(...days) + 7 };
 }
 
+// ── 終わりの無いタイムライン：横スクロールが端に近づいたら、タスクの範囲の前後に日を足していく ──
+// ── the endless timeline: as the horizontal scroll nears an edge, days are added before or after the tasks' range ──
+
+// タスクの範囲の前後に足した日数 / the days added before and after the tasks' range
+export interface RangePad {
+  before: number;
+  after: number;
+}
+
+// 端に近づいたとき 1 回に足す日数（Day は 4 週、Week は 3 か月、Month は 1 年）。Fit はのばさない
+// the days added each time an edge comes near (Day: four weeks, Week: three months, Month: a year); Fit doesn't grow
+export function extendChunk(zoom: ZoomMode): number {
+  return zoom === "Day" ? 28 : zoom === "Week" ? 91 : zoom === "Month" ? 365 : 0;
+}
+
+// スクロールで片側に足せる上限（Day は 1 年、Week は 3 年、Month は 10 年）。DOM と描画の大きさを有限に保つ
+// the most scrolling can add on one side (Day: a year, Week: three years, Month: ten); keeps the DOM and drawing bounded
+export function extendLimit(zoom: ZoomMode): number {
+  return zoom === "Day" ? 366 : zoom === "Week" ? 3 * 366 : zoom === "Month" ? 10 * 366 : 0;
+}
+
+// 片側を 1 回分のばした余白。上限で止まり、のびなければ null / the pad grown by one chunk on one side; stops at the limit, null when it can't grow
+export function growPad(pad: RangePad, side: keyof RangePad, zoom: ZoomMode): RangePad | null {
+  const next = Math.min(extendLimit(zoom), pad[side] + extendChunk(zoom));
+  return next > pad[side] ? { ...pad, [side]: next } : null;
+}
+
+// タスクの範囲に余白を足した表示範囲 / the shown range: the tasks' range plus the pad
+export function padRange(r: DateRange, pad: RangePad): DateRange {
+  return { min: r.min - pad.before, max: r.max + pad.after };
+}
+
+// day が表示範囲に（1 回分の余裕をもって）入る余白。今日へ飛ぶ・縮尺を変えるときに使うので、上限より広くてもよい
+// a pad that brings `day` into the shown range with a chunk to spare; used for jumps (Today, a zoom change), so it may exceed the limit
+export function padToCover(base: DateRange, pad: RangePad, day: number, zoom: ZoomMode): RangePad {
+  const chunk = extendChunk(zoom);
+  return { before: Math.max(pad.before, Math.ceil(base.min - day) + chunk), after: Math.max(pad.after, Math.ceil(day - base.max) + chunk) };
+}
+
+// 左に days 日足したあと、同じ日付を見せたままにする scrollLeft / the scrollLeft that keeps the same dates in view after adding `days` on the left
+export function shiftScroll(scrollLeft: number, days: number, ppd: number): number {
+  return scrollLeft + days * ppd;
+}
+
+// どちらの端に近いか（残りが margin 以下）。両方なら左から / which edge is within `margin` of the view, if any (the left one first)
+export function nearEdge(scrollLeft: number, clientWidth: number, scrollWidth: number, margin: number): keyof RangePad | null {
+  if (scrollLeft < margin) return "before";
+  if (scrollLeft + clientWidth > scrollWidth - margin) return "after";
+  return null;
+}
+
 // ── 稲妻線 / progress line ──
 
 // 稲妻線の 1 行分の入力。バーを持たない行（グループ行・日付なし）は startX を省略する

@@ -1,6 +1,6 @@
 // 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
 // Tests for date-filter resolution/matching and progress-line geometry
-import { resolveDateValue, matchDate, dayIndex, dayToStr, todayIndex, progressLineX, buildProgressLine, buildTicks, buildBands } from "./timeline.mjs";
+import { resolveDateValue, matchDate, dayIndex, dayToStr, todayIndex, progressLineX, buildProgressLine, buildTicks, buildBands, extendChunk, extendLimit, growPad, padRange, padToCover, shiftScroll, nearEdge } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -144,6 +144,23 @@ check("todayIndex: +09:00 は翌日", dayToStr(todayIndex(instant, "+09:00")) ==
 check("todayIndex: -05:00 は同日", dayToStr(todayIndex(instant, "-05:00")) === "2026-11-03");
 check("todayIndex: -09:30 の朝", dayToStr(todayIndex(new Date(Date.UTC(2026, 10, 4, 5, 0)), "-09:30")) === "2026-11-03");
 check("todayIndex: system は端末の暦", todayIndex(new Date(2026, 9, 23, 23, 30), "system") === todayIndex(new Date(2026, 9, 23, 23, 30)));
+
+// 終わりの無いタイムライン：端でのばす日数・上限・左にのばしたときのスクロールの補正 / the endless timeline: chunk, limit, and the scroll fix after growing on the left
+{
+  const zero = { before: 0, after: 0 };
+  check("のばす日数: Day 4 週・Week 3 か月・Month 1 年・Fit なし", [extendChunk("Day"), extendChunk("Week"), extendChunk("Month"), extendChunk("Fit")].join() === "28,91,365,0");
+  check("growPad: 片側だけ 1 回分", JSON.stringify(growPad(zero, "before", "Week")) === '{"before":91,"after":0}');
+  check("growPad: 上限で止まり、それ以上は null", growPad({ before: extendLimit("Week") - 10, after: 0 }, "before", "Week").before === extendLimit("Week") && growPad({ before: extendLimit("Week"), after: 0 }, "before", "Week") === null);
+  check("growPad: Fit はのびない", growPad(zero, "after", "Fit") === null);
+  const base = { min: 100, max: 200 };
+  check("padRange: 前後に足す", JSON.stringify(padRange(base, { before: 28, after: 91 })) === '{"min":72,"max":291}');
+  check("padToCover: 範囲の外の日（今日など）が 1 回分の余裕つきで入る", JSON.stringify(padToCover(base, zero, 500, "Day")) === '{"before":0,"after":328}' && padToCover(base, zero, 10, "Month").before === 455);
+  check("padToCover: 範囲の中ほどなら変えない", JSON.stringify(padToCover(base, { before: 5, after: 7 }, 150, "Day")) === '{"before":5,"after":7}');
+  check("padToCover: 上限を超えても届かせる（明示の移動）", padToCover(base, zero, -5000, "Week").before > extendLimit("Week"));
+  // 左に 91 日（16px/日）足したら、同じ日付を見せるため scrollLeft は 1456px 右へ / adding 91 days on the left at 16 px/day moves scrollLeft 1456 px right to keep the same dates
+  check("shiftScroll: 左にのばした分だけ右へ", shiftScroll(120, 91, 16) === 1576 && shiftScroll(0, 0, 5) === 0);
+  check("nearEdge: 左端・右端・中ほど", nearEdge(100, 800, 5000, 800) === "before" && nearEdge(3500, 800, 5000, 800) === "after" && nearEdge(2000, 800, 5000, 800) === null);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
