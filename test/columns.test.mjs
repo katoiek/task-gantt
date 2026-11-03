@@ -104,6 +104,10 @@ check("unknown sort column falls back to start", sorted(ALL, settings("ghost")) 
   check("cannot move past the top", moveColumn(cols, ["start", "end"], [], "start", -1) === null);
   check("cannot cross into the hidden ones", moveColumn(cols, ["start", "end"], [], "end", 1) === null);
   const hidden = moveColumn(cols, ["start"], [], "tags", -1);
+  // 定義に無い id（キーを打ち直している途中の Custom field）は元の位置のまま残る / ids the definitions don't know (a custom field mid-edit) stay where they were
+  const keep = toggleColumn(cols, ["start", "cf:zz", "end"], ["start", "cf:zz", "end"], "end", false);
+  check("unknown ids keep their visibility and place on toggle", keep.visibleColumns.join() === "start,cf:zz" && keep.columnOrder.slice(0, 3).join() === "start,cf:zz,end");
+  check("unknown ids keep their place on move", moveColumn(cols, ["start", "end"], ["start", "cf:zz", "end"], "end", -1).slice(0, 3).join() === "end,cf:zz,start");
   check("hidden columns reorder among themselves", list(["start"], hidden) === "start,(end),(duration),(progress),(assignee),(tags),(status),(cf:n1)");
 }
 

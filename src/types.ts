@@ -41,6 +41,8 @@ export interface Task {
   // optional time of day, set when frontmatter is "YYYY-MM-DDTHH:mm"; layout stays day-based
   startTime?: string; // HH:mm
   endTime?: string; // HH:mm
+  // 期限日が無く、描くために開始日を写した（日付で動く決まりは期限日として数えない）/ no due date in the note: end was copied from start for drawing (date rules don't count it)
+  endFilled?: boolean;
   status?: string; // StatusDef.id を参照
   // 担当者（多値・フロントマターは単一値でもリストでも可）/ assignees (multi-valued; frontmatter may hold one value or a list)
   assignees: string[];

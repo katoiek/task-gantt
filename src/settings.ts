@@ -8,7 +8,7 @@ import type GanttPlugin from "./main";
 import { StatusDef, StatusGroup, STATUS_GROUPS, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset, CustomField, CustomFieldType } from "./types";
 import { collectAllTags, customFieldIssues, filesWithFrontmatterKey, newStatus, renameFrontmatterKey, validCustomFields } from "./model";
 import { BUILTIN_COLUMNS, ColumnDef, columnList, customColumn, moveColumn, toggleColumn } from "./columns";
-import { autoStatusTargets } from "./schedule";
+import { AutoUndone, autoStatusTargets } from "./schedule";
 import { ChoiceModal, ConfirmModal, PickModal } from "./modals";
 import { obsidianTagColor, toHex } from "./colors";
 import { pickColor } from "./popover";
@@ -76,9 +76,11 @@ export interface GanttSettings {
   nonWorkingDays: number[];
   // 先行が遅れて FS の後続と重なったら後続を押し出す / push FS successors when a slipping predecessor overlaps them
   autoScheduleFS: boolean;
-  // 日付で自動的にステータスを進める（既定 OFF）。空の id・空の一覧は既定（組み込みの in-progress / done、最初の「進行中」グループのステータス）
-  // move statuses on by date (off by default); an empty id or list means the default (the built-in in-progress / done, the first active status)
-  autoStatus: { enabled: boolean; started: string; finished: string; notStarted: string[] };
+  // 日付で自動的にステータスを進める（既定 OFF）。空の id・空の一覧は既定（組み込みの in-progress / done、最初の「進行中」グループのステータス）。
+  // undone は取り消された変更（ノートのパスごと。日付かステータスが変わるまで当て直さない）
+  // move statuses on by date (off by default); an empty id or list means the default (the built-in in-progress / done, the first active status).
+  // `undone` holds the changes the user undid (per note path; not applied again until its date or status changes)
+  autoStatus: { enabled: boolean; started: string; finished: string; notStarted: string[]; undone: Record<string, AutoUndone> };
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
   visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
   // 任意列の並び（列 id。無い列は定義順で後ろ）/ the optional columns' order (column ids; missing ones follow in definition order)
@@ -188,7 +190,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   tz: "system",
   nonWorkingDays: [0, 6],
   autoScheduleFS: true,
-  autoStatus: { enabled: false, started: "", finished: "", notStarted: [] },
+  autoStatus: { enabled: false, started: "", finished: "", notStarted: [], undone: {} },
   detailWidth: 380,
   visibleColumns: ["start", "end"],
   columnOrder: [],
@@ -530,7 +532,16 @@ export class GanttSettingTab extends PluginSettingTab {
   // onDelete means a column-header row at the top of the list can't throw off which row gets removed
   private ctlStatusRow(setting: Setting, st: StatusDef): void {
     setting
-      .addText((t) => t.setPlaceholder(tr().setStatusId).setValue(st.id).onChange((v) => { st.id = v.trim(); this.save(); }))
+      .addText((t) => {
+        t.setPlaceholder(tr().setStatusId).setValue(st.id).onChange((v) => { st.id = v.trim(); this.save(); });
+        // id を変え終えたら、自動ステータスの行き先・未着手の一覧もついて行かせる / once the id is committed, the automatic-status targets follow it
+        let was = st.id;
+        t.inputEl.addEventListener("change", () => {
+          this.plugin.renameStatusId(was, st.id);
+          was = st.id;
+          this.save();
+        });
+      })
       .addText((t) => {
         t.setPlaceholder(tr().setStatusLabel).setValue(st.label).onChange((v) => { st.label = v; this.save(); });
         // 名前で覚えている見出しのアイコン・畳み状態は、打ち終えたとき（確定時）にまとめて付け替える / the heading icon and collapse state kept by name move once, on commit
@@ -564,6 +575,7 @@ export class GanttSettingTab extends PluginSettingTab {
           const live = this.plugin.settings.statuses;
           const at = live.indexOf(st);
           if (at >= 0) live.splice(at, 1);
+          this.plugin.renameStatusId(st.id, null);
           this.save();
           this.redraw();
         })

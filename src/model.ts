@@ -275,7 +275,8 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
     // マイルストーン＝期限(end)のみ入力、または明示フラグ / milestone = only the due date, or explicit flag
     const milestone = fm[k.milestone] === true || (!!end && !start);
     // 「開始のみ・終了なし」は無効ルール → 終了=開始（1日タスク扱い）/ "start only" isn't valid: mirror end = start
-    if (start && !end) end = start;
+    const endFilled = !!start && !end;
+    if (endFilled) end = start;
 
     rawAfter.set(file.path, toArray(fm[k.after]));
     // parent は any を直接受けず unknown 経由で安全に文字列化 / coerce parent via unknown (avoid unsafe any)
@@ -306,6 +307,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       end,
       startTime: ps?.time,
       endTime: pe?.time,
+      endFilled: endFilled || undefined,
       status: fm[k.status] != null ? String(fm[k.status]) : undefined,
       assignees: fmList(fm[k.assignee]),
       kind,

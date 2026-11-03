@@ -30,7 +30,7 @@ import {
   anchorEnd,
   statusGroupOf,
 } from "./model";
-import { autoStatusChanges, cascadeDates, depViolated, endForDuration, isWorkday, keepDurationOnStartChange, offDayGradient, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
+import { AutoUndone, autoStatusChanges, cascadeDates, depViolated, endForDuration, isWorkday, keepDurationOnStartChange, offDayGradient, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
 import {
   DateRange,
   computeRange,
@@ -106,6 +106,7 @@ interface HistoryEntry {
   expect?: Map<string, string | null>;
   moves: Move[];
   created: string[]; // 操作で作成 / made by the op
+  auto?: Record<string, AutoUndone>; // 日付による自動ステータスの変更 / automatic status changes
   deleted: string[]; // 操作で削除 / removed by the op
 }
 
@@ -441,7 +442,9 @@ export class GanttView extends ItemView {
   }
 
   // ディスクから集計し直して再描画 / re-collect from disk, then render
-  async refresh(): Promise<void> {
+  // auto=false は設定の保存からの読み直し（自動ステータスは保存の後に main.ts が 1 回だけ回す）
+  // auto = false for the reload after a settings save (main.ts then runs automatic status once)
+  async refresh(auto = true): Promise<void> {
     if (!this.gridHost) this.buildSkeleton();
     // 起動中（索引の途中）は仮の行のまま待ち、準備ができてから描く / during startup (mid-indexing) keep the placeholder and draw once ready
     if (!this.app.workspace.layoutReady) {
@@ -468,7 +471,7 @@ export class GanttView extends ItemView {
     this.tasks = collectTasks(this.app, this.plugin.settings, this.folder);
     this.allFolders = collectFolders(this.app, this.plugin.settings, this.folder);
     this.rerender();
-    if (await this.applyAutoStatus()) this.rerender();
+    if (auto && (await this.plugin.runAutoStatus(this))) this.rerender();
     // 開いている詳細パネルも最新に。表示中の内容が変わったときだけ描き直し（別のノートの変更や、パネル自身の編集の後の読み直しでは描き直さない）、
     // 欄の入力中は触らない。タスクが消えていたら閉じる
     // bring an open detail panel up to date: rebuilt only when what it shows changed (not for another note's change, nor the reload after the
@@ -482,38 +485,32 @@ export class GanttView extends ItemView {
     if (this.panelSig !== this.sigOf(t, await readBody(this.app, path))) await this.openDetail(path);
   }
 
-  // 日付による自動ステータス（設定で ON のとき）。全部を 1 つの取り消しにまとめ、件数と取り消しボタンを通知する。
-  // 同じ日に一度当てた変更（取り消した・手で戻したものも）は、その日はもう当てない（読み直しのたびに当て直さない）。変えたら true
-  // automatic status by date (when enabled): every change is one undoable action, announced with a count and an Undo button.
-  // A change already applied today (even if undone or set back by hand) isn't applied again that day, so reloads don't redo it; true when something changed
-  private autoApplied = { day: 0, done: new Set<string>() };
-  private autoRunning = false;
-  private async applyAutoStatus(): Promise<boolean> {
+  // 日付による自動ステータスの 1 回分（tasks は既定のフォルダ全体。main.ts の runAutoStatus から 1 つずつ呼ばれる）。全部を 1 つの取り消しにまとめ、
+  // 件数と取り消しボタンを通知する。書けなかったノートは記録にもメモリにも載せない。変えたら true
+  // one automatic-status run (tasks = the whole default folder; called one at a time from main.ts's runAutoStatus). Everything is one undoable action,
+  // announced with a count and an Undo button; a note that couldn't be written is kept out of the record and memory. True when something changed
+  async applyAutoStatus(tasks: Task[]): Promise<boolean> {
     const s = this.plugin.settings;
-    if (!s.autoStatus.enabled || this.autoRunning) return false;
-    const today = this.today();
-    if (this.autoApplied.day !== today) this.autoApplied = { day: today, done: new Set() };
-    const done = this.autoApplied.done;
-    const changes = [...autoStatusChanges(this.tasks, s.statuses, s.autoStatus, today)].filter(([p, st]) => !done.has(`${p}\u0000${st}`));
+    const changes = [...autoStatusChanges(tasks, s.statuses, s.autoStatus, this.today())];
     if (!changes.length) return false;
-    for (const [p, st] of changes) done.add(`${p}\u0000${st}`);
-    this.autoRunning = true;
-    let changed = false;
-    try {
-      changed = await this.mutate(tr().autoStatusLabel, changes.map(([p]) => p), async () => {
-        await Promise.all(changes.map(([p, st]) => writeField(this.app, p, s.keys.status, st)));
-        return true;
-      });
-    } finally {
-      this.autoRunning = false;
-    }
-    if (!changed) return false;
+    const was = new Map(tasks.map((t) => [t.path, t.status ?? ""]));
+    let wrote: typeof changes = [];
+    const changed = await this.mutate(tr().autoStatusLabel, changes.map(([p]) => p), async () => {
+      // 全部書き終えてから記録する（途中で 1 件失敗しても、記録が実際の中身とずれないように）/ record only after every write settles, so one failure can't skew the record
+      const res = await Promise.allSettled(changes.map(([p, c]) => writeField(this.app, p, s.keys.status, c.status)));
+      wrote = changes.filter((_, i) => res[i].status === "fulfilled");
+      if (wrote.length < changes.length) new Notice(tr().writeFailed);
+      const auto: Record<string, AutoUndone> = {};
+      for (const [p, c] of wrote) auto[p] = { rule: c.rule, date: c.date, status: was.get(p) ?? "" };
+      return { auto };
+    });
+    if (!changed || !wrote.length) return false;
     // メタデータの更新を待たずに描き直せるよう、メモリ上のタスクにも反映 / reflect it in memory, so the redraw doesn't wait for the metadata cache
-    for (const [p, st] of changes) {
+    for (const [p, c] of wrote) {
       const t = this.tasks.find((x) => x.path === p);
-      if (t) t.status = st;
+      if (t) t.status = c.status;
     }
-    this.undoToast = this.buttonNotice(tr().autoStatusDone(changes.length), tr().undoShort, () => void this.undo(), 8000);
+    this.undoToast = this.buttonNotice(tr().autoStatusDone(wrote.length), tr().undoShort, () => void this.undo(), 8000);
     return true;
   }
 
@@ -1456,6 +1453,7 @@ export class GanttView extends ItemView {
             onConfirm: () => {
               const at = s.statuses.indexOf(st);
               if (at >= 0) s.statuses.splice(at, 1);
+              this.plugin.renameStatusId(st.id, null);
               persist();
             },
           }).open();
@@ -1632,7 +1630,7 @@ export class GanttView extends ItemView {
       // the contents after the op: with no move and nothing changed it isn't recorded (e.g. removing an inline-only #tag); undo checks they're still these
       const post = await this.snapshot(files.keys());
       if (!r.moves?.length && [...files].every(([p, c]) => post.get(p) === c)) return false;
-      this.record({ label, files, expect: r.moves?.length ? undefined : post, moves: r.moves ?? [], created: r.created ?? [], deleted: r.deleted ?? [] });
+      this.record({ label, files, expect: r.moves?.length ? undefined : post, moves: r.moves ?? [], created: r.created ?? [], deleted: r.deleted ?? [], auto: r.auto });
       return true;
     });
   }
@@ -1749,6 +1747,8 @@ export class GanttView extends ItemView {
         await this.restore(entry.files, redo ? entry.created : entry.deleted, now);
         if (redo) await this.replayMoves(entry.moves);
         this.pushHistory(redo ? this.undoStack : this.redoStack, { ...entry, files: now, expect: entry.expect && entry.files });
+        // 取り消した自動の変更は覚えて、どのボードからも再起動後も当て直さない / an undone automatic change is remembered, so no board re-applies it, even after a restart
+        if (entry.auto) await this.plugin.noteAutoUndone(entry.auto, !redo);
       });
     } finally {
       this.historyBusy--;

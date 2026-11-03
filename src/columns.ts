@@ -347,7 +347,21 @@ export function toggleColumn(defs: ColumnDef[], visible: string[], order: string
   const vis = new Set(visible);
   if (on) vis.add(id);
   else vis.delete(id);
-  return { visibleColumns: list.filter((x) => vis.has(x.col.id)).map((x) => x.col.id), columnOrder: list.map((x) => x.col.id) };
+  return {
+    visibleColumns: keepUnknown(list.filter((x) => vis.has(x.col.id)).map((x) => x.col.id), visible, defs),
+    columnOrder: keepUnknown(list.map((x) => x.col.id), order, defs),
+  };
+}
+
+// 今の定義に無い列 id（キーを打ち直している途中の Custom field など）を、元の位置のまま残す（消すと表示と並びが失われる）
+// keep column ids the current definitions don't know (say, a custom field whose key is being retyped) at their old place; dropping them would lose their visibility and position
+function keepUnknown(next: string[], prev: string[], defs: ColumnDef[]): string[] {
+  const known = new Set(defs.map((c) => c.id));
+  const out = [...next];
+  prev.forEach((id, i) => {
+    if (!known.has(id) && !out.includes(id)) out.splice(Math.min(i, out.length), 0, id);
+  });
+  return out;
 }
 
 // 一覧の中で 1 つ上（dir=-1）か下（+1）へ。表示中と隠した列の境目は越えない（越えられなければ null）
@@ -358,7 +372,7 @@ export function moveColumn(defs: ColumnDef[], visible: string[], order: string[]
   const j = i + dir;
   if (i < 0 || j < 0 || j >= list.length || list[j].on !== list[i].on) return null;
   [list[i], list[j]] = [list[j], list[i]];
-  return list.map((x) => x.col.id);
+  return keepUnknown(list.map((x) => x.col.id), order, defs);
 }
 
 // 列の実効幅（ユーザー上書き > 既定）/ effective column width (user override > default)

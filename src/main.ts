@@ -3,7 +3,8 @@ import { GanttSettings, DEFAULT_SETTINGS, GanttSettingTab } from "./settings";
 import { GanttView } from "./view";
 import { VIEW_TYPE_GANTT, GanttViewState } from "./types";
 import { t } from "./i18n";
-import { inferStatusGroup, moveCollapsed } from "./model";
+import { collectTasks, inferStatusGroup, moveCollapsed } from "./model";
+import { AutoUndone, keepAutoUndone, renameAutoStatusId } from "./schedule";
 import { checkNotifications } from "./notify";
 import { usePopoverKeys } from "./popover";
 import { migrateRenamedPath, schedulePush, syncGcal } from "./gcal/sync";
@@ -215,6 +216,7 @@ export default class GanttPlugin extends Plugin {
     this.settings.columnOrder = [...(this.settings.columnOrder ?? [])];
     this.settings.autoStatus = Object.assign({}, DEFAULT_SETTINGS.autoStatus, this.settings.autoStatus);
     this.settings.autoStatus.notStarted = [...(this.settings.autoStatus.notStarted ?? [])];
+    this.settings.autoStatus.undone = { ...(this.settings.autoStatus.undone ?? {}) };
     this.settings.customFields = (this.settings.customFields ?? []).map((f) => ({ ...f }));
     this.settings.nonWorkingDays = [...(this.settings.nonWorkingDays ?? DEFAULT_SETTINGS.nonWorkingDays)];
     // 通知設定も既定とマージ＆複製 / merge notify settings with defaults and clone containers
@@ -239,11 +241,60 @@ export default class GanttPlugin extends Plugin {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_GANTT)) if (leaf.view instanceof GanttView) leaf.view.rerender();
   }
 
+  // 保存してボードを読み直す。日付による自動ステータスはボードごとではなく、保存の後に 1 回だけ（打鍵が続くあいだは待つ）
+  // save and reload the boards; automatic status runs once after the save (waiting while typing goes on), not once per board
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
     this.app.workspace.getLeavesOfType(VIEW_TYPE_GANTT).forEach((leaf: WorkspaceLeaf) => {
       const v = leaf.view;
-      if (v instanceof GanttView) void v.refresh();
+      if (v instanceof GanttView) void v.refresh(false);
     });
+    if (this.autoTimer != null) window.clearTimeout(this.autoTimer);
+    this.autoTimer = window.setTimeout(() => {
+      this.autoTimer = null;
+      const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_GANTT)[0];
+      const view = this.app.workspace.getActiveViewOfType(GanttView) ?? (leaf?.view instanceof GanttView ? leaf.view : null);
+      if (view) void this.runAutoStatus(view).then((changed) => { if (changed) view.rerender(); });
+    }, 1000);
+  }
+
+  // ── 日付による自動ステータス：既定のフォルダ（未設定なら Vault 全体）で 1 つの実行。ボードを開いた・読み直した・日付が変わったときにボードから呼ばれ、
+  // 重なった呼び出しは実行中のものを待つ（同じノートを二重に書かない）。書き込みと取り消しは呼んだボードの履歴に載る
+  // ── automatic status by date: one run over the default folder (the whole vault when unset), called by a board when it opens, reloads or the day changes; overlapping calls
+  // wait for the run in progress, so no note is written twice. The writes and their undo go into the calling board's history
+  private autoRun: Promise<boolean> | null = null;
+  private autoTimer: number | null = null;
+  runAutoStatus(view: GanttView): Promise<boolean> {
+    if (!this.settings.autoStatus.enabled) return Promise.resolve(false);
+    return (this.autoRun ??= (async () => {
+      try {
+        const tasks = collectTasks(this.app, this.settings, this.settings.rootFolder ?? ""); // 既定のフォルダ（未設定なら Vault 全体）/ the default folder (the whole vault when unset)
+        // 取り消しの記録は、ノートが消えたり日付・ステータスが変わったりしたら捨てる / drop undo records whose note is gone or whose date or status changed
+        const a = this.settings.autoStatus;
+        const kept = keepAutoUndone(a.undone, tasks);
+        if (Object.keys(kept).length !== Object.keys(a.undone).length) {
+          a.undone = kept;
+          await this.saveData(this.settings);
+        }
+        return await view.applyAutoStatus(tasks);
+      } finally {
+        this.autoRun = null;
+      }
+    })());
+  }
+
+  // 自動の変更を取り消した（やり直した）ら覚える（忘れる）。再起動しても、ほかのボードからも当て直さない
+  // remember (or, on redo, forget) undone automatic changes, so neither a restart nor another board applies them again
+  async noteAutoUndone(records: Record<string, AutoUndone>, undone: boolean): Promise<void> {
+    const a = this.settings.autoStatus;
+    if (undone) Object.assign(a.undone, records);
+    else for (const p of Object.keys(records)) delete a.undone[p];
+    await this.saveData(this.settings);
+  }
+
+  // ステータスの id を変えた・消した（to = null）ら、自動ステータスの行き先と未着手の一覧も付け替える。保存は呼び出し側
+  // after a status id is renamed (or deleted: to = null), carry it into the automatic-status targets and not-started list. The caller saves
+  renameStatusId(from: string, to: string | null): void {
+    renameAutoStatusId(this.settings.autoStatus, from, to);
   }
 }

@@ -282,42 +282,91 @@ export function cascadeDates(tasks: Task[], roots: string[], opts: ScheduleOptio
 
 // ── 日付による自動ステータス / automatic status by date ──
 
+// どちらの決まりで動いたか（開始日が来た・期限日が過ぎた）/ which rule moved a task (its start came, its due date passed)
+export type AutoRule = "started" | "finished";
+// 取り消された自動の変更（ノートのパスごと）。その日付と、戻したステータスのままなら同じ決まりは当て直さない
+// an automatic change the user undid (per note path); while the note keeps that date and that status, the rule isn't applied again
+export interface AutoUndone {
+  rule: AutoRule;
+  date: string;
+  status: string;
+}
+
 // 自動ステータスの設定（空の id・空の一覧は既定）/ the automatic-status setup (an empty id or list means the default)
 export interface AutoStatusConfig {
   started: string;
   finished: string;
   notStarted: string[];
+  undone?: Record<string, AutoUndone>;
 }
 
-// 設定を今のステータス一覧で解決する。開始後は「進行中」グループ、完了後は「完了」グループのステータスだけ（既定は組み込みの in-progress / done）、
-// 未着手は「進行中」グループのうち開始後以外（既定は最初の 1 つ）。一覧に無い id は使わない
-// resolve the setup against the current statuses: the started target must be an active status and the finished one a completed status
-// (defaults: the built-in in-progress / done); not-started statuses are active ones other than the started target (default: the first one).
-// Ids the list doesn't know are dropped
+// 設定を今のステータス一覧で解決する。開始後は「進行中」グループ（既定は in-progress、無ければ 2 つ目の進行中）、
+// 完了後は「完了」グループ（既定は done、無ければ最初の完了）、未着手は「進行中」グループのうち開始後以外（既定は最初の 1 つ）。
+// 選んだ id が一覧から消えていれば既定へ。当てはまるものが無ければその決まりは動かない
+// resolve the setup against the current statuses: the started target is an active status (default in-progress, else the second active
+// one), the finished target a completed status (default done, else the first completed one), and the not-started statuses active ones other
+// than the started target (default: the first). A picked id that's no longer listed falls back to the default; with nothing that fits, that rule doesn't run
 export function autoStatusTargets(statuses: StatusDef[], cfg: AutoStatusConfig): { started?: string; finished?: string; notStarted: string[] } {
-  const inGroup = (id: string, group: StatusDef["group"]) => statuses.some((s) => s.id === id && s.group === group);
-  const started = [cfg.started || "in-progress"].find((id) => inGroup(id, "active"));
-  const finished = [cfg.finished || "done"].find((id) => inGroup(id, "completed"));
-  const firstActive = statuses.find((s) => s.group === "active" && s.id !== started)?.id;
-  const wanted = cfg.notStarted.length ? cfg.notStarted : firstActive ? [firstActive] : [];
-  return { started, finished, notStarted: wanted.filter((id) => id !== started && inGroup(id, "active")) };
+  const active = statuses.filter((s) => s.group === "active").map((s) => s.id);
+  const completed = statuses.filter((s) => s.group === "completed").map((s) => s.id);
+  const started = active.includes(cfg.started) ? cfg.started : active.includes("in-progress") ? "in-progress" : active[1];
+  const finished = completed.includes(cfg.finished) ? cfg.finished : completed.includes("done") ? "done" : completed[0];
+  const wanted = cfg.notStarted.filter((id) => id !== started && active.includes(id));
+  const firstActive = active.find((id) => id !== started);
+  return { started, finished, notStarted: wanted.length ? wanted : firstActive ? [firstActive] : [] };
 }
 
-// 日付が来た・過ぎたタスクの新しいステータス（パス → ステータス id）。today は設定タイムゾーンでの今日。
+// その決まりが見る日付。期限日は描くために開始日を写したもの（期限日の無いタスク）を数えない
+// the date a rule looks at; a due date copied from the start for drawing (a task with no due date) doesn't count
+function ruleDate(t: Task, rule: AutoRule): string | undefined {
+  return rule === "started" ? t.start : t.endFilled ? undefined : t.end;
+}
+
+// 日付が来た・過ぎたタスクの新しいステータス（パス → 行き先・決まり・日付）。today は設定タイムゾーンでの今日。
 // 期限日を過ぎた（today > 期限日）未完了のタスクは完了後へ、開始日になった（today >= 開始日）未着手のタスクは開始後へ。
-// 「進行中」グループ以外（延期・完了・中止）、ステータス未設定・不明、該当する日付の無いタスクには触れず、後戻りもしない
-// the new statuses (path → status id) for tasks whose dates have come or gone; `today` is today in the configured timezone.
+// 「進行中」グループ以外（延期・完了・中止）、ステータス未設定・不明、ノートに該当する日付の無いタスクには触れず、後戻りもしない。
+// 取り消された変更（undone）は、日付もステータスも同じあいだ当て直さない（そのノートはほかの決まりでも動かさない）
+// the new statuses (path → target, rule and date) for tasks whose dates have come or gone; `today` is today in the configured timezone.
 // A task past its due date (today > due) that isn't finished moves to the finished status; a not-started task whose start has come
-// (today >= start) moves to the started status. Tasks outside the active group (deferred, completed, cancelled), with no or an
-// unknown status, or without the date in question are left alone, and nothing moves backwards
-export function autoStatusChanges(tasks: Task[], statuses: StatusDef[], cfg: AutoStatusConfig, today: number): Map<string, string> {
+// (today >= start) moves to the started status. Tasks outside the active group (deferred, completed, cancelled), with no or an unknown
+// status, or without that date in the note are left alone, and nothing moves backwards. An undone change isn't applied again while the
+// note keeps that date and status (nor does another rule move that note meanwhile)
+export function autoStatusChanges(tasks: Task[], statuses: StatusDef[], cfg: AutoStatusConfig, today: number): Map<string, { status: string; rule: AutoRule; date: string }> {
   const { started, finished, notStarted } = autoStatusTargets(statuses, cfg);
   const active = new Set(statuses.filter((s) => s.group === "active").map((s) => s.id));
-  const out = new Map<string, string>();
+  const out = new Map<string, { status: string; rule: AutoRule; date: string }>();
   for (const t of tasks) {
     if (!t.status || !active.has(t.status)) continue;
-    if (finished && t.end && today > dayIndex(t.end)) out.set(t.path, finished);
-    else if (started && t.start && today >= dayIndex(t.start) && notStarted.includes(t.status)) out.set(t.path, started);
+    const due = ruleDate(t, "finished");
+    const start = ruleDate(t, "started");
+    const rule: AutoRule | null = finished && due && today > dayIndex(due) ? "finished"
+      : started && start && today >= dayIndex(start) && notStarted.includes(t.status) ? "started" : null;
+    if (!rule) continue;
+    const date = (rule === "finished" ? due : start)!;
+    const u = cfg.undone?.[t.path];
+    if (u && u.rule === rule && u.date === date && u.status === t.status) continue;
+    out.set(t.path, { status: rule === "finished" ? finished! : started!, rule, date });
   }
   return out;
+}
+
+// ステータスの id が変わった・消えた（to = null）ときに、行き先と未着手の一覧を付け替える（cfg をその場で書き換える）
+// carry a renamed (or deleted: to = null) status id into the targets and the not-started list (cfg is updated in place)
+export function renameAutoStatusId(cfg: AutoStatusConfig, from: string, to: string | null): void {
+  if (!from || from === to) return;
+  if (cfg.started === from) cfg.started = to ?? "";
+  if (cfg.finished === from) cfg.finished = to ?? "";
+  cfg.notStarted = cfg.notStarted.flatMap((id) => (id !== from ? [id] : to ? [to] : []));
+}
+
+// 取り消しの記録のうち、まだ意味のあるものだけ（ノートが残っていて、日付が記録のまま）。記録を小さく保つ。
+// ステータスでは捨てない：取り消した直後はメタデータがまだ古いことがあり、捨てると当て直してしまう（ステータスが違えば記録は効かない）
+// the undo records still worth keeping: the note is still there with the same date. Keeps the record small. Not dropped by status:
+// right after an undo the metadata can still be stale, and dropping would re-apply the change (a record whose status differs has no effect anyway)
+export function keepAutoUndone(undone: Record<string, AutoUndone>, tasks: Task[]): Record<string, AutoUndone> {
+  const byPath = new Map(tasks.map((t) => [t.path, t]));
+  return Object.fromEntries(Object.entries(undone).filter(([p, u]) => {
+    const t = byPath.get(p);
+    return !!t && ruleDate(t, u.rule) === u.date;
+  }));
 }
