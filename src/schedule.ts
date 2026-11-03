@@ -259,8 +259,11 @@ export function cascadeDates(tasks: Task[], roots: string[], opts: ScheduleOptio
   const cur = new Map<string, Span & { milestone: boolean }>(tasks.map((t) => [t.path, { start: t.start, end: t.end, milestone: t.milestone }]));
   const changes = new Map<string, { start: string; end: string }>();
   const queue = [...roots];
-  let guard = 0;
-  while (queue.length && guard++ < 1000) {
+  // 輪が無くても伝わり方の上限は置く（菱形の依存は同じタスクを何度か通る）。超えたら途中までは書かず、何も動かさない
+  // a cap on propagation even without a loop (diamond-shaped dependencies pass the same task a few times); past it, nothing moves rather than a partial result
+  let guard = 20 * tasks.length + 100;
+  while (queue.length) {
+    if (guard-- <= 0) return null;
     const predPath = queue.shift()!;
     const pred = cur.get(predPath);
     if (!pred) continue;

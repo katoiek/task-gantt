@@ -1,6 +1,6 @@
 // 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
 // Tests for date-filter resolution/matching and progress-line geometry
-import { resolveDateValue, matchDate, dayIndex, dayToStr, todayIndex, progressLineX, buildProgressLine, buildTicks, buildBands, extendChunk, extendLimit, growPad, padRange, padToCover, nearEdge, fixedOffset } from "./timeline.mjs";
+import { resolveDateValue, matchDate, dayIndex, dayToStr, todayIndex, progressLineX, buildProgressLine, buildTicks, buildBands, computeRange, extendChunk, extendLimit, growPad, padRange, padToCover, nearEdge, fixedOffset } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -161,6 +161,14 @@ check("todayIndex: system は端末の暦", todayIndex(new Date(2026, 9, 23, 23,
   check("growPad: 端の帯から出る分を 1 度に（1 回分ずつ切り上げ）", growPad(zero, "after", "Week", 100).after === 182 && growPad(zero, "after", "Week", 0).after === 91);
   check("fixedOffset: 固定オフセットは分、system は null", fixedOffset("+09:30") === 570 && fixedOffset("-05:00") === -300 && fixedOffset("system") === null);
   check("nearEdge: 左端・右端・中ほど", nearEdge(100, 800, 5000, 800) === "before" && nearEdge(3500, 800, 5000, 800) === "after" && nearEdge(2000, 800, 5000, 800) === null);
+}
+
+// 範囲は今日から 20 年より離れた日付（年の打ち間違い）を数えない / the range ignores dates more than 20 years from today (a mistyped year)
+{
+  const today = dayIndex("2026-11-04");
+  const r = computeRange([{ start: "1025-11-01", end: "2026-11-10" }, { start: "2026-11-01", end: "3026-01-01" }], today);
+  check("computeRange: 20 年より離れた日付は範囲に入れない", dayToStr(r.min) === "2026-10-29" && dayToStr(r.max) === "2026-11-17");
+  check("computeRange: 全部が遠い日付なら今日のまわり", computeRange([{ start: "1025-01-01", end: "1025-01-02" }], today).min === today - 7);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

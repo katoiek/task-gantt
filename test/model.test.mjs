@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { buildRows, kanbanLanes, listWith, newStatus, moveCollapsed, cardProgress, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
+import { bodyOf, withBody, buildRows, kanbanLanes, listWith, newStatus, moveCollapsed, cardProgress, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -221,6 +221,16 @@ check("statusGroupOf: 未定義 id は undefined", statusGroupOf(statusDefs, "gh
   check("cf input: 元がリストの text はリストに戻す", JSON.stringify(parseCustomInput("a, b ,", "text", true)) === JSON.stringify(["a", "b"]));
   check("cf input: 元が単一値の text はそのまま", parseCustomInput("a, b", "text", false) === "a, b");
 }
+
+// 本文とフロントマターの切り分け（CRLF・中身の無い ---/---・フロントマター無し）/ splitting body and frontmatter (CRLF, an empty ---/---, none at all)
+check("bodyOf: 普通のフロントマター", bodyOf("---\na: 1\n---\nhello\n") === "hello");
+check("bodyOf: CRLF", bodyOf("---\r\na: 1\r\n---\r\nhello\r\n") === "hello");
+check("bodyOf: 中身の無い ---/--- は本文に出さない", bodyOf("---\n---\nhello") === "hello" && bodyOf("---\n---") === "");
+check("bodyOf: フロントマター無し", bodyOf("hello\n---\nx") === "hello\n---\nx");
+check("withBody: フロントマターの直後に空行を足さない", withBody("---\na: 1\n---\nold\n", "new") === "---\na: 1\n---\nnew\n");
+check("withBody: CRLF のフロントマターはそのまま", withBody("---\r\na: 1\r\n---\r\nold", "new") === "---\r\na: 1\r\n---\r\nnew\n");
+check("withBody: 中身の無い ---/--- を保つ・本文を空にできる", withBody("---\n---", "x") === "---\n---\nx\n" && withBody("---\na: 1\n---\nold", "") === "---\na: 1\n---\n");
+check("withBody: フロントマター無し", withBody("old", "new") === "new\n");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

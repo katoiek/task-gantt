@@ -297,12 +297,14 @@ export class GanttSettingTab extends PluginSettingTab {
   // ===== control builders shared by getSettingDefinitions and the display() fallback =====
   private ctlRootFolder(setting: Setting): void {
     const s = this.plugin.settings;
-    setting.addText((t) =>
-      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(s.rootFolder).onChange((v) => {
-        s.rootFolder = v.trim();
+    // 打ち終えたとき（確定時）にだけ保存する（打ちかけのフォルダでボードを読み直さない）/ saved on commit only, so boards don't reload on a half-typed folder
+    setting.addText((t) => {
+      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(s.rootFolder);
+      t.inputEl.addEventListener("change", () => {
+        s.rootFolder = t.getValue().trim();
         this.save();
-      })
-    );
+      });
+    });
   }
 
   private ctlRecurse(setting: Setting): void {
@@ -879,12 +881,14 @@ export class GanttSettingTab extends PluginSettingTab {
 
   private ctlGcalScope(setting: Setting): void {
     const g = this.plugin.settings.gcal;
-    setting.addText((t) =>
-      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(g.scopeFolder).onChange((v) => {
-        g.scopeFolder = v.trim();
+    // 打ち終えたとき（確定時）にだけ保存する（打ちかけのフォルダで同期の範囲が変わらない）/ saved on commit only, so a half-typed folder never becomes the sync scope
+    setting.addText((t) => {
+      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(g.scopeFolder);
+      t.inputEl.addEventListener("change", () => {
+        g.scopeFolder = t.getValue().trim();
         this.save();
-      })
-    );
+      });
+    });
   }
 
   private ctlGcalInterval(setting: Setting): void {

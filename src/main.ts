@@ -101,7 +101,8 @@ export default class GanttPlugin extends Plugin {
       this.registerInterval(
         window.setInterval(() => {
           const now = Date.now();
-          const from = this.lastNotifyCheck;
+          // スリープから戻っても、2 分より前の分はまとめて送らない / after a sleep, alerts older than two minutes aren't sent in a burst
+          const from = Math.max(this.lastNotifyCheck, now - 120_000);
           this.lastNotifyCheck = now;
           void checkNotifications(this, from, now);
           // Google カレンダー：Pull は設定間隔で、Push は毎分の掃き出し（差分が無ければ何もしない）
@@ -226,6 +227,8 @@ export default class GanttPlugin extends Plugin {
     delete legacy.undone;
     this.settings.autoStatus.fired = fired;
     this.settings.customFields = (this.settings.customFields ?? []).map((f) => ({ ...f }));
+    this.settings.filters = structuredClone(this.settings.filters ?? []);
+    this.settings.filterPresets = structuredClone(this.settings.filterPresets ?? []);
     this.settings.nonWorkingDays = [...(this.settings.nonWorkingDays ?? DEFAULT_SETTINGS.nonWorkingDays)];
     // 通知設定も既定とマージ＆複製 / merge notify settings with defaults and clone containers
     this.settings.notify = Object.assign({}, DEFAULT_SETTINGS.notify, this.settings.notify);

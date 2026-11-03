@@ -512,14 +512,16 @@ export class GanttView extends ItemView {
     const statuses: StatusChange[] = [];
     await this.mutate(tr().autoStatusLabel, [], async () => {
       // 全部書き終えてから記録する（途中で 1 件失敗しても、記録が実際の中身とずれないように）/ record only after every write settles, so one failure can't skew the record
-      const res = await Promise.allSettled(changes.map(([p, c]) => writeField(this.app, p, s.keys.status, c.status)));
+      // 読んだときのステータスのままのノートだけ書く（その間に手で変えたものには触れない）/ write only notes still holding the status that was read (a hand edit meanwhile is left alone)
+      const res = await Promise.allSettled(changes.map(([p, c]) => this.swapStatus(p, was.get(p), c.status)));
       changes.forEach(([p, c], i) => {
-        if (res[i].status !== "fulfilled") return;
+        const r = res[i];
+        if (r.status !== "fulfilled" || !r.value) return;
         statuses.push({ path: p, from: was.get(p), to: c.status });
         wrote.set(p, c.status);
         s.autoStatus.fired[p] = { ...s.autoStatus.fired[p], [c.rule]: c.date };
       });
-      if (wrote.size < changes.length) new Notice(tr().writeFailed);
+      if (res.some((r) => r.status === "rejected")) new Notice(tr().writeFailed);
       return statuses.length ? { statuses } : false;
     });
     if (wrote.size) this.undoToast = this.buttonNotice(tr().autoStatusDone(wrote.size), tr().undoShort, () => void this.undo(), 8000);
@@ -545,17 +547,22 @@ export class GanttView extends ItemView {
   // 自動ステータスの取り消し・やり直し：ステータスの欄だけを戻す（進める）。その後で手で変えたノートには触れない
   // undo or redo an automatic-status run: only the status field goes back (or forward); a note whose status was changed by hand since is left alone
   private async replayStatuses(list: StatusChange[], redo: boolean): Promise<void> {
+    await Promise.allSettled(list.map((c) => (redo ? this.swapStatus(c.path, c.from, c.to) : this.swapStatus(c.path, c.to, c.from))));
+  }
+
+  // ステータスが now のままなら next にする（undefined は未設定）。書いたら true / set the status to `next` if it still is `now` (undefined = unset); true when written
+  private async swapStatus(path: string, now: string | undefined, next: string | undefined): Promise<boolean> {
+    const f = this.app.vault.getAbstractFileByPath(path);
+    if (!(f instanceof TFile)) return false;
     const key = this.plugin.settings.keys.status;
-    await Promise.allSettled(list.map(async (c) => {
-      const f = this.app.vault.getAbstractFileByPath(c.path);
-      if (!(f instanceof TFile)) return;
-      const [now, next] = redo ? [c.from, c.to] : [c.to, c.from];
-      await this.app.fileManager.processFrontMatter(f, (fm: Record<string, unknown>) => {
-        if ((fm[key] == null ? undefined : String(fm[key])) !== now) return;
-        if (next === undefined) delete fm[key];
-        else fm[key] = next;
-      });
-    }));
+    let done = false;
+    await this.app.fileManager.processFrontMatter(f, (fm: Record<string, unknown>) => {
+      if ((fm[key] == null ? undefined : String(fm[key])) !== now) return;
+      if (next === undefined) delete fm[key];
+      else fm[key] = next;
+      done = true;
+    });
+    return done;
   }
 
   // 詳細パネルが見せている内容の印（タスクのデータと本文）/ a fingerprint of what the detail panel shows (the task's data and its body)
@@ -1701,9 +1708,13 @@ export class GanttView extends ItemView {
       for (const p of r.created ?? []) files.set(p, null);
       // 操作後の内容。移動が無く何も変わっていなければ記録しない（本文の #tag だけのタグ削除など）。取り消すときはこの内容のままかを確かめる
       // the contents after the op: with no move and nothing changed it isn't recorded (e.g. removing an inline-only #tag); undo checks they're still these
-      const post = await this.snapshot(files.keys());
+      // 移動したファイルは移動先から読み、元のパスのキーで持つ（取り消すときは移動を戻してから元のパスで確かめる）
+      // a moved file is read at its new path and kept under its old one (undo puts the moves back first, then checks the old paths)
+      const at = (p: string) => (r.moves ?? []).reduce((q, m) => (q === m.from || q.startsWith(m.from + "/") ? m.to + q.slice(m.from.length) : q), p);
+      const moved = await this.snapshot([...files.keys()].map(at));
+      const post = new Map([...files.keys()].map((p) => [p, moved.get(at(p)) ?? null]));
       if (!r.moves?.length && !r.statuses?.length && [...files].every(([p, c]) => post.get(p) === c)) return false;
-      this.record({ label, files, expect: r.moves?.length ? undefined : post, moves: r.moves ?? [], created: r.created ?? [], deleted: r.deleted ?? [], statuses: r.statuses });
+      this.record({ label, files, expect: post, moves: r.moves ?? [], created: r.created ?? [], deleted: r.deleted ?? [], statuses: r.statuses });
       return true;
     });
   }
@@ -2804,7 +2815,8 @@ export class GanttView extends ItemView {
     const end = keepDurationOnStartChange(t, next, scheduleOptions(this.plugin.settings).cal);
     await this.mutate(tr().undoReschedule(t.name), [path, ...this.cascadePaths(path)], async () => {
       await writeField(this.app, path, k.start, combineDateTime(next.start || undefined, times.start, tz));
-      await writeField(this.app, path, k.end, combineDateTime(end || undefined, times.end, tz));
+      // 期限日の無いタスクは、動かしても 1 日のままなら期限日を足さない / a task with no due date gets none when it's moved and stays a single day
+      if (!(t.endFilled && end === next.start)) await writeField(this.app, path, k.end, combineDateTime(end || undefined, times.end, tz));
       // メモリにも反映して連動に備える（期限のみ＝マイルストーン）/ mirror in memory for the cascade (due only = milestone)
       t.start = next.start || undefined;
       t.end = end || undefined;

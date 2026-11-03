@@ -123,10 +123,12 @@ export interface DateRange {
 export function computeRange(tasks: Task[], today = todayIndex()): DateRange {
   const days: number[] = [];
   // 不正な日付（NaN）は範囲計算から除外して全体崩壊を防ぐ / drop NaN day indices so a bad date can't break the whole range
+  // 今日から 20 年より離れた日付（年の打ち間違いなど）は範囲に入れない。タスクは表に残る
+  // dates more than 20 years from today (a mistyped year, say) stay out of the range; the task still shows in the table
   const push = (s?: string) => {
     if (!s) return;
     const i = dayIndex(s);
-    if (Number.isFinite(i)) days.push(i);
+    if (Number.isFinite(i) && Math.abs(i - today) <= 20 * 366) days.push(i);
   };
   for (const t of tasks) {
     push(t.start);

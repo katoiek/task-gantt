@@ -212,13 +212,6 @@ export function combineDateTime(date: string | undefined, time: string | undefin
   return `${date}T${time}${offsetSuffix(wallOffset(tz, date, time))}`;
 }
 
-// after を文字列配列へ正規化 / normalize `after` into a string array
-function toArray(v: unknown): string[] {
-  if (v == null || v === "") return [];
-  if (Array.isArray(v)) return v.map((x) => String(x));
-  return [String(v)];
-}
-
 // フロントマターの tags 値を文字列配列へ正規化（配列/カンマ/空白区切り・# 抜き）
 // normalize a frontmatter `tags` value into a string array (array / comma / space separated, # stripped)
 function normalizeTags(v: unknown): string[] {
@@ -278,7 +271,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
     const endFilled = !!start && !end;
     if (endFilled) end = start;
 
-    rawAfter.set(file.path, toArray(fm[k.after]));
+    rawAfter.set(file.path, fmList(fm[k.after]));
     // parent は any を直接受けず unknown 経由で安全に文字列化 / coerce parent via unknown (avoid unsafe any)
     const pv: unknown = fm[k.parent];
     if (pv != null && pv !== "") {
@@ -313,7 +306,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       kind,
       canvas: kind === "canvas" ? canvas?.path : undefined,
       deps: [] as Dep[],
-      progress: cards ? cardProgress(cards.done, cards.total) : fm[k.progress] != null ? Number(fm[k.progress]) : undefined,
+      progress: cards ? cardProgress(cards.done, cards.total) : fm[k.progress] != null ? parseFloat(String(fm[k.progress])) : undefined, // "50%" も 50 / "50%" reads as 50
       cards,
       milestone,
       parent: undefined,
@@ -525,7 +518,8 @@ export async function writeDates(
       delete fm[k.start];
     } else {
       fm[k.start] = combineDateTime(start, ts, settings.tz);
-      fm[k.end] = combineDateTime(end, te, settings.tz);
+      // 期限日の無いタスクを動かしても期限日を足さない（1 日のまま開始日だけ）/ moving a task with no due date doesn't add one (it stays a start-only day)
+      if (fm[k.end] != null || start !== end) fm[k.end] = combineDateTime(end, te, settings.tz);
     }
   });
 }
@@ -579,19 +573,26 @@ export async function readBody(app: App, path: string): Promise<string> {
 
 // ノートの中身から本文だけ（先頭の --- ... --- を除去）/ a note's body: its text without the leading frontmatter block
 export function bodyOf(text: string): string {
-  return text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
+  return text.replace(FRONTMATTER, "").trim();
+}
+
+// 先頭のフロントマター（中身の無い "---\n---" も）/ the leading frontmatter block (an empty "---\n---" too)
+const FRONTMATTER = /^---\r?\n(?:[\s\S]*?\r?\n)?---(?:\r?\n|$)/;
+
+// フロントマターを保ったまま本文を差し替えたノートの中身（フロントマターの直後に空行を足さない）
+// a note's text with its body replaced and its frontmatter kept (no blank line added after the frontmatter)
+export function withBody(text: string, body: string): string {
+  const m = text.match(FRONTMATTER);
+  const fm = !m ? "" : m[0].endsWith("\n") ? m[0] : m[0] + "\n";
+  const trimmed = body.replace(/\s+$/, "");
+  return fm + (trimmed ? trimmed + "\n" : "");
 }
 
 // 本文を書き戻す（フロントマターは保持）/ write back the body (keeping frontmatter)
 export async function writeBody(app: App, path: string, body: string): Promise<void> {
   const file = app.vault.getAbstractFileByPath(path);
   if (!(file instanceof TFile)) return;
-  await app.vault.process(file, (text) => {
-    const m = text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
-    const fm = m ? m[0].replace(/\n*$/, "\n") : "";
-    const trimmed = body.replace(/\s+$/, "");
-    return (fm ? fm + "\n" : "") + (trimmed ? trimmed + "\n" : "");
-  });
+  await app.vault.process(file, (text) => withBody(text, body));
 }
 
 // 新規タスクをフォルダ直下に作り、作ったパスを返す（ノートが先頭）。名前が衝突したら連番を付ける。
@@ -679,7 +680,8 @@ export function kanbanLanes(cache: CachedMetadata | null, text = ""): KanbanLane
 export async function renameTask(app: App, path: string, newName: string): Promise<string | null | "taken"> {
   const file = app.vault.getAbstractFileByPath(path);
   if (!(file instanceof TFile)) return null;
-  const safe = newName.replace(/[\\/:*?"<>|]/g, "").trim();
+  // ファイル名に使えない文字と、リンクを壊す #^[]| を除く / drop characters a file name can't hold, and #^[]| which break links
+  const safe = newName.replace(/[\\/:*?"<>|#^[\]]/g, "").trim();
   if (!safe) return null;
   const dir = file.parent && file.parent.path !== "/" ? file.parent.path + "/" : "";
   const newPath = `${dir}${safe}.md`;
@@ -812,8 +814,8 @@ export async function addDependency(
   if (!(succ instanceof TFile) || !(pred instanceof TFile)) return false;
   const k = settings.keys;
   await app.fileManager.processFrontMatter(succ, (fm: Record<string, unknown>) => {
-    const existing = fm[k.after];
-    const arr: unknown[] = existing == null ? [] : Array.isArray(existing) ? existing : [existing];
+    // 引用符なしの [[x]] も文字列の wikilink として読む（fmList）/ an unquoted [[x]] is read as a wikilink string too (fmList)
+    const arr = fmList(fm[k.after]);
     // 既存の同 pred を除去 / drop any existing entry to the same predecessor
     const kept = arr.filter(
       (raw) => resolveLink(app, stripDepType(raw), successorPath)?.path !== predPath
@@ -836,9 +838,8 @@ export async function removeDependency(
   if (!(succ instanceof TFile)) return;
   const k = settings.keys;
   await app.fileManager.processFrontMatter(succ, (fm: Record<string, unknown>) => {
-    const existing = fm[k.after];
-    if (existing == null) return;
-    const list: unknown[] = Array.isArray(existing) ? existing : [existing];
+    if (fm[k.after] == null) return;
+    const list = fmList(fm[k.after]);
     const filtered = list.filter(
       (raw) => resolveLink(app, stripDepType(raw), successorPath)?.path !== predPath
     );

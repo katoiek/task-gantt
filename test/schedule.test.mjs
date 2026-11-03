@@ -219,5 +219,21 @@ check("休日の帯: 休日なしは none", offDayGradient(0, { off: [] }, 10, "
   check("自動: 開始後は未着手に数えない", autoStatusTargets(ST, { started: "in-progress", finished: "", notStarted: ["in-progress", "todo"] }).notStarted.join() === "todo");
 }
 
+// 伝わり方の上限：長い鎖や菱形は最後まで、上限を超えたら途中までは返さず null / the propagation cap: long chains and diamonds finish; past the cap, null rather than a partial result
+{
+  const n = 1500;
+  const chain = Array.from({ length: n }, (_, i) => ({ path: `c${i}`, start: "2026-01-05", end: "2026-01-05", milestone: false, deps: i ? [{ path: `c${i - 1}`, type: "FS" }] : [] }));
+  chain[0] = { ...chain[0], end: "2026-01-06" };
+  const opts = { cal: { off: [] }, fs: true };
+  const all = cascadeDates(chain, ["c0"], opts);
+  check("cascade: 1500 件の鎖も最後まで動く", all !== null && all.size === n - 1);
+  // 菱形のはしご（各段 2 つ・どちらも前の段の両方に依存）/ a diamond ladder (two per level, each depending on both of the level above)
+  const lv = 40;
+  const ladder = [{ path: "r", start: "2026-01-05", end: "2026-01-06", milestone: false, deps: [] }];
+  for (let i = 0; i < lv; i++) for (const s of ["a", "b"]) ladder.push({ path: `${s}${i}`, start: "2026-01-05", end: "2026-01-05", milestone: false, deps: i ? [{ path: `a${i - 1}`, type: "FS" }, { path: `b${i - 1}`, type: "FS" }] : [{ path: "r", type: "FS" }] });
+  const d = cascadeDates(ladder, ["r"], opts);
+  check("cascade: 菱形のはしごも最後まで", d !== null && d.size === 2 * lv);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
