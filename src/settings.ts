@@ -6,9 +6,9 @@ import { App, Notice, Platform, PluginSettingTab, Setting, TextComponent } from 
 import type { SettingDefinitionItem, SettingDefinitionList, SettingGroupItem } from "obsidian";
 import type GanttPlugin from "./main";
 import { StatusDef, StatusGroup, STATUS_GROUPS, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset, CustomField, CustomFieldType } from "./types";
-import { collectAllTags, customFieldIssues, filesWithFrontmatterKey, newStatus, renameFrontmatterKey, validCustomFields } from "./model";
-import { BUILTIN_COLUMNS, ColumnDef, columnList, customColumn, moveColumn, toggleColumn } from "./columns";
-import { AutoUndone, autoStatusTargets } from "./schedule";
+import { collectAllTags, customFieldIssues, filesWithFrontmatterKey, newStatus, renameFrontmatterKey } from "./model";
+import { ColumnDef, allColumns, columnList, moveColumn, toggleColumn } from "./columns";
+import { AutoFired, autoStatusTargets, renameAutoStatusId } from "./schedule";
 import { ChoiceModal, ConfirmModal, PickModal } from "./modals";
 import { obsidianTagColor, toHex } from "./colors";
 import { pickColor } from "./popover";
@@ -77,10 +77,10 @@ export interface GanttSettings {
   // 先行が遅れて FS の後続と重なったら後続を押し出す / push FS successors when a slipping predecessor overlaps them
   autoScheduleFS: boolean;
   // 日付で自動的にステータスを進める（既定 OFF）。空の id・空の一覧は既定（組み込みの in-progress / done、最初の「進行中」グループのステータス）。
-  // undone は取り消された変更（ノートのパスごと。日付かステータスが変わるまで当て直さない）
+  // fired は決まりが当たった日付（ノートのパスごと。その日付のあいだは、取り消しても手で戻しても当て直さない）
   // move statuses on by date (off by default); an empty id or list means the default (the built-in in-progress / done, the first active status).
-  // `undone` holds the changes the user undid (per note path; not applied again until its date or status changes)
-  autoStatus: { enabled: boolean; started: string; finished: string; notStarted: string[]; undone: Record<string, AutoUndone> };
+  // `fired` holds the date each rule fired for, per note path (not applied again while that date stands, even if undone or set back by hand)
+  autoStatus: { enabled: boolean; started: string; finished: string; notStarted: string[]; fired: AutoFired };
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
   visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
   // 任意列の並び（列 id。無い列は定義順で後ろ）/ the optional columns' order (column ids; missing ones follow in definition order)
@@ -190,7 +190,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   tz: "system",
   nonWorkingDays: [0, 6],
   autoScheduleFS: true,
-  autoStatus: { enabled: false, started: "", finished: "", notStarted: [], undone: {} },
+  autoStatus: { enabled: false, started: "", finished: "", notStarted: [], fired: {} },
   detailWidth: 380,
   visibleColumns: ["start", "end"],
   columnOrder: [],
@@ -379,7 +379,6 @@ export class GanttSettingTab extends PluginSettingTab {
     setting.addToggle((t) => t.setValue(a.enabled).onChange((v) => {
       a.enabled = v;
       this.save();
-      this.redraw(); // 行き先などの行を出し分ける / show or hide the target rows
     }));
   }
 
@@ -427,10 +426,6 @@ export class GanttSettingTab extends PluginSettingTab {
   }
 
   // ===== 表の列 / table columns =====
-  // 列の定義（組み込み＋Custom field）/ the column definitions (built-ins + custom fields)
-  private columnDefs(): ColumnDef[] {
-    return [...BUILTIN_COLUMNS, ...validCustomFields(this.plugin.settings).map(customColumn)];
-  }
 
   // 列 1 行：表に表示・上下の矢印・幅。隠した列は一覧の下に薄く並び、同じように操作できる（幅などの設定は消えない）
   // one column row: show in the table, up/down arrows and the width; hidden columns sit dimmed at the bottom and work the same (their settings are kept)
@@ -439,7 +434,7 @@ export class GanttSettingTab extends PluginSettingTab {
     setting.setName(col.label()).setClass("ogantt-col-row");
     if (!on) setting.setClass("ogantt-col-off");
     setting.addToggle((t) => {
-      t.setValue(on).onChange((v) => this.changeColumns(`${col.id}|0`, () => Object.assign(s, toggleColumn(this.columnDefs(), s.visibleColumns, s.columnOrder, col.id, v))));
+      t.setValue(on).onChange((v) => this.changeColumns(`${col.id}|0`, () => Object.assign(s, toggleColumn(allColumns(this.plugin.settings), s.visibleColumns, s.columnOrder, col.id, v))));
       t.toggleEl.setAttr("aria-label", `${tr().setColumnShown}: ${col.label()}`);
       t.toggleEl.dataset.col = `${col.id}|0`;
     });
@@ -449,7 +444,7 @@ export class GanttSettingTab extends PluginSettingTab {
           .setTooltip(dir < 0 ? tr().colMoveUp(col.label()) : tr().colMoveDown(col.label()))
           .setDisabled(dir < 0 ? !canUp : !canDown)
           .onClick(() => this.changeColumns(`${col.id}|${dir}`, () => {
-            s.columnOrder = moveColumn(this.columnDefs(), s.visibleColumns, s.columnOrder, col.id, dir) ?? s.columnOrder;
+            s.columnOrder = moveColumn(allColumns(this.plugin.settings), s.visibleColumns, s.columnOrder, col.id, dir) ?? s.columnOrder;
           }));
         b.buttonEl.addClass("clickable-icon");
         b.buttonEl.dataset.col = `${col.id}|${dir}`;
@@ -533,12 +528,13 @@ export class GanttSettingTab extends PluginSettingTab {
   private ctlStatusRow(setting: Setting, st: StatusDef): void {
     setting
       .addText((t) => {
-        t.setPlaceholder(tr().setStatusId).setValue(st.id).onChange((v) => { st.id = v.trim(); this.save(); });
-        // id を変え終えたら、自動ステータスの行き先・未着手の一覧もついて行かせる / once the id is committed, the automatic-status targets follow it
-        let was = st.id;
+        // id は打ち終えたとき（確定時）にだけ変えて保存する（打ちかけの id で自動ステータスが動かないように）。自動ステータスの行き先・未着手の一覧もついて行く
+        // the id changes and saves only on commit (so automatic status never runs on a half-typed id); the automatic-status targets follow it
+        t.setPlaceholder(tr().setStatusId).setValue(st.id);
         t.inputEl.addEventListener("change", () => {
-          this.plugin.renameStatusId(was, st.id);
-          was = st.id;
+          const was = st.id;
+          st.id = t.getValue().trim();
+          renameAutoStatusId(this.plugin.settings.autoStatus, was, st.id);
           this.save();
         });
       })
@@ -575,7 +571,7 @@ export class GanttSettingTab extends PluginSettingTab {
           const live = this.plugin.settings.statuses;
           const at = live.indexOf(st);
           if (at >= 0) live.splice(at, 1);
-          this.plugin.renameStatusId(st.id, null);
+          renameAutoStatusId(this.plugin.settings.autoStatus, st.id, null);
           this.save();
           this.redraw();
         })
@@ -1024,7 +1020,7 @@ export class GanttSettingTab extends PluginSettingTab {
         heading: tr().setColumnsHeading,
         items: [
           { name: "", desc: tr().setColumnsDesc, render: () => {} }, // render が無いと宣言版は名前の無い行を描かない / without a render the declarative tab skips a nameless row
-          ...columnList(this.columnDefs(), s.visibleColumns, s.columnOrder).map(({ col, on }, i, list): SettingGroupItem => ({
+          ...columnList(allColumns(this.plugin.settings), s.visibleColumns, s.columnOrder).map(({ col, on }, i, list): SettingGroupItem => ({
             name: "",
             render: (x) => this.ctlColumnRow(x, col, on, list[i - 1]?.on === on, list[i + 1]?.on === on),
           })),
@@ -1036,9 +1032,10 @@ export class GanttSettingTab extends PluginSettingTab {
         heading: tr().setAutoStatusHeading,
         items: [
           { name: tr().setAutoStatusName, desc: tr().setAutoStatusDesc, render: (x) => this.ctlAutoStatus(x) },
-          { name: tr().setAutoStatusStarted, visible: () => s.autoStatus.enabled, render: (x) => this.ctlAutoStatusTarget(x, "started") },
-          { name: tr().setAutoStatusNotStarted, visible: () => s.autoStatus.enabled, render: (x) => this.ctlAutoStatusNotStarted(x) },
-          { name: tr().setAutoStatusFinished, visible: () => s.autoStatus.enabled, render: (x) => this.ctlAutoStatusTarget(x, "finished") },
+          // 行き先は OFF のうちから選べる（ON にした最初の実行から選んだとおりに動く）/ the targets can be picked while it's off, so the first run already follows them
+          { name: tr().setAutoStatusStarted, render: (x) => this.ctlAutoStatusTarget(x, "started") },
+          { name: tr().setAutoStatusNotStarted, render: (x) => this.ctlAutoStatusNotStarted(x) },
+          { name: tr().setAutoStatusFinished, render: (x) => this.ctlAutoStatusTarget(x, "finished") },
         ],
       },
       // タグの色（フォルダの色は表で右クリック）/ tag colors (folder colors via right-click in the table)

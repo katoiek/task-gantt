@@ -17,7 +17,8 @@ import {
   offDayGradient,
   autoStatusChanges,
   autoStatusTargets,
-  keepAutoUndone,
+  keepAutoFired,
+  moveAutoFired,
   renameAutoStatusId,
 } from "./schedule.mjs";
 import { dayIndex, dayToStr } from "./timeline.mjs";
@@ -199,13 +200,18 @@ check("休日の帯: 休日なしは none", offDayGradient(0, { off: [] }, 10, "
   // 期限日の無いタスク（描くために開始日を写したもの）は完了にしない。マイルストーン（期限日だけ）は期限日で動く
   // a task with no due date (end copied from the start for drawing) is never finished; a milestone (due date only) moves by its due date
   check("自動: 期限日の無いタスクは完了にしない（開始は当てる）", JSON.stringify(run([{ ...T("a", "todo", "2026-11-01", "2026-11-01"), endFilled: true }, { ...T("m", "todo", undefined, "2026-11-01"), milestone: true }])) === '{"a":"in-progress","m":"done"}');
-  // 取り消した変更は、日付とステータスが記録のままなら当て直さない（ほかの決まりでも動かさない）。変われば当てる
-  // an undone change isn't re-applied while date and status match the record (nor does another rule move the note); once either changes it applies again
-  const undone = { a: { rule: "finished", date: "2026-11-01", status: "todo" } };
-  check("自動: 取り消した変更は当て直さない", JSON.stringify(run([T("a", "todo", "2026-10-01", "2026-11-01")], { ...DEF, undone })) === "{}");
-  check("自動: 期限日が変われば当て直す", JSON.stringify(run([T("a", "todo", "2026-10-01", "2026-11-02")], { ...DEF, undone })) === '{"a":"done"}');
-  const kept = keepAutoUndone({ ...undone, b: { rule: "started", date: "2026-11-01", status: "todo" }, gone: { rule: "started", date: "2026-11-01", status: "todo" } }, [T("a", "in-progress", "2026-10-01", "2026-11-01"), T("b", "todo", "2026-11-02", "2026-11-09")]);
-  check("自動: 取り消しの記録は消えたノート・変わった日付の分を捨てる（ステータスでは捨てない）", Object.keys(kept).join() === "a");
+  // 一度当たった決まりは、その日付のあいだ当て直さない：取り消しても、手でステータスを戻しても。日付が変われば当てる。ほかの決まりは別
+  // a rule that fired isn't applied again while the note keeps that date, whether undone or set back by hand; a new date applies it again; the other rule is separate
+  const fired = { a: { finished: "2026-11-01" } };
+  check("自動: 取り消した変更は当て直さない", JSON.stringify(run([T("a", "todo", "2026-10-01", "2026-11-01")], { ...DEF, fired })) === "{}");
+  check("自動: 手で戻したステータスもそのまま（期限日を過ぎていても）", JSON.stringify(run([T("a", "in-progress", "2026-10-01", "2026-11-01")], { ...DEF, fired })) === "{}");
+  check("自動: 期限日が変われば当て直す", JSON.stringify(run([T("a", "todo", "2026-10-01", "2026-11-02")], { ...DEF, fired })) === '{"a":"done"}');
+  check("自動: 開始の記録は完了を止めない", JSON.stringify(run([T("a", "in-progress", "2026-10-01", "2026-11-01")], { ...DEF, fired: { a: { started: "2026-10-01" } } })) === '{"a":"done"}');
+  // 記録はノートが消えたときだけ捨てる（日付を動かして戻したら、断った変更はまた効く）/ records go only with their note (move a date and back, and the refusal holds again)
+  const kept = keepAutoFired({ ...fired, b: { started: "2026-10-01" }, gone: { started: "2026-11-01" } }, (p) => p !== "gone");
+  check("自動: 当たった記録は消えたノートの分だけ捨てる", Object.keys(kept).join() === "a,b");
+  const mv = { "P/x.md": { started: "2026-10-01" }, "P/sub/y.md": { finished: "2026-10-02" }, "Q.md": { started: "2026-10-03" } };
+  check("自動: 記録はリネーム・フォルダの移動に付いて行く", moveAutoFired(mv, "P", "R") && Object.keys(mv).sort().join() === "Q.md,R/sub/y.md,R/x.md" && moveAutoFired(mv, "Q.md", "Z.md") && mv["Z.md"].started === "2026-10-03" && !moveAutoFired(mv, "none", "x"));
   const cfgR = { started: "in-progress", finished: "done", notStarted: ["todo", "review"] };
   renameAutoStatusId(cfgR, "todo", "backlog");
   renameAutoStatusId(cfgR, "done", null);

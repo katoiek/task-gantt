@@ -1,6 +1,6 @@
 // 列定義の並び・表示・並べ替え（visibleColumns / columnWidth / taskComparator）の検証
 // Tests for column order, visibility, widths and sorting (visibleColumns / columnWidth / taskComparator)
-import { BUILTIN_COLUMNS, visibleColumns, columnWidth, taskComparator, customColumn, customColumnId, columnList, toggleColumn, moveColumn } from "./columns.mjs";
+import { BUILTIN_COLUMNS, visibleColumns, columnWidth, taskComparator, customColumn, customColumnId, columnList, toggleColumn, moveColumn, allColumns } from "./columns.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -106,6 +106,7 @@ check("unknown sort column falls back to start", sorted(ALL, settings("ghost")) 
   const hidden = moveColumn(cols, ["start"], [], "tags", -1);
   // 定義に無い id（キーを打ち直している途中の Custom field）は元の位置のまま残る / ids the definitions don't know (a custom field mid-edit) stay where they were
   const keep = toggleColumn(cols, ["start", "cf:zz", "end"], ["start", "cf:zz", "end"], "end", false);
+  check("allColumns: built-ins, then usable custom fields only", ids(allColumns({ customFields: [{ id: "n1", key: "budget", label: "", type: "number" }, { id: "bad", key: "", label: "", type: "text" }], keys: {} })) === "name,start,end,duration,progress,assignee,status,tags,cf:n1");
   check("unknown ids keep their visibility and place on toggle", keep.visibleColumns.join() === "start,cf:zz" && keep.columnOrder.slice(0, 3).join() === "start,cf:zz,end");
   check("unknown ids keep their place on move", moveColumn(cols, ["start", "end"], ["start", "cf:zz", "end"], "end", -1).slice(0, 3).join() === "end,cf:zz,start");
   check("hidden columns reorder among themselves", list(["start"], hidden) === "start,(end),(duration),(progress),(assignee),(tags),(status),(cf:n1)");

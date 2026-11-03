@@ -2,15 +2,17 @@
 import type { App } from "obsidian";
 import type { GanttSettings } from "./settings";
 import type { GroupBy } from "./filter";
-import type { AutoUndone } from "./schedule";
 
 // ファイルの移動・リネーム / a file move or rename
 export type Move = { from: string; to: string };
 
 // mutate の fn の戻り値。false＝変化なし（記録しない）、true / void＝変化あり
 // what mutate's fn returns: false = nothing changed (not recorded); true / void = changed
-// auto は日付による自動ステータスの変更（取り消したら覚え、やり直したら忘れる）/ `auto`: automatic status changes (remembered when undone, forgotten on redo)
-export type MutateResult = { moves?: Move[]; created?: string[]; deleted?: string[]; auto?: Record<string, AutoUndone> } | boolean | void;
+// ステータスの欄だけの変更（自動ステータス。取り消しはこの欄だけを戻す）/ a change to the status field alone (automatic status; undo puts back only this field)
+export type StatusChange = { path: string; from?: string; to: string };
+
+// statuses を返した操作はファイル全体ではなくステータスの欄だけを取り消す / an op that returns `statuses` is undone field by field, not as whole files
+export type MutateResult = { moves?: Move[]; created?: string[]; deleted?: string[]; statuses?: StatusChange[] } | boolean | void;
 
 // 部品が GanttView 全体に触れずに使える窓口。ビューが実装する
 // the narrow surface parts use instead of the whole GanttView; the view implements it

@@ -21,10 +21,16 @@ export function dayToStr(day: number): string {
 // today in the configured timezone ("system" = the device's calendar, or a fixed offset like "+09:00"); counting in UTC would
 // give yesterday until 9 am in Japan, and tomorrow on a US evening
 export function todayIndex(now = new Date(), tz = "system"): number {
-  const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
-  if (!m) return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / MS_PER_DAY);
-  const offset = (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]);
+  const offset = fixedOffset(tz);
+  if (offset == null) return Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / MS_PER_DAY);
   return Math.floor((now.getTime() + offset * 60000) / MS_PER_DAY);
+}
+
+// 固定オフセットのタイムゾーン（"+09:00" など）を分へ。"system" は null（端末の時差をその都度使う）
+// a fixed-offset timezone ("+09:00", …) in minutes; "system" gives null (the device's offset applies, case by case)
+export function fixedOffset(tz: string): number | null {
+  const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
+  return m ? (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]) : null;
 }
 
 // ISO（YYYY-MM-DD）を表示用フォーマットへ整形 / format an ISO date for display
@@ -153,9 +159,12 @@ export function extendLimit(zoom: ZoomMode): number {
   return zoom === "Day" ? 366 : zoom === "Week" ? 3 * 366 : zoom === "Month" ? 10 * 366 : 0;
 }
 
-// 片側を 1 回分のばした余白。上限で止まり、のびなければ null / the pad grown by one chunk on one side; stops at the limit, null when it can't grow
-export function growPad(pad: RangePad, side: keyof RangePad, zoom: ZoomMode): RangePad | null {
-  const next = Math.min(extendLimit(zoom), pad[side] + extendChunk(zoom));
+// 片側を、少なくとも need 日（端の帯から出るのに要る分）を 1 回分ずつ切り上げてのばした余白。上限で止まり、のびなければ null
+// the pad grown on one side by at least `need` days (what it takes to leave the edge zone), rounded up to whole chunks; stops at the limit, null when it can't grow
+export function growPad(pad: RangePad, side: keyof RangePad, zoom: ZoomMode, need = 0): RangePad | null {
+  const chunk = extendChunk(zoom);
+  if (!chunk) return null;
+  const next = Math.min(extendLimit(zoom), pad[side] + Math.max(1, Math.ceil(need / chunk)) * chunk);
   return next > pad[side] ? { ...pad, [side]: next } : null;
 }
 
@@ -169,11 +178,6 @@ export function padRange(r: DateRange, pad: RangePad): DateRange {
 export function padToCover(base: DateRange, pad: RangePad, day: number, zoom: ZoomMode): RangePad {
   const chunk = extendChunk(zoom);
   return { before: Math.max(pad.before, Math.ceil(base.min - day) + chunk), after: Math.max(pad.after, Math.ceil(day - base.max) + chunk) };
-}
-
-// 左に days 日足したあと、同じ日付を見せたままにする scrollLeft / the scrollLeft that keeps the same dates in view after adding `days` on the left
-export function shiftScroll(scrollLeft: number, days: number, ppd: number): number {
-  return scrollLeft + days * ppd;
 }
 
 // どちらの端に近いか（残りが margin 以下）。両方なら左から / which edge is within `margin` of the view, if any (the left one first)

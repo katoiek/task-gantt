@@ -30,7 +30,7 @@ import {
   anchorEnd,
   statusGroupOf,
 } from "./model";
-import { AutoUndone, autoStatusChanges, cascadeDates, depViolated, endForDuration, isWorkday, keepDurationOnStartChange, offDayGradient, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
+import { autoStatusChanges, renameAutoStatusId, cascadeDates, depViolated, endForDuration, isWorkday, keepDurationOnStartChange, offDayGradient, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
 import {
   DateRange,
   computeRange,
@@ -46,7 +46,6 @@ import {
   padRange,
   padToCover,
   RangePad,
-  shiftScroll,
   buildProgressLine,
   ProgressLineRow,
   Tick,
@@ -60,8 +59,8 @@ import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変�
 import { schedulePush } from "./gcal/sync";
 import { isConnected } from "./gcal/auth";
 import { applyFilters, besideHeading, regroup, GroupBy } from "./filter";
-import { BoardContext, Move, MutateResult } from "./board";
-import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnList, columnWidth, customColumn, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
+import { BoardContext, Move, MutateResult, StatusChange } from "./board";
+import { CellColumn, ColumnDef, allColumns, columnList, columnWidth, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
 
 const ROW_H = 30; // 行の高さ（表とタイムラインで共通）/ shared row height
 // 日本語などの変換中のキー（Enter は変換の確定、Esc は変換の取り消しで、こちらの操作ではない）
@@ -112,7 +111,7 @@ interface HistoryEntry {
   expect?: Map<string, string | null>;
   moves: Move[];
   created: string[]; // 操作で作成 / made by the op
-  auto?: Record<string, AutoUndone>; // 日付による自動ステータスの変更 / automatic status changes
+  statuses?: StatusChange[]; // 日付による自動ステータスの変更（取り消しはこの欄だけ）/ automatic status changes (undo touches only this field)
   deleted: string[]; // 操作で削除 / removed by the op
 }
 
@@ -346,6 +345,7 @@ export class GanttView extends ItemView {
       if (this.today() === day) return;
       day = this.today();
       void this.refresh();
+      this.plugin.requestAutoStatus();
     }, 60_000));
   }
 
@@ -453,9 +453,7 @@ export class GanttView extends ItemView {
   }
 
   // ディスクから集計し直して再描画 / re-collect from disk, then render
-  // auto=false は設定の保存からの読み直し（自動ステータスは保存の後に main.ts が 1 回だけ回す）
-  // auto = false for the reload after a settings save (main.ts then runs automatic status once)
-  async refresh(auto = true): Promise<void> {
+  async refresh(): Promise<void> {
     if (!this.gridHost) this.buildSkeleton();
     // 起動中（索引の途中）は仮の行のまま待ち、準備ができてから描く / during startup (mid-indexing) keep the placeholder and draw once ready
     if (!this.app.workspace.layoutReady) {
@@ -467,7 +465,8 @@ export class GanttView extends ItemView {
     if (this.historyBusy > 0 || this.dragging) return this.scheduleRefresh();
     // 別のボードに切り替わったら、そのボードの表示オプションを読み、スクロール位置と選択は引き継がない
     // switching to another board loads its view options; the scroll position and the selection don't carry over
-    if (this.boardKey !== this.folder) {
+    const opened = this.boardKey !== this.folder;
+    if (opened) {
       this.boardKey = this.folder;
       this.loadBoard();
       this.pad = { before: 0, after: 0 };
@@ -483,7 +482,8 @@ export class GanttView extends ItemView {
     this.tasks = collectTasks(this.app, this.plugin.settings, this.folder);
     this.allFolders = collectFolders(this.app, this.plugin.settings, this.folder);
     this.rerender();
-    if (auto && (await this.plugin.runAutoStatus(this))) this.rerender();
+    // 日付による自動ステータスはボードを開いたときに頼む（読み直しのたびには回さない）/ automatic status is requested when a board opens (not on every reload)
+    if (opened) this.plugin.requestAutoStatus();
     // 開いている詳細パネルも最新に。表示中の内容が変わったときだけ描き直し（別のノートの変更や、パネル自身の編集の後の読み直しでは描き直さない）、
     // 欄の入力中は触らない。タスクが消えていたら閉じる
     // bring an open detail panel up to date: rebuilt only when what it shows changed (not for another note's change, nor the reload after the
@@ -497,33 +497,65 @@ export class GanttView extends ItemView {
     if (this.panelSig !== this.sigOf(t, await readBody(this.app, path))) await this.openDetail(path);
   }
 
-  // 日付による自動ステータスの 1 回分（tasks は既定のフォルダ全体。main.ts の runAutoStatus から 1 つずつ呼ばれる）。全部を 1 つの取り消しにまとめ、
-  // 件数と取り消しボタンを通知する。書けなかったノートは記録にもメモリにも載せない。変えたら true
-  // one automatic-status run (tasks = the whole default folder; called one at a time from main.ts's runAutoStatus). Everything is one undoable action,
-  // announced with a count and an Undo button; a note that couldn't be written is kept out of the record and memory. True when something changed
-  async applyAutoStatus(tasks: Task[]): Promise<boolean> {
+  // 日付による自動ステータスの 1 回分（tasks は既定のフォルダの配下すべて。main.ts から 1 つずつ呼ばれる）。全部を 1 つの取り消しにまとめ、
+  // 件数と取り消しボタンを通知する。取り消しはステータスの欄だけを戻す（本文などその後の編集は消さない）。書けたノートとその行き先を返し、
+  // 当たった決まりを記録する（保存は main.ts）。書けなかったノートは記録にもメモリにも載せない
+  // one automatic-status run (tasks = everything under the default folder; called one at a time from main.ts). Everything is one undoable action,
+  // announced with a count and an Undo button, and its undo puts back only the status field (later edits to the body etc. stay). Returns the notes
+  // written with their new status and records the rules that fired (main.ts saves); a note that couldn't be written stays out of both
+  async applyAutoStatus(tasks: Task[]): Promise<Map<string, string>> {
     const s = this.plugin.settings;
+    const wrote = new Map<string, string>();
     const changes = [...autoStatusChanges(tasks, s.statuses, s.autoStatus, this.today())];
-    if (!changes.length) return false;
-    const was = new Map(tasks.map((t) => [t.path, t.status ?? ""]));
-    let wrote: typeof changes = [];
-    const changed = await this.mutate(tr().autoStatusLabel, changes.map(([p]) => p), async () => {
+    if (!changes.length) return wrote;
+    const was = new Map(tasks.map((t) => [t.path, t.status]));
+    const statuses: StatusChange[] = [];
+    await this.mutate(tr().autoStatusLabel, [], async () => {
       // 全部書き終えてから記録する（途中で 1 件失敗しても、記録が実際の中身とずれないように）/ record only after every write settles, so one failure can't skew the record
       const res = await Promise.allSettled(changes.map(([p, c]) => writeField(this.app, p, s.keys.status, c.status)));
-      wrote = changes.filter((_, i) => res[i].status === "fulfilled");
-      if (wrote.length < changes.length) new Notice(tr().writeFailed);
-      const auto: Record<string, AutoUndone> = {};
-      for (const [p, c] of wrote) auto[p] = { rule: c.rule, date: c.date, status: was.get(p) ?? "" };
-      return { auto };
+      changes.forEach(([p, c], i) => {
+        if (res[i].status !== "fulfilled") return;
+        statuses.push({ path: p, from: was.get(p), to: c.status });
+        wrote.set(p, c.status);
+        s.autoStatus.fired[p] = { ...s.autoStatus.fired[p], [c.rule]: c.date };
+      });
+      if (wrote.size < changes.length) new Notice(tr().writeFailed);
+      return statuses.length ? { statuses } : false;
     });
-    if (!changed || !wrote.length) return false;
-    // メタデータの更新を待たずに描き直せるよう、メモリ上のタスクにも反映 / reflect it in memory, so the redraw doesn't wait for the metadata cache
-    for (const [p, c] of wrote) {
-      const t = this.tasks.find((x) => x.path === p);
-      if (t) t.status = c.status;
+    if (wrote.size) this.undoToast = this.buttonNotice(tr().autoStatusDone(wrote.size), tr().undoShort, () => void this.undo(), 8000);
+    return wrote;
+  }
+
+  // 自動ステータスで書いたステータスをメモリ上のタスクに反映して描き直す（メタデータの更新を待たない）
+  // take the statuses automatic status wrote into the in-memory tasks and redraw, without waiting for the metadata cache
+  takeStatuses(statuses: Map<string, string>): void {
+    let hit = false;
+    for (const t of this.tasks) {
+      const st = statuses.get(t.path);
+      if (st !== undefined) (t.status = st), (hit = true);
     }
-    this.undoToast = this.buttonNotice(tr().autoStatusDone(wrote.length), tr().undoShort, () => void this.undo(), 8000);
-    return true;
+    if (hit) this.rerender();
+  }
+
+  // 書き込み・取り消し・ドラッグの最中か（自動ステータスはどのボードもこれが終わるまで待つ）/ whether a write, an undo or a drag is under way (automatic status waits for every board)
+  isBusy(): boolean {
+    return this.historyBusy > 0 || this.historyRunning || this.dragging != null;
+  }
+
+  // 自動ステータスの取り消し・やり直し：ステータスの欄だけを戻す（進める）。その後で手で変えたノートには触れない
+  // undo or redo an automatic-status run: only the status field goes back (or forward); a note whose status was changed by hand since is left alone
+  private async replayStatuses(list: StatusChange[], redo: boolean): Promise<void> {
+    const key = this.plugin.settings.keys.status;
+    await Promise.allSettled(list.map(async (c) => {
+      const f = this.app.vault.getAbstractFileByPath(c.path);
+      if (!(f instanceof TFile)) return;
+      const [now, next] = redo ? [c.from, c.to] : [c.to, c.from];
+      await this.app.fileManager.processFrontMatter(f, (fm: Record<string, unknown>) => {
+        if ((fm[key] == null ? undefined : String(fm[key])) !== now) return;
+        if (next === undefined) delete fm[key];
+        else fm[key] = next;
+      });
+    }));
   }
 
   // 詳細パネルが見せている内容の印（タスクのデータと本文）/ a fingerprint of what the detail panel shows (the task's data and its body)
@@ -615,14 +647,15 @@ export class GanttView extends ItemView {
     this.ppd = this.computePpd();
 
     // のばすときは同じスクロール枠を使い続ける（つまみのドラッグや慣性のスクロールが途切れない）/ a grow keeps the same scroll box, so a thumb drag or momentum scroll carries on
-    const reuse = this.extending && prev?.isConnected ? prev : null;
-    if (!reuse) this.gridHost.empty();
-    this.boardMain = null;
-    this.cursor = Math.max(0, Math.min(this.cursor, this.rows.length - 1));
     // 何も出ないとき：絞り込みのせいならそう伝えて解除ボタンを、フォルダが本当に空なら新規作成ボタンを出す
     // nothing to show: when the filters hide everything say so and offer Clear filters; when the folder is truly empty offer New task
     const filtered = view.length === 0 && this.tasks.length > 0;
-    if (this.rows.length === 0 || filtered) return this.renderEmpty(filtered);
+    const empty = this.rows.length === 0 || filtered;
+    const reuse = this.extending && !empty && prev?.isConnected ? prev : null;
+    if (!reuse) this.gridHost.empty();
+    this.boardMain = null;
+    this.cursor = Math.max(0, Math.min(this.cursor, this.rows.length - 1));
+    if (empty) return this.renderEmpty(filtered);
     const main = reuse ?? this.gridHost.createDiv({ cls: "ogantt-main" });
     reuse?.empty();
     this.boardMain = main;
@@ -689,11 +722,8 @@ export class GanttView extends ItemView {
   // every column definition (built-ins, then custom fields); rebuilt only when the custom fields change
   private columnCache: { sig: string; cols: ColumnDef[] } | null = null;
   private columns(): ColumnDef[] {
-    const fields = validCustomFields(this.plugin.settings);
-    const sig = JSON.stringify(fields);
-    if (this.columnCache?.sig !== sig) {
-      this.columnCache = { sig, cols: [...BUILTIN_COLUMNS, ...fields.map(customColumn)] };
-    }
+    const sig = JSON.stringify(validCustomFields(this.plugin.settings));
+    if (this.columnCache?.sig !== sig) this.columnCache = { sig, cols: allColumns(this.plugin.settings) };
     return this.columnCache.cols;
   }
   // 表全体の幅（表示中の列幅の合計）/ total table width (sum of visible column widths)
@@ -952,7 +982,7 @@ export class GanttView extends ItemView {
     addDate("start", tr().fieldStart);
     addDate("end", tr().fieldDue);
     const r = anchor.getBoundingClientRect();
-    m.showAtPosition({ x: r.left, y: r.bottom + 4 });
+    m.showAtPosition({ x: r.left, y: r.bottom + 4 }, anchor.doc);
   }
 
   // 追加直後、最後のフィルタのエディタを開く / open the just-added filter's editor
@@ -1240,7 +1270,7 @@ export class GanttView extends ItemView {
       }
       // ボタンの下に開く（キーボードで押したときマウスの位置は 0,0）/ opened under the button (a keyboard press has its mouse position at 0,0)
       const r = kinds.getBoundingClientRect();
-      m.showAtPosition({ x: r.left, y: r.bottom + 4 });
+      m.showAtPosition({ x: r.left, y: r.bottom + 4 }, kinds.doc);
     };
     // 今日へスクロール / scroll to today
     const todayBtn = bar.createEl("button", { cls: "ogantt-today-btn", text: tr().today });
@@ -1481,7 +1511,7 @@ export class GanttView extends ItemView {
             onConfirm: () => {
               const at = s.statuses.indexOf(st);
               if (at >= 0) s.statuses.splice(at, 1);
-              this.plugin.renameStatusId(st.id, null);
+              renameAutoStatusId(this.plugin.settings.autoStatus, st.id, null);
               persist();
             },
           }).open();
@@ -1570,17 +1600,17 @@ export class GanttView extends ItemView {
     }
     if (heading != null) {
       const key = `${axis}:${heading}`;
-      const legacy = axis === "folder" ? `folder:${name}` : key; // 以前のフォルダ名のキー / the older folder-name key
+      // 以前のフォルダ名のキーから来たアイコンは、ほかのフォルダのものでもあるので消さず、このフォルダだけ「なし」（空）にする
+      // an icon that comes from the older folder-name key is shared with other folders, so it isn't deleted: this folder alone is set to none (empty)
+      const legacy = this.legacyIcon(heading, name) != null;
       const setGroupIcon = (icon: string | null) => {
         if (icon) s.icons[key] = icon;
-        else {
-          delete s.icons[key];
-          delete s.icons[legacy];
-        }
+        else if (legacy) s.icons[key] = "";
+        else delete s.icons[key];
         void this.plugin.saveLook();
       };
       m.addItem((i) => i.setTitle(tr().menuChangeIcon).setIcon("shapes").onClick(() => pickIcon(anchor, setGroupIcon)));
-      if (s.icons[key] || s.icons[legacy]) m.addItem((i) => i.setTitle(tr().menuResetIcon).setIcon("rotate-ccw").onClick(() => setGroupIcon(null)));
+      if (s.icons[key] || legacy) m.addItem((i) => i.setTitle(tr().menuResetIcon).setIcon("rotate-ccw").onClick(() => setGroupIcon(null)));
     }
     m.showAtMouseEvent(e);
   }
@@ -1605,10 +1635,19 @@ export class GanttView extends ItemView {
   // 見出しのアイコン（ユーザーの指定 > 軸ごとの既定）。フォルダは以前の名前のキーも読む / a heading's icon (the user's pick > the axis default); folders also read the older name key
   private groupIcon(key: string, name: string, collapsed: boolean): string {
     const icons = this.plugin.settings.icons;
-    const custom = icons[`${this.groupBy}:${key}`] ?? (this.groupBy === "folder" ? icons[`folder:${name}`] : undefined);
+    const custom = icons[`${this.groupBy}:${key}`] ?? (this.groupBy === "folder" ? this.legacyIcon(key, name) : undefined);
     if (custom) return custom;
     if (this.groupBy === "folder") return collapsed ? "folder" : "folder-open";
     return this.groupBy === "tag" ? "tag" : this.groupBy === "assignee" ? "user" : "circle-dot";
+  }
+
+  // 以前のフォルダ名のキー（"folder:<名前>"）のアイコン。入れ子のフォルダで、自分のキーが無く、同じ名前のフォルダが Vault の直下に無いときだけ
+  // （直下にあれば、そのキーはそのフォルダのパスのキー）/ the icon under the older folder-name key ("folder:<name>"); only for a nested folder with no
+  // key of its own, and only when no top-level folder has that name (if one does, the key is that folder's path key)
+  private legacyIcon(path: string, name: string): string | undefined {
+    const icons = this.plugin.settings.icons;
+    if (path === name || `folder:${path}` in icons || this.app.vault.getAbstractFileByPath(name) instanceof TFolder) return undefined;
+    return icons[`folder:${name}`];
   }
 
   // フィルタ→グループ再マッピングを適用したタスク列を返す（判定本体は filter.ts）/ tasks after filter + group remap (logic lives in filter.ts)
@@ -1663,8 +1702,8 @@ export class GanttView extends ItemView {
       // 操作後の内容。移動が無く何も変わっていなければ記録しない（本文の #tag だけのタグ削除など）。取り消すときはこの内容のままかを確かめる
       // the contents after the op: with no move and nothing changed it isn't recorded (e.g. removing an inline-only #tag); undo checks they're still these
       const post = await this.snapshot(files.keys());
-      if (!r.moves?.length && [...files].every(([p, c]) => post.get(p) === c)) return false;
-      this.record({ label, files, expect: r.moves?.length ? undefined : post, moves: r.moves ?? [], created: r.created ?? [], deleted: r.deleted ?? [], auto: r.auto });
+      if (!r.moves?.length && !r.statuses?.length && [...files].every(([p, c]) => post.get(p) === c)) return false;
+      this.record({ label, files, expect: r.moves?.length ? undefined : post, moves: r.moves ?? [], created: r.created ?? [], deleted: r.deleted ?? [], statuses: r.statuses });
       return true;
     });
   }
@@ -1768,7 +1807,12 @@ export class GanttView extends ItemView {
     this.historyBusy++;
     let conflict = false;
     try {
-      await this.busy(entry.files.size, async () => {
+      await this.busy(entry.files.size + (entry.statuses?.length ?? 0), async () => {
+        if (entry.statuses) {
+          await this.replayStatuses(entry.statuses, redo);
+          this.pushHistory(redo ? this.undoStack : this.redoStack, entry);
+          return;
+        }
         if (!redo) await this.replayMoves(entry.moves.map((m) => ({ from: m.to, to: m.from })).reverse());
         const now = await this.snapshot(entry.files.keys());
         conflict = !force && [...(entry.expect ?? [])].some(([p, c]) => now.get(p) !== c);
@@ -1781,8 +1825,6 @@ export class GanttView extends ItemView {
         await this.restore(entry.files, redo ? entry.created : entry.deleted, now);
         if (redo) await this.replayMoves(entry.moves);
         this.pushHistory(redo ? this.undoStack : this.redoStack, { ...entry, files: now, expect: entry.expect && entry.files });
-        // 取り消した自動の変更は覚えて、どのボードからも再起動後も当て直さない / an undone automatic change is remembered, so no board re-applies it, even after a restart
-        if (entry.auto) await this.plugin.noteAutoUndone(entry.auto, !redo);
       });
     } finally {
       this.historyBusy--;
@@ -1996,6 +2038,7 @@ export class GanttView extends ItemView {
     if (main.dataset.scroll) return;
     main.dataset.scroll = "1";
     let ticking = false;
+    let left = main.scrollLeft;
     main.addEventListener("scroll", () => {
       if (ticking) return;
       ticking = true;
@@ -2003,6 +2046,9 @@ export class GanttView extends ItemView {
         ticking = false;
         if (main.clientHeight) this.scrollMemo = this.scrollOf(main);
         this.paintWindow?.();
+        // 縦だけのスクロールでは端を見ない / a vertical-only scroll doesn't check the edges
+        if (main.scrollLeft === left) return;
+        left = main.scrollLeft;
         this.growNearEdge();
       });
     });
@@ -2016,22 +2062,20 @@ export class GanttView extends ItemView {
     if (!main?.clientWidth || this.zoom === "Fit" || this.dragging || this.exporting || this.extending) return;
     const ae = activeDocument.activeElement;
     if (ae && this.tbodyEl?.contains(ae) && ae.matches("input, select, textarea")) return;
-    const side = nearEdge(main.scrollLeft, main.clientWidth, main.scrollWidth, main.clientWidth);
-    const next = side && growPad(this.pad, side, this.zoom);
-    if (!side || !next) return;
-    const added = next[side] - this.pad[side];
-    const { scrollLeft, scrollTop } = main;
+    const margin = main.clientWidth;
+    const side = nearEdge(main.scrollLeft, main.clientWidth, main.scrollWidth, margin);
+    if (!side) return;
+    // 1 回で端の帯から出るだけ足す（何度も描き直さない）/ add enough in one go to leave the edge zone (no chain of redraws)
+    const gap = side === "before" ? main.scrollLeft : main.scrollWidth - main.scrollLeft - main.clientWidth;
+    const next = growPad(this.pad, side, this.zoom, Math.ceil((margin - gap) / this.ppd) + 1);
+    if (!next) return;
     this.pad = next;
     this.extending = true;
     try {
-      this.rerender();
+      this.rerender(); // 中央の日付を保って描き直すので、左に足しても見ている日はずれない / the redraw keeps the centre date, so adding on the left doesn't move the view
     } finally {
       this.extending = false;
     }
-    if (this.boardMain !== main) return;
-    main.scrollTop = scrollTop;
-    main.scrollLeft = side === "before" ? shiftScroll(scrollLeft, added, this.ppd) : scrollLeft;
-    this.scrollMemo = this.scrollOf(main);
   }
 
   // 表ヘッダー（表示中の列・クリックか Enter でソート・右端グリップで幅）/ the table header: visible columns, sort by click or Enter, width grip
@@ -2342,7 +2386,7 @@ export class GanttView extends ItemView {
     if ("clientX" in at) m.showAtMouseEvent(at); // instanceof はポップアウトの窓では成り立たない / instanceof fails across popout windows
     else {
       const r = at.getBoundingClientRect();
-      m.showAtPosition({ x: r.left + 24, y: r.bottom });
+      m.showAtPosition({ x: r.left + 24, y: r.bottom }, at.doc);
     }
   }
 

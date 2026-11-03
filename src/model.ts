@@ -2,6 +2,7 @@ import { App, CachedMetadata, TFile, TFolder, getAllTags, normalizePath } from "
 import { GanttSettings } from "./settings";
 import { fmList, fmText, isBareLink, linkLabel } from "./links";
 import { PALETTE } from "./colors";
+import { fixedOffset } from "./timeline";
 import { Task, TaskKind, Row, Dep, DepType, StatusDef, StatusGroup, CustomField, CustomFieldType, CustomValue } from "./types";
 
 // ── ステータスグループ / status groups ──
@@ -154,9 +155,13 @@ const pad2 = (n: number): string => String(n).padStart(2, "0");
 // 設定タイムゾーンのオフセット（分）。"system" は端末のその時点のオフセット（DST考慮）
 // configured timezone offset in minutes; "system" = device offset at that instant (DST-aware)
 function offsetMinutes(tz: string, instantMs: number): number {
-  const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
-  if (m) return (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]);
-  return -new Date(instantMs).getTimezoneOffset();
+  return fixedOffset(tz) ?? -new Date(instantMs).getTimezoneOffset();
+}
+
+// 壁時計（日付＋時刻）でのオフセット（分）。"system" はその日時の端末のオフセット（DST考慮）
+// the offset (minutes) at a wall-clock date + time; "system" = the device's offset at that wall time (DST-aware)
+function wallOffset(tz: string, date: string, time: string): number {
+  return fixedOffset(tz) ?? -new Date(`${date}T${time}`).getTimezoneOffset();
 }
 
 // 分オフセットを "+09:00" 形式へ / minutes to a "+09:00" suffix
@@ -196,9 +201,7 @@ export function toInstant(date: string, time: string, tz: string): number {
   const [y, mo, d] = date.split("-").map(Number);
   const [h, mi] = time.split(":").map(Number);
   const naive = Date.UTC(y, mo - 1, d, h, mi);
-  const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
-  const off = m ? (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]) : -new Date(`${date}T${time}`).getTimezoneOffset();
-  return naive - off * 60000;
+  return naive - wallOffset(tz, date, time) * 60000;
 }
 
 // 表示用の日付＋時刻を保存形式へ（時刻があれば設定タイムゾーンのオフセットを付与）
@@ -206,10 +209,7 @@ export function toInstant(date: string, time: string, tz: string): number {
 export function combineDateTime(date: string | undefined, time: string | undefined, tz: string): string | undefined {
   if (!date) return undefined;
   if (!time) return date;
-  // "system" はその日時のローカルオフセット（DST考慮）/ "system" = device offset at that wall time (DST-aware)
-  const m = tz.match(/^([+-])(\d{2}):(\d{2})$/);
-  const min = m ? (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]) : -new Date(`${date}T${time}`).getTimezoneOffset();
-  return `${date}T${time}${offsetSuffix(min)}`;
+  return `${date}T${time}${offsetSuffix(wallOffset(tz, date, time))}`;
 }
 
 // after を文字列配列へ正規化 / normalize `after` into a string array

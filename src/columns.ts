@@ -7,6 +7,7 @@ import {
   anchorStart,
   anchorEnd,
   writeField,
+  validCustomFields,
   customValueText,
   parseCustomInput,
 } from "./model";
@@ -311,6 +312,11 @@ export function customColumn(f: CustomField): CellColumn {
     },
     editAria: () => tr().editCustomField(name()),
   };
+}
+
+// 全列の定義（組み込み→キーの使える Custom field の順）。ビューと設定画面が共有 / every column definition (built-ins, then usable custom fields); shared by the view and the settings tab
+export function allColumns(settings: GanttSettings): ColumnDef[] {
+  return [...BUILTIN_COLUMNS, ...validCustomFields(settings).map(customColumn)];
 }
 
 // ----- 並び・表示・比較（純粋関数）/ order, visibility and comparison (pure) -----

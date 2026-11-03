@@ -1,6 +1,6 @@
 // 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
 // Tests for date-filter resolution/matching and progress-line geometry
-import { resolveDateValue, matchDate, dayIndex, dayToStr, todayIndex, progressLineX, buildProgressLine, buildTicks, buildBands, extendChunk, extendLimit, growPad, padRange, padToCover, shiftScroll, nearEdge } from "./timeline.mjs";
+import { resolveDateValue, matchDate, dayIndex, dayToStr, todayIndex, progressLineX, buildProgressLine, buildTicks, buildBands, extendChunk, extendLimit, growPad, padRange, padToCover, nearEdge, fixedOffset } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -157,8 +157,9 @@ check("todayIndex: system は端末の暦", todayIndex(new Date(2026, 9, 23, 23,
   check("padToCover: 範囲の外の日（今日など）が 1 回分の余裕つきで入る", JSON.stringify(padToCover(base, zero, 500, "Day")) === '{"before":0,"after":328}' && padToCover(base, zero, 10, "Month").before === 455);
   check("padToCover: 範囲の中ほどなら変えない", JSON.stringify(padToCover(base, { before: 5, after: 7 }, 150, "Day")) === '{"before":5,"after":7}');
   check("padToCover: 上限を超えても届かせる（明示の移動）", padToCover(base, zero, -5000, "Week").before > extendLimit("Week"));
-  // 左に 91 日（16px/日）足したら、同じ日付を見せるため scrollLeft は 1456px 右へ / adding 91 days on the left at 16 px/day moves scrollLeft 1456 px right to keep the same dates
-  check("shiftScroll: 左にのばした分だけ右へ", shiftScroll(120, 91, 16) === 1576 && shiftScroll(0, 0, 5) === 0);
+  // 端の帯から出るのに 100 日要るなら、1 回分（91 日）ずつ切り上げて 182 日を 1 度に / needing 100 days to leave the edge zone adds 182 (two 91-day chunks) at once
+  check("growPad: 端の帯から出る分を 1 度に（1 回分ずつ切り上げ）", growPad(zero, "after", "Week", 100).after === 182 && growPad(zero, "after", "Week", 0).after === 91);
+  check("fixedOffset: 固定オフセットは分、system は null", fixedOffset("+09:30") === 570 && fixedOffset("-05:00") === -300 && fixedOffset("system") === null);
   check("nearEdge: 左端・右端・中ほど", nearEdge(100, 800, 5000, 800) === "before" && nearEdge(3500, 800, 5000, 800) === "after" && nearEdge(2000, 800, 5000, 800) === null);
 }
 

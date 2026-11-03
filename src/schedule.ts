@@ -284,20 +284,16 @@ export function cascadeDates(tasks: Task[], roots: string[], opts: ScheduleOptio
 
 // どちらの決まりで動いたか（開始日が来た・期限日が過ぎた）/ which rule moved a task (its start came, its due date passed)
 export type AutoRule = "started" | "finished";
-// 取り消された自動の変更（ノートのパスごと）。その日付と、戻したステータスのままなら同じ決まりは当て直さない
-// an automatic change the user undid (per note path); while the note keeps that date and that status, the rule isn't applied again
-export interface AutoUndone {
-  rule: AutoRule;
-  date: string;
-  status: string;
-}
+// 決まりが当たった日付（ノートのパスごと・決まりごと）。同じ日付のあいだは、取り消しても手でステータスを戻しても当て直さない
+// the date each rule fired for (per note path and rule); while the note keeps that date, the rule isn't applied again, whether undone or set back by hand
+export type AutoFired = Record<string, Partial<Record<AutoRule, string>>>;
 
 // 自動ステータスの設定（空の id・空の一覧は既定）/ the automatic-status setup (an empty id or list means the default)
 export interface AutoStatusConfig {
   started: string;
   finished: string;
   notStarted: string[];
-  undone?: Record<string, AutoUndone>;
+  fired?: AutoFired;
 }
 
 // 設定を今のステータス一覧で解決する。開始後は「進行中」グループ（既定は in-progress、無ければ 2 つ目の進行中）、
@@ -325,12 +321,12 @@ function ruleDate(t: Task, rule: AutoRule): string | undefined {
 // 日付が来た・過ぎたタスクの新しいステータス（パス → 行き先・決まり・日付）。today は設定タイムゾーンでの今日。
 // 期限日を過ぎた（today > 期限日）未完了のタスクは完了後へ、開始日になった（today >= 開始日）未着手のタスクは開始後へ。
 // 「進行中」グループ以外（延期・完了・中止）、ステータス未設定・不明、ノートに該当する日付の無いタスクには触れず、後戻りもしない。
-// 取り消された変更（undone）は、日付もステータスも同じあいだ当て直さない（そのノートはほかの決まりでも動かさない）
+// 一度当てた決まり（fired）は、その日付のあいだ当て直さない（取り消しても、手でステータスを戻しても）
 // the new statuses (path → target, rule and date) for tasks whose dates have come or gone; `today` is today in the configured timezone.
 // A task past its due date (today > due) that isn't finished moves to the finished status; a not-started task whose start has come
 // (today >= start) moves to the started status. Tasks outside the active group (deferred, completed, cancelled), with no or an unknown
-// status, or without that date in the note are left alone, and nothing moves backwards. An undone change isn't applied again while the
-// note keeps that date and status (nor does another rule move that note meanwhile)
+// status, or without that date in the note are left alone, and nothing moves backwards. A rule that already fired (`fired`) isn't applied
+// again while the note keeps that date, whether the change was undone or the status set back by hand
 export function autoStatusChanges(tasks: Task[], statuses: StatusDef[], cfg: AutoStatusConfig, today: number): Map<string, { status: string; rule: AutoRule; date: string }> {
   const { started, finished, notStarted } = autoStatusTargets(statuses, cfg);
   const active = new Set(statuses.filter((s) => s.group === "active").map((s) => s.id));
@@ -343,8 +339,7 @@ export function autoStatusChanges(tasks: Task[], statuses: StatusDef[], cfg: Aut
       : started && start && today >= dayIndex(start) && notStarted.includes(t.status) ? "started" : null;
     if (!rule) continue;
     const date = (rule === "finished" ? due : start)!;
-    const u = cfg.undone?.[t.path];
-    if (u && u.rule === rule && u.date === date && u.status === t.status) continue;
+    if (cfg.fired?.[t.path]?.[rule] === date) continue; // この日付ではもう当てた / already applied for this date
     out.set(t.path, { status: rule === "finished" ? finished! : started!, rule, date });
   }
   return out;
@@ -359,14 +354,20 @@ export function renameAutoStatusId(cfg: AutoStatusConfig, from: string, to: stri
   cfg.notStarted = cfg.notStarted.flatMap((id) => (id !== from ? [id] : to ? [to] : []));
 }
 
-// 取り消しの記録のうち、まだ意味のあるものだけ（ノートが残っていて、日付が記録のまま）。記録を小さく保つ。
-// ステータスでは捨てない：取り消した直後はメタデータがまだ古いことがあり、捨てると当て直してしまう（ステータスが違えば記録は効かない）
-// the undo records still worth keeping: the note is still there with the same date. Keeps the record small. Not dropped by status:
-// right after an undo the metadata can still be stale, and dropping would re-apply the change (a record whose status differs has no effect anyway)
-export function keepAutoUndone(undone: Record<string, AutoUndone>, tasks: Task[]): Record<string, AutoUndone> {
-  const byPath = new Map(tasks.map((t) => [t.path, t]));
-  return Object.fromEntries(Object.entries(undone).filter(([p, u]) => {
-    const t = byPath.get(p);
-    return !!t && ruleDate(t, u.rule) === u.date;
-  }));
+// 当たった記録のうち、ノートが残っている分だけ（日付が変わった記録は効かないが、日付を戻したときのために残す）
+// the fired records whose note still exists (a record for an old date has no effect, but is kept in case the date is moved back)
+export function keepAutoFired(fired: AutoFired, exists: (path: string) => boolean): AutoFired {
+  return Object.fromEntries(Object.entries(fired).filter(([p]) => exists(p)));
+}
+
+// リネーム・移動に記録を付いて行かせる（フォルダなら配下ごと）。変えたら true / let the records follow a rename or move (a folder takes its contents along); true when any moved
+export function moveAutoFired(fired: AutoFired, from: string, to: string): boolean {
+  let moved = false;
+  for (const p of Object.keys(fired)) {
+    if (p !== from && !p.startsWith(from + "/")) continue;
+    fired[to + p.slice(from.length)] = fired[p];
+    delete fired[p];
+    moved = true;
+  }
+  return moved;
 }
