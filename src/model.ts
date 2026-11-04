@@ -395,6 +395,11 @@ export function moveCollapsed(keys: string[], from: string, to: string): string[
   });
 }
 
+// 改名・移動に合わせてパスの一覧を付け替える（フォルダなら配下ごと）/ re-point a list of paths after a rename or move (a folder takes its contents along)
+export function movePaths(paths: string[], from: string, to: string): string[] {
+  return paths.map((p) => (p === from || p.startsWith(from + "/") ? to + p.slice(from.length) : p));
+}
+
 // フォルダ階層を入れ子の表示行へ展開（collapsed のフォルダは子を省く）
 // flatten the folder tree into nested rows (collapsed folders hide their children)
 // 既定のタスク比較＝開始日昇順（呼び出し側が指定しなければこれ）/ default task order = start ascending

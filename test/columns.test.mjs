@@ -1,6 +1,6 @@
 // 列定義の並び・表示・並べ替え（visibleColumns / columnWidth / taskComparator）の検証
 // Tests for column order, visibility, widths and sorting (visibleColumns / columnWidth / taskComparator)
-import { BUILTIN_COLUMNS, visibleColumns, columnWidth, taskComparator, customColumn, customColumnId, columnList, toggleColumn, moveColumn, allColumns } from "./columns.mjs";
+import { BUILTIN_COLUMNS, visibleColumns, columnWidth, taskComparator, customColumn, customColumnId, columnList, toggleColumn, moveColumn, allColumns, manualComparator, disabledLast } from "./columns.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -110,6 +110,16 @@ check("unknown sort column falls back to start", sorted(ALL, settings("ghost")) 
   check("unknown ids keep their visibility and place on toggle", keep.visibleColumns.join() === "start,cf:zz" && keep.columnOrder.slice(0, 3).join() === "start,cf:zz,end");
   check("unknown ids keep their place on move", moveColumn(cols, ["start", "end"], ["start", "cf:zz", "end"], "end", -1).slice(0, 3).join() === "end,cf:zz,start");
   check("hidden columns reorder among themselves", list(["start"], hidden) === "start,(end),(duration),(progress),(assignee),(tags),(status),(cf:n1)");
+}
+
+// 手の並びと、止めたタスクは最後 / the manual order, and disabled tasks last
+{
+  const T = (path, start) => ({ path, name: path, start, end: start, groups: [], deps: [], tags: [], assignees: [], milestone: false });
+  const list = [T("a", "2026-01-03"), T("b", "2026-01-01"), T("c", "2026-01-02"), T("d", "2026-01-04")];
+  const byStart = taskComparator(BUILTIN_COLUMNS, { sortBy: "manual", sortDir: "asc", statuses: [] });
+  const names = (cmp) => list.slice().sort(cmp).map((t) => t.path).join("");
+  check("manual: 並びの順、並びに無いものは後ろで開始日順", names(manualComparator(["c", "a"], byStart)) === "cabd");
+  check("manual: 止めたタスクは最後（その中も並びの順）", names(disabledLast(new Set(["c", "b"]), manualComparator(["c", "a"], byStart))) === "adcb");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

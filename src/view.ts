@@ -5,6 +5,7 @@ import {
   collectTasks,
   collectFolders,
   moveCollapsed,
+  movePaths,
   buildRows,
   createTask,
   reparentTask,
@@ -60,7 +61,7 @@ import { schedulePush } from "./gcal/sync";
 import { isConnected } from "./gcal/auth";
 import { applyFilters, besideHeading, regroup, GroupBy } from "./filter";
 import { BoardContext, Move, MutateResult, StatusChange } from "./board";
-import { CellColumn, ColumnDef, allColumns, columnList, columnWidth, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
+import { CellColumn, ColumnDef, allColumns, columnList, columnWidth, disabledLast, manualComparator, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
 
 const ROW_H = 30; // 行の高さ（表とタイムラインで共通）/ shared row height
 // 日本語などの変換中のキー（Enter は変換の確定、Esc は変換の取り消しで、こちらの操作ではない）
@@ -112,6 +113,7 @@ interface HistoryEntry {
   moves: Move[];
   created: string[]; // 操作で作成 / made by the op
   statuses?: StatusChange[]; // 日付による自動ステータスの変更（取り消しはこの欄だけ）/ automatic status changes (undo touches only this field)
+  disable?: { paths: string[]; on: boolean }; // タスクを止めた・戻した（ボードの設定だけ）/ tasks disabled or enabled (board setting only)
   deleted: string[]; // 操作で削除 / removed by the op
 }
 
@@ -164,6 +166,8 @@ export class GanttView extends ItemView {
   private selectedPath: string | null = null;
   private folder = ""; // 表示対象フォルダ / scoped folder path
   private collapsed = new Set<string>(); // 折りたたみ中フォルダのキー / collapsed folder keys
+  private order: string[] = []; // 手で決めた行の並び（タスクのパス。並べ替えが「手動」のとき）/ the manual row order (task paths; used while the sort is "manual")
+  private disabled = new Set<string>(); // 止めたタスク（薄く、兄弟の最後に）/ disabled tasks (greyed, last among their siblings)
 
   // 表示オプション（ボードごとに settings.boards へ覚える）/ view options (remembered per board in settings.boards)
   private colorBy: "status" | "assignee" = "status";
@@ -314,8 +318,13 @@ export class GanttView extends ItemView {
       // 畳んだ親タスク（キーはパス）も追いかける / collapsed parent tasks (keyed by path) follow too
       const before = [...this.collapsed];
       const collapsed = moveCollapsed(before, oldPath, file.path);
-      if (collapsed.some((k, i) => k !== before[i])) {
+      // 手の並びと止めたタスク（キーはパス）も / the manual order and disabled tasks (keyed by path) too
+      const order = movePaths(this.order, oldPath, file.path);
+      const disabled = movePaths([...this.disabled], oldPath, file.path);
+      if (collapsed.some((k, i) => k !== before[i]) || order.some((k, i) => k !== this.order[i]) || disabled.some((k) => !this.disabled.has(k))) {
         this.collapsed = new Set(collapsed);
+        this.order = order;
+        this.disabled = new Set(disabled);
         this.saveBoard();
       }
       if (inScope(oldPath) || inScope(file.path)) this.scheduleRefresh();
@@ -506,9 +515,14 @@ export class GanttView extends ItemView {
   async applyAutoStatus(tasks: Task[]): Promise<Map<string, string>> {
     const s = this.plugin.settings;
     const wrote = new Map<string, string>();
-    const changes = [...autoStatusChanges(tasks, s.statuses, s.autoStatus, this.today())];
-    if (!changes.length) return wrote;
     const was = new Map(tasks.map((t) => [t.path, t.status]));
+    // 今のままでよいノートは見たことだけ覚える（あとで手で変えたら分かるように）/ notes already right are only remembered as seen, so a later hand edit can be told apart
+    const changes = [...autoStatusChanges(tasks, s.statuses, s.autoStatus, this.today())].filter(([p, c]) => {
+      if (c.status !== was.get(p)) return true;
+      s.autoStatus.fired[p] = { dates: c.dates, status: c.status };
+      return false;
+    });
+    if (!changes.length) return wrote;
     const statuses: StatusChange[] = [];
     await this.mutate(tr().autoStatusLabel, [], async () => {
       // 全部書き終えてから記録する（途中で 1 件失敗しても、記録が実際の中身とずれないように）/ record only after every write settles, so one failure can't skew the record
@@ -519,7 +533,7 @@ export class GanttView extends ItemView {
         if (r.status !== "fulfilled" || !r.value) return;
         statuses.push({ path: p, from: was.get(p), to: c.status });
         wrote.set(p, c.status);
-        s.autoStatus.fired[p] = { ...s.autoStatus.fired[p], [c.rule]: c.date };
+        s.autoStatus.fired[p] = { dates: c.dates, status: c.status };
       });
       if (res.some((r) => r.status === "rejected")) new Notice(tr().writeFailed);
       return statuses.length ? { statuses } : false;
@@ -584,6 +598,8 @@ export class GanttView extends ItemView {
     // 折りたたみはグループ化の軸ごと（"folder:Design" のように）。軸の印が無い古いキーはフォルダのもの
     // collapse keys belong to a grouping axis ("folder:Design", …); an older key without one is a folder key
     this.collapsed = new Set((b?.collapsed ?? []).map((k) => (/^(folder|status|assignee|tag):/.test(k) ? k : `folder:${k}`)));
+    this.order = [...(b?.order ?? [])];
+    this.disabled = new Set(b?.disabled ?? []);
     this.groupSel.value = this.groupBy;
     this.colorSel.value = this.colorBy;
   }
@@ -591,7 +607,11 @@ export class GanttView extends ItemView {
   // 表示オプションを覚える / remember the view options
   private saveBoard(): void {
     const { groupBy, colorBy, flat, rollup, progressLine, showEmptyFolders, showDeps, showTags } = this;
-    this.plugin.settings.boards[`folder:${this.folder}`] = { groupBy, colorBy, flat, rollup, progressLine, showEmptyFolders, showDeps, showTags, collapsed: [...this.collapsed] };
+    // 手の並びと止めたタスクは、消えたノートの分を落として保存 / the manual order and disabled tasks are saved without notes that are gone
+    const exists = (p: string) => this.app.vault.getAbstractFileByPath(p) instanceof TFile;
+    this.order = this.order.filter(exists);
+    this.disabled = new Set([...this.disabled].filter(exists));
+    this.plugin.settings.boards[`folder:${this.folder}`] = { groupBy, colorBy, flat, rollup, progressLine, showEmptyFolders, showDeps, showTags, collapsed: [...this.collapsed], order: this.order, disabled: [...this.disabled] };
     this.saveSoon();
   }
 
@@ -622,7 +642,7 @@ export class GanttView extends ItemView {
     this.renderLegend(); // 凡例はデータ（担当者）で変わる / the legend depends on the data (the assignees)
     this.renderFilterBar(); // 統合フィルタ行を最新データで更新 / refresh the unified filter row
     const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
-    const compare = taskComparator(this.columns(), this.plugin.settings);
+    const compare = this.comparator();
     if (this.flat) {
       // フラット：フォルダも親子も無視して全タスクを1本のソート済みリストに / flat: one sorted list, no grouping/nesting
       this.rows = view.slice().sort(compare).map((task) => ({ kind: "task", group: "", depth: 0, task }));
@@ -674,6 +694,51 @@ export class GanttView extends ItemView {
     // キーボードで行にいたら描き直した後も行へ（スクロールはさせない。行が描かれていなければ表の本体へ）
     // keyboard focus stays on the rows after a redraw, without scrolling (on the table body when that row isn't drawn)
     if (hadFocus) (this.tbodyEl.querySelector<HTMLElement>(`.ogantt-tr[data-index="${this.cursor}"]`) ?? this.tbodyEl).focus({ preventScroll: true });
+  }
+
+  // 行の並べ方：列で並べ替え中はその列、「手動」なら手で決めた並び。止めたタスクはいつも兄弟の最後
+  // how rows sort: by the sorted column, or the manual order while the sort is "manual"; disabled tasks always last among their siblings
+  private comparator(): (a: Task, b: Task) => number {
+    const s = this.plugin.settings;
+    const byColumn = taskComparator(this.columns(), s); // "manual" は列に無いので開始日順 / "manual" is no column, so this is by start
+    return disabledLast(this.disabled, s.sortBy === "manual" ? manualComparator(this.order, byColumn) : byColumn);
+  }
+
+  // 行を兄弟の中で 1 つ上・下へ（並べ替えは「手動」になる）。動かせたら true
+  // move a row one up or down among its siblings (the sort becomes "manual"); true when it moved
+  private moveRow(i: number, dir: -1 | 1): boolean {
+    const row = this.rows[i];
+    if (row?.kind !== "task") return false;
+    let j = i + dir;
+    while (this.rows[j]?.kind === "task" && this.rows[j].depth > row.depth) j += dir; // 子の行は飛ばす / skip child rows
+    const other = this.rows[j];
+    if (other?.kind !== "task" || other.depth !== row.depth) return false;
+    this.placeRow(row.task!.path, other.task!.path, dir < 0 ? "before" : "after");
+    return true;
+  }
+
+  // src を target の前か後ろへ。今の並びを起点に（列で並べていたなら、その見た目から）手の並びを作る
+  // place `src` before or after `target`; the manual order starts from the order on screen (a column sort included)
+  private placeRow(src: string, target: string, where: "before" | "after"): void {
+    const order = [...new Set(this.tasks.slice().sort(this.comparator()).map((t) => t.path))].filter((p) => p !== src);
+    order.splice(order.indexOf(target) + (where === "after" ? 1 : 0), 0, src);
+    this.order = order;
+    this.plugin.settings.sortBy = "manual";
+    this.saveBoard();
+    this.rerender();
+    const k = this.rows.findIndex((r) => r.task?.path === src);
+    if (k >= 0) this.focusRow(k);
+  }
+
+  // タスクを止める・戻す（取り消せる。ノートには書かない）/ disable or enable tasks (undoable; nothing is written to the notes)
+  private setDisabled(paths: string[], on: boolean, label?: string): void {
+    for (const p of paths) {
+      if (on) this.disabled.add(p);
+      else this.disabled.delete(p);
+    }
+    if (label) this.record({ label, files: new Map(), moves: [], created: [], deleted: [], disable: { paths, on } });
+    this.saveBoard();
+    this.rerender();
   }
 
   // スクロール位置：縦はそのまま、横は画面の中央の日付（縮尺が変わっても同じ日が中央に残る）
@@ -1819,8 +1884,9 @@ export class GanttView extends ItemView {
     let conflict = false;
     try {
       await this.busy(entry.files.size + (entry.statuses?.length ?? 0), async () => {
-        if (entry.statuses) {
-          await this.replayStatuses(entry.statuses, redo);
+        if (entry.statuses || entry.disable) {
+          if (entry.statuses) await this.replayStatuses(entry.statuses, redo);
+          if (entry.disable) this.setDisabled(entry.disable.paths, redo === entry.disable.on);
           this.pushHistory(redo ? this.undoStack : this.redoStack, entry);
           return;
         }
@@ -2235,6 +2301,7 @@ export class GanttView extends ItemView {
     el.setAttr("data-path", t.path);
     if (row.hasChildren && row.key != null) el.setAttr("aria-expanded", String(!this.isCollapsed(row.key)));
     if (t.path === this.selectedPath) el.addClass("is-selected");
+    if (this.disabled.has(t.path)) el.addClass("is-disabled");
     // 表示中の列を順に描画 / render each visible column
     for (const col of cols) {
       if (col.kind !== "name") {
@@ -2337,6 +2404,10 @@ export class GanttView extends ItemView {
     const key = row.kind === "group" ? row.key : row.hasChildren ? row.key : undefined;
     const page = Math.max(1, Math.floor(((this.boardMain?.clientHeight ?? 0) - HEAD_H) / ROW_H) - 1);
     const go = (n: number) => { e.preventDefault(); this.focusRow(Math.max(0, Math.min(this.rows.length - 1, n))); };
+    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      return void this.moveRow(i, e.key === "ArrowUp" ? -1 : 1);
+    }
     if (e.key === "ArrowDown") return go(i + 1);
     if (e.key === "ArrowUp") return go(i - 1);
     if (e.key === "Home") return go(0);
@@ -2392,6 +2463,13 @@ export class GanttView extends ItemView {
       const dirs = ["", ...this.allFolders.map((f) => f.join("/"))].map((rel) => (this.folder && rel ? `${this.folder}/${rel}` : this.folder || rel));
       new PickModal(this.app, dirs, (d) => d || tr().vaultRoot, tr().menuMoveToFolder, (d) => void this.reparentTo(t.path, d, null)).open();
     }));
+    // 兄弟の中で上・下へ（キーボードは Alt+↑/↓）/ up or down among its siblings (Alt+↑/↓ on the keyboard)
+    const i = this.rows[this.cursor]?.task?.path === t.path ? this.cursor : this.rows.findIndex((r) => r.task?.path === t.path);
+    m.addItem((it) => it.setTitle(tr().menuMoveUp).setIcon("arrow-up").onClick(() => this.moveRow(i, -1)));
+    m.addItem((it) => it.setTitle(tr().menuMoveDown).setIcon("arrow-down").onClick(() => this.moveRow(i, 1)));
+    const off = this.disabled.has(t.path);
+    m.addItem((it) => it.setTitle(off ? tr().menuEnable : tr().menuDisable).setIcon(off ? "circle-play" : "circle-off").onClick(() =>
+      this.setDisabled([t.path], !off, off ? tr().menuEnable : tr().menuDisable)));
     m.addSeparator();
     m.addItem((i) => i.setTitle(tr().menuDelete).setIcon("trash-2").onClick(() => this.confirmDelete(t.path)));
     if ("clientX" in at) m.showAtMouseEvent(at); // instanceof はポップアウトの窓では成り立たない / instanceof fails across popout windows
@@ -2528,7 +2606,7 @@ export class GanttView extends ItemView {
     const aStart = anchorStart(t);
     if (!aStart) return;
     const x = this.xOf(aStart);
-    const g = this.svgEl("g", { class: "ogantt-bar-g" + (group === "cancelled" ? " is-cancelled" : "") + (this.late?.has(t.path) ? " is-late" : ""), "data-path": t.path });
+    const g = this.svgEl("g", { class: "ogantt-bar-g" + (group === "cancelled" ? " is-cancelled" : "") + (this.disabled.has(t.path) ? " is-disabled" : this.late?.has(t.path) ? " is-late" : ""), "data-path": t.path });
     let lx = x; // 左端ハンドル位置 / left handle x
     let rx = x; // 右端ハンドル位置 / right handle x
     if (t.milestone) {
@@ -2790,7 +2868,7 @@ export class GanttView extends ItemView {
   // propagate the roots' date changes to their successors (SS/FF snap, FS pushes when enabled; durations kept in
   // workdays). Writes to disk and updates the in-memory tasks; call it from inside mutate
   private async cascade(roots: string[]): Promise<void> {
-    const changes = cascadeDates(this.tasks, roots, scheduleOptions(this.plugin.settings));
+    const changes = cascadeDates(this.cascadeTasks(), roots, scheduleOptions(this.plugin.settings));
     // 依存が輪になっていると日付が決まらないので、後続は動かさずに知らせる / dependencies in a loop have no answer: successors stay put, and we say why
     if (!changes) return void new Notice(tr().depLoop);
     // 書く先はそれぞれ別のファイルなので並行に書く。どれかが失敗しても残りは書き終えてから知らせる（取り消しの記録が書いた分とずれない）
@@ -2829,7 +2907,13 @@ export class GanttView extends ItemView {
 
   // 日付変更で連動しうる後続（Undo のスナップショット対象）/ successors a date change may move (undo snapshot targets)
   private cascadePaths(root: string): string[] {
-    return successorClosure(this.tasks, root, this.plugin.settings.autoScheduleFS);
+    return successorClosure(this.cascadeTasks(), root, this.plugin.settings.autoScheduleFS);
+  }
+
+  // 連動に使うタスク：止めたタスクは押されない（依存を持たないものとして扱うので、その先へも伝わらない）
+  // the tasks a cascade sees: a disabled task is never pushed (treated as having no dependencies, so the push doesn't pass through it)
+  private cascadeTasks(): Task[] {
+    return this.disabled.size ? this.tasks.map((t) => (this.disabled.has(t.path) ? { ...t, deps: [] } : t)) : this.tasks;
   }
 
   // 描く依存の一覧（後続・先行の行番号つき）。描画のたびに見えている範囲で絞る
@@ -3113,23 +3197,38 @@ export class GanttView extends ItemView {
   }
 
   // 行をドロップ先にする。重ねている間は、落とすと何が起きるか（label）を行に出す / make a row a drop target; while hovering, the row shows what a drop will do
+  // タスクの行の上端・下端の 4 分の 1 に落とすと、その前・後ろへ並べ替え（真ん中は handler）
+  // on a task row, dropping in the top or bottom quarter places the dragged row before or after it (the middle runs `handler`)
   private makeDropTarget(row: HTMLElement, label: string, handler: (srcPath: string) => void): void {
+    const target = row.dataset.path;
+    const zone = (e: DragEvent): "before" | "after" | null => {
+      if (!target) return null;
+      const r = row.getBoundingClientRect();
+      const y = (e.clientY - r.top) / r.height;
+      return y < 0.25 ? "before" : y > 0.75 ? "after" : null;
+    };
+    const clear = () => row.removeClass("is-drop-target", "is-drop-before", "is-drop-after");
     row.addEventListener("dragover", (e: DragEvent) => {
-      if (this.dragPath != null && this.dragPath === row.dataset.path) return; // 自分の上には落とせない / not onto itself
+      if (this.dragPath != null && this.dragPath === target) return; // 自分の上には落とせない / not onto itself
       e.preventDefault(); // preventDefault でドロップを許可 / allow dropping
       if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-      row.dataset.dropLabel = label;
-      row.addClass("is-drop-target");
+      const z = zone(e);
+      row.dataset.dropLabel = z ? tr().dropReorder : label;
+      row.toggleClass("is-drop-target", !z);
+      row.toggleClass("is-drop-before", z === "before");
+      row.toggleClass("is-drop-after", z === "after");
     });
     row.addEventListener("dragleave", (e: DragEvent) => {
-      if (!row.contains(e.relatedTarget as Node | null)) row.removeClass("is-drop-target");
+      if (!row.contains(e.relatedTarget as Node | null)) clear();
     });
     row.addEventListener("drop", (e: DragEvent) => {
       e.preventDefault();
-      row.removeClass("is-drop-target");
+      clear();
       this.dragPath = null;
       const src = e.dataTransfer?.getData("text/plain");
-      if (src) handler(src);
+      const z = zone(e);
+      if (src && z && target) this.placeRow(src, target, z);
+      else if (src) handler(src);
     });
   }
 

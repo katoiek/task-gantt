@@ -386,6 +386,17 @@ export function columnWidth(def: ColumnDef, overrides: Record<string, number>): 
   return overrides[def.id] ?? def.width;
 }
 
+// 手で決めた並び（パスの順）。並びに無いタスクは後ろへ、その中は fallback の順 / the manual order (by path); tasks not in it go after, in the fallback's order
+export function manualComparator(order: string[], fallback: (a: Task, b: Task) => number): (a: Task, b: Task) => number {
+  const at = new Map(order.map((p, i) => [p, i]));
+  return (a, b) => (at.get(a.path) ?? order.length) - (at.get(b.path) ?? order.length) || fallback(a, b);
+}
+
+// 止めたタスクは最後へ（比べるのは兄弟どうしなので、親・グループの中の最後）/ disabled tasks go last (siblings are compared, so last within their parent or group)
+export function disabledLast(off: Set<string>, compare: (a: Task, b: Task) => number): (a: Task, b: Task) => number {
+  return (a, b) => Number(off.has(a.path)) - Number(off.has(b.path)) || compare(a, b);
+}
+
 // ソート設定からタスク比較関数を作る。未知の列 id は開始日順 / build a task comparator; an unknown column id sorts by start
 export function taskComparator(defs: ColumnDef[], settings: GanttSettings): (a: Task, b: Task) => number {
   const def = defs.find((c) => c.id === settings.sortBy) ?? defs.find((c) => c.id === "start")!;

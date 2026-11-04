@@ -163,6 +163,8 @@ export interface BoardState {
   showDeps: boolean; // 依存の矢印を描くか / whether dependency arrows are drawn
   showTags: boolean; // バーにタグを出すか / whether tags show on the bars
   collapsed: string[];
+  order?: string[]; // 手で決めた行の並び（タスクのパス）/ the manual row order (task paths)
+  disabled?: string[]; // 止めたタスク（パス。ノートには書かない）/ disabled tasks (paths; nothing is written to the notes)
 }
 
 // タスク1件分の同期スナップショット（ループ防止と差分検出に使う）
@@ -961,6 +963,18 @@ export class GanttSettingTab extends PluginSettingTab {
         desc: tr().setProgressLineColorDesc,
         render: (x) => this.ctlProgressLineColor(x),
       },
+      // 日付による自動ステータス（見つけやすいよう、全般の設定のすぐ後）/ automatic status by date (right after the general settings, easy to find)
+      {
+        type: "group",
+        heading: tr().setAutoStatusHeading,
+        items: [
+          { name: tr().setAutoStatusName, desc: tr().setAutoStatusDesc, render: (x) => this.ctlAutoStatus(x) },
+          // 行き先は OFF のうちから選べる（ON にした最初の実行から選んだとおりに動く）/ the targets can be picked while it's off, so the first run already follows them
+          { name: tr().setAutoStatusStarted, render: (x) => this.ctlAutoStatusTarget(x, "started") },
+          { name: tr().setAutoStatusNotStarted, render: (x) => this.ctlAutoStatusNotStarted(x) },
+          { name: tr().setAutoStatusFinished, render: (x) => this.ctlAutoStatusTarget(x, "finished") },
+        ],
+      },
       // ステータス（追加はフレームワークの list、削除は行内のゴミ箱）/ statuses (the list owns add; rows own delete)
       {
         type: "list",
@@ -1028,18 +1042,6 @@ export class GanttSettingTab extends PluginSettingTab {
             name: "",
             render: (x) => this.ctlColumnRow(x, col, on, list[i - 1]?.on === on, list[i + 1]?.on === on),
           })),
-        ],
-      },
-      // 日付による自動ステータス（行き先などは ON のときだけ）/ automatic status by date (the targets only while it's on)
-      {
-        type: "group",
-        heading: tr().setAutoStatusHeading,
-        items: [
-          { name: tr().setAutoStatusName, desc: tr().setAutoStatusDesc, render: (x) => this.ctlAutoStatus(x) },
-          // 行き先は OFF のうちから選べる（ON にした最初の実行から選んだとおりに動く）/ the targets can be picked while it's off, so the first run already follows them
-          { name: tr().setAutoStatusStarted, render: (x) => this.ctlAutoStatusTarget(x, "started") },
-          { name: tr().setAutoStatusNotStarted, render: (x) => this.ctlAutoStatusNotStarted(x) },
-          { name: tr().setAutoStatusFinished, render: (x) => this.ctlAutoStatusTarget(x, "finished") },
         ],
       },
       // タグの色（フォルダの色は表で右クリック）/ tag colors (folder colors via right-click in the table)

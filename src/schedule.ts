@@ -285,11 +285,9 @@ export function cascadeDates(tasks: Task[], roots: string[], opts: ScheduleOptio
 
 // ── 日付による自動ステータス / automatic status by date ──
 
-// どちらの決まりで動いたか（開始日が来た・期限日が過ぎた）/ which rule moved a task (its start came, its due date passed)
-export type AutoRule = "started" | "finished";
-// 決まりが当たった日付（ノートのパスごと・決まりごと）。同じ日付のあいだは、取り消しても手でステータスを戻しても当て直さない
-// the date each rule fired for (per note path and rule); while the note keeps that date, the rule isn't applied again, whether undone or set back by hand
-export type AutoFired = Record<string, Partial<Record<AutoRule, string>>>;
+// 自動ステータスが最後に見たノートの日付とステータス（ノートのパスごと）。日付が同じなのにステータスが違えば、手で変えた（か取り消した）ので触らない
+// what automatic status last saw for a note (per path): its dates and status. Same dates but another status means it was set by hand (or undone), so it's left alone
+export type AutoFired = Record<string, { dates: string; status: string }>;
 
 // 自動ステータスの設定（空の id・空の一覧は既定）/ the automatic-status setup (an empty id or list means the default)
 export interface AutoStatusConfig {
@@ -315,35 +313,40 @@ export function autoStatusTargets(statuses: StatusDef[], cfg: AutoStatusConfig):
   return { started, finished, notStarted: wanted.length ? wanted : firstActive ? [firstActive] : [] };
 }
 
-// その決まりが見る日付。期限日は描くために開始日を写したもの（期限日の無いタスク）を数えない
-// the date a rule looks at; a due date copied from the start for drawing (a task with no due date) doesn't count
-function ruleDate(t: Task, rule: AutoRule): string | undefined {
-  return rule === "started" ? t.start : t.endFilled ? undefined : t.end;
+// 日付の印（開始日と、ノートに書かれた期限日）。描くために開始日を写した期限日は数えない
+// the dates' fingerprint (the start and the due date written in the note); a due date copied from the start for drawing doesn't count
+function datesOf(t: Task): string {
+  return `${t.start ?? ""}|${t.endFilled ? "" : t.end ?? ""}`;
 }
 
-// 日付が来た・過ぎたタスクの新しいステータス（パス → 行き先・決まり・日付）。today は設定タイムゾーンでの今日。
-// 期限日を過ぎた（today > 期限日）未完了のタスクは完了後へ、開始日になった（today >= 開始日）未着手のタスクは開始後へ。
-// 「進行中」グループ以外（延期・完了・中止）、ステータス未設定・不明、ノートに該当する日付の無いタスクには触れず、後戻りもしない。
-// 一度当てた決まり（fired）は、その日付のあいだ当て直さない（取り消しても、手でステータスを戻しても）
-// the new statuses (path → target, rule and date) for tasks whose dates have come or gone; `today` is today in the configured timezone.
-// A task past its due date (today > due) that isn't finished moves to the finished status; a not-started task whose start has come
-// (today >= start) moves to the started status. Tasks outside the active group (deferred, completed, cancelled), with no or an unknown
-// status, or without that date in the note are left alone, and nothing moves backwards. A rule that already fired (`fired`) isn't applied
-// again while the note keeps that date, whether the change was undone or the status set back by hand
-export function autoStatusChanges(tasks: Task[], statuses: StatusDef[], cfg: AutoStatusConfig, today: number): Map<string, { status: string; rule: AutoRule; date: string }> {
+// 日付に合わせたステータス（パス → 行き先と日付の印）。today は設定タイムゾーンでの今日。
+// 開始日が先なら未着手（未着手の一覧の先頭）、開始日〜期限日のあいだ（期限日が無ければ開始日から）は開始後、期限日を過ぎたら完了後。後ろへも戻す。
+// 今のステータスがもう当てはまる組（未着手の一覧・ほかの進行中・完了グループ）なら動かさない。延期・中止・不明のステータス、日付の無いタスクには触れない。
+// 前回見たときと日付が同じでステータスだけ違うノートは、手で変えた（取り消した）ので触らない（日付が変わるまで）
+// the status that matches the dates (path → target and the dates' fingerprint); `today` is today in the configured timezone. Before the start:
+// not started (the first not-started status); from the start through the due date (from the start on, with no due date): started; past the
+// due date: finished. Tasks move back too. A status already in the matching kind (a not-started one, another active one, the completed group)
+// stays. Deferred, cancelled and unknown statuses, and tasks without dates, are left alone. A note whose dates are as last seen but whose status
+// differs was set by hand (or undone), so it's left alone until its dates change
+export function autoStatusChanges(tasks: Task[], statuses: StatusDef[], cfg: AutoStatusConfig, today: number): Map<string, { status: string; dates: string }> {
   const { started, finished, notStarted } = autoStatusTargets(statuses, cfg);
-  const active = new Set(statuses.filter((s) => s.group === "active").map((s) => s.id));
-  const out = new Map<string, { status: string; rule: AutoRule; date: string }>();
+  const group = new Map(statuses.map((s) => [s.id, s.group]));
+  const out = new Map<string, { status: string; dates: string }>();
   for (const t of tasks) {
-    if (!t.status || !active.has(t.status)) continue;
-    const due = ruleDate(t, "finished");
-    const start = ruleDate(t, "started");
-    const rule: AutoRule | null = finished && due && today > dayIndex(due) ? "finished"
-      : started && start && today >= dayIndex(start) && notStarted.includes(t.status) ? "started" : null;
-    if (!rule) continue;
-    const date = (rule === "finished" ? due : start)!;
-    if (cfg.fired?.[t.path]?.[rule] === date) continue; // この日付ではもう当てた / already applied for this date
-    out.set(t.path, { status: rule === "finished" ? finished! : started!, rule, date });
+    const end = t.endFilled ? undefined : t.end;
+    const from = t.start ?? end;
+    if (!from) continue;
+    const cur = t.status;
+    const g = cur ? group.get(cur) : undefined;
+    if (cur && g !== "active" && g !== "completed") continue;
+    const dates = datesOf(t);
+    const seen = cfg.fired?.[t.path];
+    if (seen && seen.dates === dates && seen.status !== (cur ?? "")) continue;
+    let want: string | undefined;
+    if (end && today > dayIndex(end)) want = g === "completed" ? cur : finished;
+    else if (today >= dayIndex(from)) want = g === "active" && !notStarted.includes(cur!) ? cur : started;
+    else want = g === "active" && notStarted.includes(cur!) ? cur : notStarted[0];
+    if (want) out.set(t.path, { status: want, dates });
   }
   return out;
 }

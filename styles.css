@@ -5,6 +5,12 @@
   padding: 0;
   position: relative;
   overflow: hidden;
+  /* 並び（表が左、時間は左から右）は表示言語が右から左（ヘブライ語・アラビア語）でも固定。そのままだと全体が左右反転し、
+     横スクロールの値の向きも変わってバーとタグが画面の外に描かれる。文字の向きは下の plaintext で中身ごとに決める
+     the layout (table on the left, time running left to right) stays put under a right-to-left interface (Hebrew, Arabic): inherited, it
+     mirrors the whole board and flips the sign of the horizontal scroll, so bars and tags land off screen. Text direction comes from
+     each text itself (plaintext below) */
+  direction: ltr;
   /* 休日の網掛けの色 / the shading of non-working days */
   --ogantt-offday: var(--background-modifier-hover);
 }
@@ -699,6 +705,20 @@ button.ogantt-legend-chip {
   background: var(--background-modifier-active-hover, var(--background-modifier-hover));
   box-shadow: inset 2px 0 0 var(--interactive-accent);
 }
+/* 行の端に落とすと、その前・後ろへ並べ替え（線で場所を示す）/ dropping on a row's edge reorders: a line shows where it goes */
+.ogantt-tr.is-drop-before {
+  box-shadow: inset 0 2px 0 var(--interactive-accent);
+}
+.ogantt-tr.is-drop-after {
+  box-shadow: inset 0 -2px 0 var(--interactive-accent);
+}
+/* 止めたタスク：行もバーも薄く（操作はできる）/ a disabled task: row and bar dimmed (still usable) */
+.ogantt-tr.is-disabled {
+  opacity: 0.5;
+}
+.ogantt-bar-g.is-disabled {
+  opacity: 0.35;
+}
 /* 落とすと何が起きるか（「〜のサブタスクにする」など）/ what a drop will do ("Make subtask of …" and so on) */
 .ogantt-tr.is-drop-target::after {
   content: attr(data-drop-label);
@@ -811,6 +831,15 @@ input.ogantt-cell-input[type="number"] {
   background: var(--background-secondary);
 }
 /* タグチップ（テーブル列・詳細パネル共通。色は JS でインライン指定）/ tag chips (color set inline in JS) */
+/* 中身の文字で向きを決める（ヘブライ語・アラビア語のタグや名前は右から左、混在もそれぞれ正しく）
+   each text takes its direction from its own content (Hebrew or Arabic tags and names read right to left, mixed text sorts itself out) */
+.ogantt-tag-chip,
+.ogantt-tag-pill text,
+.ogantt-td-text,
+.ogantt-name-text,
+.ogantt-td-group > span:last-child {
+  unicode-bidi: plaintext;
+}
 .ogantt-tag-chip {
   display: inline-flex;
   align-items: center;

@@ -3,8 +3,8 @@ import { GanttSettings, DEFAULT_SETTINGS, GanttSettingTab } from "./settings";
 import { GanttView } from "./view";
 import { VIEW_TYPE_GANTT, GanttViewState } from "./types";
 import { t } from "./i18n";
-import { collectTasks, inferStatusGroup, moveCollapsed } from "./model";
-import { AutoFired, AutoRule, keepAutoFired, moveAutoFired } from "./schedule";
+import { collectTasks, inferStatusGroup, moveCollapsed, movePaths } from "./model";
+import { AutoFired, keepAutoFired, moveAutoFired } from "./schedule";
 import { checkNotifications } from "./notify";
 import { usePopoverKeys } from "./popover";
 import { migrateRenamedPath, schedulePush, syncGcal } from "./gcal/sync";
@@ -124,9 +124,13 @@ export default class GanttPlugin extends Plugin {
     const boards = this.settings.boards;
     let moved = false;
     for (const key of Object.keys(boards)) {
-      const collapsed = moveCollapsed(boards[key].collapsed ?? [], from, to);
-      if (collapsed.some((k, i) => k !== boards[key].collapsed[i])) {
-        boards[key] = { ...boards[key], collapsed };
+      const b = boards[key];
+      const collapsed = moveCollapsed(b.collapsed ?? [], from, to);
+      // 手の並びと止めたタスク（キーはパス）も / the manual order and disabled tasks (keyed by path) too
+      const order = movePaths(b.order ?? [], from, to);
+      const disabled = movePaths(b.disabled ?? [], from, to);
+      if (collapsed.some((k, i) => k !== b.collapsed[i]) || order.some((k, i) => k !== b.order?.[i]) || disabled.some((k, i) => k !== b.disabled?.[i])) {
+        boards[key] = { ...b, collapsed, order, disabled };
         moved = true;
       }
       const path = key.startsWith("folder:") ? key.slice(7) : null;
@@ -219,12 +223,11 @@ export default class GanttPlugin extends Plugin {
     this.settings.columnOrder = [...(this.settings.columnOrder ?? [])];
     this.settings.autoStatus = Object.assign({}, DEFAULT_SETTINGS.autoStatus, this.settings.autoStatus);
     this.settings.autoStatus.notStarted = [...(this.settings.autoStatus.notStarted ?? [])];
-    // 2.14.0 の取り消しの記録（undone）は当たった記録（fired）へ / 2.14.0's undo records become fired records
-    const legacy = this.settings.autoStatus as { undone?: Record<string, { rule: AutoRule; date: string }> };
+    // 見た記録は今の形（日付の印とステータス）のものだけ残す。2.15 までの決まりごとの記録（と 2.14 の undone）は捨てる
+    // keep only "seen" records in the current shape (dates + status); the per-rule records up to 2.15 (and 2.14's undone) are dropped
     const fired: AutoFired = {};
-    for (const [p, r] of Object.entries(this.settings.autoStatus.fired ?? {})) fired[p] = { ...r };
-    for (const [p, u] of Object.entries(legacy.undone ?? {})) fired[p] = { ...fired[p], [u.rule]: u.date };
-    delete legacy.undone;
+    for (const [p, r] of Object.entries(this.settings.autoStatus.fired ?? {})) if (typeof r?.dates === "string") fired[p] = { ...r };
+    delete (this.settings.autoStatus as { undone?: unknown }).undone;
     this.settings.autoStatus.fired = fired;
     this.settings.customFields = (this.settings.customFields ?? []).map((f) => ({ ...f }));
     this.settings.filters = structuredClone(this.settings.filters ?? []);
@@ -299,11 +302,12 @@ export default class GanttPlugin extends Plugin {
       const tasks = collectTasks(this.app, { ...this.settings, recurse: true }, this.settings.rootFolder ?? "");
       // 当たった記録は、ノートが消えたときだけ捨てる / fired records are dropped only once their note is gone
       const a = this.settings.autoStatus;
-      const kept = keepAutoFired(a.fired, (p) => this.app.vault.getAbstractFileByPath(p) instanceof TFile);
-      const pruned = Object.keys(kept).length !== Object.keys(a.fired).length;
-      a.fired = kept;
-      const wrote = await view.applyAutoStatus(tasks);
-      if (pruned || wrote.size) await this.saveData(this.settings);
+      const before = JSON.stringify(a.fired);
+      a.fired = keepAutoFired(a.fired, (p) => this.app.vault.getAbstractFileByPath(p) instanceof TFile);
+      // 止めたタスク（どれかのボードで）は自動ステータスに触れさせない / tasks disabled on any board are left out
+      const off = new Set(Object.values(this.settings.boards).flatMap((b) => b.disabled ?? []));
+      const wrote = await view.applyAutoStatus(tasks.filter((t) => !off.has(t.path)));
+      if (wrote.size || JSON.stringify(a.fired) !== before) await this.saveData(this.settings);
       // 開いているボードはどれもメモリ上のステータスを合わせて描き直す / every open board updates its in-memory statuses and redraws
       if (wrote.size) for (const v of views()) v.takeStatuses(wrote);
     } while (this.autoAgain);

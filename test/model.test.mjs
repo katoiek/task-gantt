@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { bodyOf, withBody, buildRows, kanbanLanes, listWith, newStatus, moveCollapsed, cardProgress, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
+import { bodyOf, withBody, movePaths, buildRows, kanbanLanes, listWith, newStatus, moveCollapsed, cardProgress, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -231,6 +231,8 @@ check("withBody: フロントマターの直後に空行を足さない", withBo
 check("withBody: CRLF のフロントマターはそのまま", withBody("---\r\na: 1\r\n---\r\nold", "new") === "---\r\na: 1\r\n---\r\nnew\n");
 check("withBody: 中身の無い ---/--- を保つ・本文を空にできる", withBody("---\n---", "x") === "---\n---\nx\n" && withBody("---\na: 1\n---\nold", "") === "---\na: 1\n---\n");
 check("withBody: フロントマター無し", withBody("old", "new") === "new\n");
+
+check("movePaths: ファイルとフォルダの改名に付いて行く", movePaths(["A/x.md", "A/sub/y.md", "B.md", "AB.md"], "A", "Z").join() === "Z/x.md,Z/sub/y.md,B.md,AB.md" && movePaths(["B.md"], "B.md", "C.md")[0] === "C.md");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
