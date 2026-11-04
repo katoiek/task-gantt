@@ -18,6 +18,7 @@ import {
   autoStatusChanges,
   autoStatusTargets,
   keepAutoFired,
+  migrateAutoFired,
   moveAutoFired,
   renameAutoStatusId,
 } from "./schedule.mjs";
@@ -230,6 +231,27 @@ check("休日の帯: 休日なしは none", offDayGradient(0, { off: [] }, 10, "
   for (let i = 0; i < lv; i++) for (const s of ["a", "b"]) ladder.push({ path: `${s}${i}`, start: "2026-01-05", end: "2026-01-05", milestone: false, deps: i ? [{ path: `a${i - 1}`, type: "FS" }, { path: `b${i - 1}`, type: "FS" }] : [{ path: "r", type: "FS" }] });
   const d = cascadeDates(ladder, ["r"], opts);
   check("cascade: 菱形のはしごも最後まで", d !== null && d.size === 2 * lv);
+}
+
+// 2.15.1 の data.json（決まりごとの日付）と 2.14 の undone からの更新：手で決めたステータスは日付が変わるまでそのまま
+// upgrading from a 2.15.1 data.json (a date per rule) and 2.14's undone: a hand-set status stays until the task's dates change
+{
+  const ST = [
+    { id: "todo", label: "To do", color: "", group: "active" },
+    { id: "in-progress", label: "In progress", color: "", group: "active" },
+    { id: "done", label: "Done", color: "", group: "completed" },
+  ];
+  const data = JSON.parse('{"autoStatus":{"enabled":true,"started":"","finished":"","notStarted":[],"fired":{"P/overdue.md":{"finished":"2026-11-01"},"P/both.md":{"started":"2026-10-20","finished":"2026-10-25"},"P/new.md":{"dates":"2026-11-10|","status":"todo"}},"undone":{"P/old.md":{"rule":"started","date":"2026-10-30","status":"todo"}}}}');
+  const fired = migrateAutoFired(data.autoStatus.fired, data.autoStatus.undone);
+  check("更新: 2.15 の記録と 2.14 の undone は pin に、今の形はそのまま", JSON.stringify(fired) === '{"P/overdue.md":{"pin":{"end":"2026-11-01"}},"P/both.md":{"pin":{"start":"2026-10-20","end":"2026-10-25"}},"P/new.md":{"dates":"2026-11-10|","status":"todo"},"P/old.md":{"pin":{"start":"2026-10-30"}}}');
+  const today = dayIndex("2026-11-04");
+  const T = (path, status, start, end) => ({ path, status, start, end, deps: [] });
+  const cfg = { started: "", finished: "", notStarted: [], fired };
+  const changed = (tasks) => Object.fromEntries([...autoStatusChanges(tasks, ST, cfg, today)].filter(([p, c]) => c.status !== tasks.find((t) => t.path === p).status).map(([p, c]) => [p, c.status]));
+  // 手で In progress に戻した期限切れ・Done にした古いタスク・To do に戻したタスク：日付が同じあいだは何も変わらない
+  // an overdue task set back to In progress, an old one left Done, one set back to To do: nothing changes while the dates are the same
+  check("更新: 記録の日付のままなら手のステータスは書き換えない", JSON.stringify(changed([T("P/overdue.md", "in-progress", "2026-10-20", "2026-11-01"), T("P/both.md", "todo", "2026-10-20", "2026-10-25"), T("P/old.md", "todo", "2026-10-30", "2026-11-20")])) === "{}");
+  check("更新: 日付が変われば日付に合わせる", JSON.stringify(changed([T("P/overdue.md", "in-progress", "2026-10-20", "2026-11-02"), T("P/old.md", "todo", "2026-10-31", "2026-11-20")])) === '{"P/overdue.md":"done","P/old.md":"in-progress"}');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

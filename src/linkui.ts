@@ -141,7 +141,7 @@ function caretOffset(ta: HTMLTextAreaElement): { top: number; left: number; line
   for (const p of props) m.style[p] = cs[p];
   m.setCssStyles({ position: "absolute", visibility: "hidden", whiteSpace: "pre-wrap", overflowWrap: "break-word", top: "0", left: "-9999px" });
   m.setText(ta.value.slice(0, ta.selectionStart ?? 0));
-  const mark = m.createSpan({ text: "​" });
+  const mark = m.createSpan({ text: "\u200B" });
   const line = mark.offsetHeight;
   const out = { top: mark.offsetTop + line - ta.scrollTop, left: mark.offsetLeft - ta.scrollLeft, line };
   m.remove();

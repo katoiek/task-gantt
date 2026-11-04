@@ -4296,7 +4296,7 @@ export class GanttView extends ItemView {
     const W = Number(svg.getAttribute("width"));
     const H = Number(svg.getAttribute("height"));
     // XML として不正な制御文字（ファイル名などに紛れ込みうる）は画像の読み込みを壊すので除く / XML-invalid control characters (possible in file names) would break the image, so drop them
-    const xml = new XMLSerializer().serializeToString(svg).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "");
+    const xml = new XMLSerializer().serializeToString(svg).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "");
     const url = URL.createObjectURL(new Blob([xml], { type: "image/svg+xml" }));
     const canvas = createEl("canvas");
     try {

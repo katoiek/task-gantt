@@ -97,7 +97,7 @@ export function taskDuration(t: Pick<Task, "start" | "end" | "milestone">, cal: 
 // 期間 n の入力を解釈する（"4" / "4d" / "4 days" など）。1 以上の整数でなければ null
 // parse a duration entry ("4", "4d", "4 days" …); null unless it's a whole number ≥ 1
 export function parseDuration(raw: string): number | null {
-  const m = raw.trim().match(/^(\d+)\s*[a-z぀-ヿ一-鿿]*$/i);
+  const m = raw.trim().match(/^(\d+)\s*[a-z\u3040-\u30FF\u4E00-\u9FFF]*$/i);
   if (!m) return null;
   const n = parseInt(m[1], 10);
   return n >= 1 ? n : null;
@@ -285,9 +285,31 @@ export function cascadeDates(tasks: Task[], roots: string[], opts: ScheduleOptio
 
 // ── 日付による自動ステータス / automatic status by date ──
 
-// 自動ステータスが最後に見たノートの日付とステータス（ノートのパスごと）。日付が同じなのにステータスが違えば、手で変えた（か取り消した）ので触らない
-// what automatic status last saw for a note (per path): its dates and status. Same dates but another status means it was set by hand (or undone), so it's left alone
-export type AutoFired = Record<string, { dates: string; status: string }>;
+// 自動ステータスが最後に見たノートの日付とステータス（ノートのパスごと）。日付が同じなのにステータスが違えば、手で変えた（か取り消した）ので触らない。
+// pin は 2.15 までの記録から移したもの：記録した日付のままのあいだ、そのタスクのステータスには触れない
+// what automatic status last saw for a note (per path): its dates and status. Same dates but another status means it was set by hand (or undone),
+// so it's left alone. A `pin` comes from a record up to 2.15: while the task keeps the dates recorded there, its status isn't touched
+export type AutoFired = Record<string, { dates: string; status: string } | { pin: { start?: string; end?: string } }>;
+
+// 2.14 の undone・2.15 の fired（決まりごとの日付）を今の形へ：どれも「その日付のあいだ触れない」pin にする（手で決めたステータスを上書きしない）
+// carry 2.14's `undone` and 2.15's `fired` (a date per rule) into the current shape: each becomes a pin, "leave alone while these dates stand",
+// so an upgrade never rewrites a status set by hand
+export function migrateAutoFired(fired: unknown, undone: unknown): AutoFired {
+  const out: AutoFired = {};
+  const pin = (p: string, rule: unknown, date: unknown) => {
+    if (typeof date !== "string" || (rule !== "started" && rule !== "finished")) return;
+    const cur = out[p];
+    const prev = cur && "pin" in cur ? cur.pin : {};
+    out[p] = { pin: { ...prev, [rule === "started" ? "start" : "end"]: date } };
+  };
+  for (const [p, r] of Object.entries((fired ?? {}) as Record<string, Record<string, unknown>>)) {
+    if (typeof r?.dates === "string" && typeof r.status === "string") out[p] = { dates: r.dates, status: r.status };
+    else if (r?.pin && typeof r.pin === "object") out[p] = { pin: { ...(r.pin as { start?: string; end?: string }) } };
+    else for (const rule of ["started", "finished"]) pin(p, rule, r?.[rule]);
+  }
+  for (const [p, u] of Object.entries((undone ?? {}) as Record<string, { rule?: unknown; date?: unknown }>)) pin(p, u?.rule, u?.date);
+  return out;
+}
 
 // 自動ステータスの設定（空の id・空の一覧は既定）/ the automatic-status setup (an empty id or list means the default)
 export interface AutoStatusConfig {
@@ -341,7 +363,7 @@ export function autoStatusChanges(tasks: Task[], statuses: StatusDef[], cfg: Aut
     if (cur && g !== "active" && g !== "completed") continue;
     const dates = datesOf(t);
     const seen = cfg.fired?.[t.path];
-    if (seen && seen.dates === dates && seen.status !== (cur ?? "")) continue;
+    if (seen && "pin" in seen ? (!seen.pin.start || seen.pin.start === t.start) && (!seen.pin.end || seen.pin.end === end) : seen && seen.dates === dates && seen.status !== (cur ?? "")) continue;
     let want: string | undefined;
     if (end && today > dayIndex(end)) want = g === "completed" ? cur : finished;
     else if (today >= dayIndex(from)) want = g === "active" && !notStarted.includes(cur!) ? cur : started;

@@ -4,7 +4,7 @@ import { GanttView } from "./view";
 import { VIEW_TYPE_GANTT, GanttViewState } from "./types";
 import { t } from "./i18n";
 import { collectTasks, inferStatusGroup, moveCollapsed, movePaths } from "./model";
-import { AutoFired, keepAutoFired, moveAutoFired } from "./schedule";
+import { keepAutoFired, migrateAutoFired, moveAutoFired } from "./schedule";
 import { checkNotifications } from "./notify";
 import { usePopoverKeys } from "./popover";
 import { migrateRenamedPath, schedulePush, syncGcal } from "./gcal/sync";
@@ -223,12 +223,11 @@ export default class GanttPlugin extends Plugin {
     this.settings.columnOrder = [...(this.settings.columnOrder ?? [])];
     this.settings.autoStatus = Object.assign({}, DEFAULT_SETTINGS.autoStatus, this.settings.autoStatus);
     this.settings.autoStatus.notStarted = [...(this.settings.autoStatus.notStarted ?? [])];
-    // 見た記録は今の形（日付の印とステータス）のものだけ残す。2.15 までの決まりごとの記録（と 2.14 の undone）は捨てる
-    // keep only "seen" records in the current shape (dates + status); the per-rule records up to 2.15 (and 2.14's undone) are dropped
-    const fired: AutoFired = {};
-    for (const [p, r] of Object.entries(this.settings.autoStatus.fired ?? {})) if (typeof r?.dates === "string") fired[p] = { ...r };
-    delete (this.settings.autoStatus as { undone?: unknown }).undone;
-    this.settings.autoStatus.fired = fired;
+    // 2.15 までの記録（と 2.14 の undone）は「その日付のあいだ触れない」pin として引き継ぐ（更新で手のステータスを書き換えない）
+    // records up to 2.15 (and 2.14's undone) carry over as pins, "leave alone while these dates stand", so an upgrade never rewrites a hand-set status
+    const legacy = this.settings.autoStatus as { undone?: unknown };
+    this.settings.autoStatus.fired = migrateAutoFired(this.settings.autoStatus.fired, legacy.undone);
+    delete legacy.undone;
     this.settings.customFields = (this.settings.customFields ?? []).map((f) => ({ ...f }));
     this.settings.filters = structuredClone(this.settings.filters ?? []);
     this.settings.filterPresets = structuredClone(this.settings.filterPresets ?? []);
