@@ -935,6 +935,11 @@ input.ogantt-cell-input[type="number"] {
 .ogantt-group-name {
   unicode-bidi: plaintext;
 }
+/* 見出しの名前は折り返さない（件数と「次」が先に縮む）/ a heading's name never wraps (the counts and "next" shrink first) */
+.ogantt-group-name {
+  flex: none;
+  white-space: nowrap;
+}
 .ogantt-tag-chip {
   display: inline-flex;
   align-items: center;
@@ -1012,6 +1017,8 @@ input.ogantt-cell-input[type="number"] {
 }
 /* 名前は省略記号で縮め、後ろの印は常に見せる / the name shrinks with an ellipsis; the trailing markers always show */
 .ogantt-name-text {
+  flex: none;
+  max-width: 75%; /* 名前は縮めず、後ろの札と目印が先に縮む。とても長い名前だけ省略 / the name doesn't shrink, the tag and cue behind it do; only a very long name is cut */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1019,6 +1026,9 @@ input.ogantt-cell-input[type="number"] {
 .ogantt-td-group {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden; /* 長い「次」はタイムラインへはみ出さず省略 / a long "next" ends in an ellipsis instead of running into the timeline */
   gap: 6px;
   padding: 0 8px;
   font-weight: 600;
@@ -1910,8 +1920,9 @@ input.ogantt-swatch {
 /* ── 実行ボード（カンバン）：行の目印と詳細パネルの要約。ガントの階層（シェブロン・字下げ）とは別の見た目 ──
    the execution board (kanban): the row cue and the panel summary; a different look from the Gantt hierarchy (chevron, indent) ── */
 .ogantt-group-next {
+  flex: 0 1000 auto; /* 件数より先に縮む / shrinks before the counts */
   font-weight: 400;
-  font-size: var(--font-smallest);
+  font-size: var(--font-ui-smaller);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1955,6 +1966,10 @@ button.ogantt-board-cue:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: pre;
+}
+.ogantt-board-cue-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
 .ogantt-board-cue-text {
   flex: 0 1000 auto;
@@ -2200,9 +2215,10 @@ button.ogantt-dep-add {
 /* 見出しの件数は控えめに、期限切れや急ぎがあるときは本文色の太字 / a heading's counts stay quiet; bold body text when something is overdue or urgent */
 .ogantt-group-count {
   font-weight: 400;
-  font-size: var(--font-smallest);
+  font-size: var(--font-ui-smaller);
   color: var(--text-muted);
   white-space: nowrap;
+  flex: none; /* 件数は縮めず、「次」が先に省略される / the counts keep their width; "next" is cut first */
 }
 .ogantt-group-count.is-alert {
   color: var(--text-normal);

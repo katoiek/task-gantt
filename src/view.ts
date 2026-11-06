@@ -2360,7 +2360,9 @@ export class GanttView extends ItemView {
       const blocked = live.filter((t) => statusGroupOf(statuses, t.status) === "deferred").length;
       if (live.length) g.createSpan({ cls: "ogantt-group-count" + (late || hot ? " is-alert" : ""), text: tr().headingCount(live.length, running, blocked, late, hot) });
       const next = nextToStart(live, today);
-      if (next) g.createSpan({ cls: "ogantt-group-next", text: tr().nextUp(isolate(next.name), formatDate(anchorStart(next)!, this.plugin.settings.dateFormat)) });
+      // サブタスクなら親も添える（畳んだ親の中にあっても、どこを開けばいいか分かる）/ a subtask carries its parent, so a collapsed one can still be found
+      const nextName = next ? (next.parent ? `${isolate(this.nameOf(next.parent))} › ` : "") + isolate(next.name) : "";
+      if (next) g.createSpan({ cls: "ogantt-group-next", text: tr().nextUp(nextName, formatDate(anchorStart(next)!, this.plugin.settings.dateFormat)) });
       // 見出しを右クリック＝色・アイコンを変更（(なし) は除く）/ right-click a heading to change its colour or icon (not "(none)")
       if (!none) g.addEventListener("contextmenu", (e) => this.openStyleMenu(e, this.groupBy, row.group, this.headingKey(row)));
       el.onclick = () => {
@@ -3221,7 +3223,12 @@ export class GanttView extends ItemView {
     // the card text keeps its own direction and is cut at its own end (a Hebrew card keeps its beginning); the translated words go around it
     // 行ではボードの印とカードの文字だけ（狭くても読める）。「次のカード／進行中のカード」は札の説明と読み上げに
     // in the row only the board icon and the card text (readable when narrow); "Next card / Current card" goes into the tooltip and the label
-    cue.createSpan({ cls: "ogantt-board-cue-text", text: say ? step!.card! : text, attr: { dir: "auto" } });
+    if (t.cards) cue.createSpan({ cls: "ogantt-board-cue-count", text: `${t.cards.done}/${t.cards.total}` });
+    // カードが行の名前で始まるなら繰り返さない（「DB Adapter — 〜」→「〜」）/ a card starting with the row's own name doesn't repeat it ("DB Adapter — x" → "x")
+    const raw = say ? step!.card! : text;
+    const tail = raw.slice(t.name.length);
+    const card = (say && raw.toLowerCase().startsWith(t.name.toLowerCase()) && /^[\s:—–-]/.test(tail) && tail.replace(/^[\s:—–-]+/, "")) || raw;
+    cue.createSpan({ cls: "ogantt-board-cue-text", text: card, attr: { dir: "auto" } });
     cue.addEventListener("click", (e) => {
       e.stopPropagation(); // 行のクリック（詳細を開く）にしない / not the row's click (which opens the details)
       this.openTask(t.path, Keymap.isModEvent(e) || "tab");

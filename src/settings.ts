@@ -205,7 +205,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   detailWidth: 380,
   cardView: "list", // 狭いパネルでも横スクロールなしで上から順に読める / reads top to bottom in a narrow panel, no sideways scrolling
   // 一目で要るもの：担当・ステータス・進捗・期限（開始はバーが示す）/ what a glance needs: assignee, status, progress, due (the bar shows the start)
-  visibleColumns: ["assignee", "status", "progress", "end"],
+  visibleColumns: ["assignee", "status", "end"], // 進捗はカンバンの目印に出るので既定では出さない（タイムラインを広く）/ Progress is off by default (a kanban's count is in its cue), leaving the timeline wider
   columnOrder: ["assignee", "status", "progress", "end", "start", "duration", "tags"], // 誰が・どの状態・どこまで・いつまで / who, what state, how far, by when
   columnWidths: {},
   sortBy: "start",
