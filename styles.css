@@ -837,7 +837,7 @@ input.ogantt-cell-input[type="number"] {
 .ogantt-tag-pill text,
 .ogantt-td-text,
 .ogantt-name-text,
-.ogantt-td-group > span:last-child {
+.ogantt-group-name {
   unicode-bidi: plaintext;
 }
 .ogantt-tag-chip {
@@ -1035,11 +1035,10 @@ input.ogantt-cell-input[type="number"] {
   fill: var(--background-secondary);
   opacity: 0.5;
 }
+/* 今日の線：格子より目立ち、期限切れの赤とは別の色 / the today line: stronger than the grid, and not the overdue red */
 .ogantt-today {
-  stroke: var(--color-red);
-  stroke-width: 1;
-  stroke-dasharray: 3 2;
-  opacity: 0.7;
+  stroke: var(--interactive-accent);
+  stroke-width: 1.5;
 }
 /* 稲妻線（今日基準の進捗折れ線）/ progress line against today */
 .ogantt-progress-line {
@@ -1091,11 +1090,11 @@ input.ogantt-cell-input[type="number"] {
 }
 /* 見出しのまとめバー（色は見出しの色を JS で。無いときはこの色）/ a heading's summary bar (tinted with the heading colour from JS; this one otherwise) */
 .ogantt-group-bar {
-  fill: var(--text-accent);
+  fill: var(--text-faint);
   opacity: 0.85;
 }
 .ogantt-group-cap {
-  fill: var(--text-accent);
+  fill: var(--text-faint);
   opacity: 0.85;
 }
 /* 文字の大きさは描くときに付ける（札の位置を決める計測と同じ値）/ the font size is set when drawing (the same value used to place the pills) */
@@ -1942,11 +1941,28 @@ button.ogantt-dep-add {
   visibility: hidden;
   pointer-events: none;
 }
-/* 矢印を隠しているとき、依存が守られていない後続のバーは赤い縁 / with arrows hidden, a successor whose dependency is broken gets a red outline */
+/* 矢印を隠しているとき、依存が守られていない後続のバーは破線の縁（赤は期限切れ用）/ with arrows hidden, a successor whose dependency is broken gets a dashed outline (red means overdue) */
 .ogantt-bar-g.is-late .ogantt-bar,
 .ogantt-bar-g.is-late .ogantt-milestone {
-  stroke: var(--color-red);
+  stroke: var(--text-normal);
   stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+/* 期限切れ（期限が過ぎて未完了）：赤い太い縁。ラベルの ⚠ と合わせて色だけに頼らない / overdue (past due, not finished): a thick red outline, with the label's ⚠ so it doesn't rely on colour */
+.ogantt-bar-g.is-overdue .ogantt-bar,
+.ogantt-bar-g.is-overdue .ogantt-milestone {
+  stroke: var(--color-red);
+  stroke-width: 2;
+}
+/* 見出しの件数は控えめに、期限切れがあるときだけ赤 / a heading's counts stay quiet, red only when something is overdue */
+.ogantt-group-count {
+  font-weight: 400;
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ogantt-group-count.is-overdue {
+  color: var(--color-red);
 }
 /* 詳細パネルのカンバンの進捗（表の進捗列と同じメーター）/ a kanban's progress in the detail panel (the Progress column's own meter) */
 .ogantt-progress-field .ogantt-td-progress {

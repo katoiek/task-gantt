@@ -59,7 +59,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { isConnected } from "./gcal/auth";
-import { applyFilters, besideHeading, regroup, GroupBy } from "./filter";
+import { applyFilters, besideHeading, isOverdue, regroup, GroupBy } from "./filter";
 import { BoardContext, Move, MutateResult, StatusChange } from "./board";
 import { CellColumn, ColumnDef, allColumns, columnList, columnWidth, disabledLast, manualComparator, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
 
@@ -240,7 +240,7 @@ export class GanttView extends ItemView {
   // SVG の模様・グラデーションの id に付ける、このビューだけの印。id は文書全体で 1 つなので、別のタブのボード（非表示）の定義を拾わないように
   // a per-view prefix for the SVG pattern and gradient ids: ids are document-wide, and a hidden board in another tab would otherwise shadow ours
   private uid = Math.random().toString(36).slice(2, 8);
-  private bare = false; // 書き出しを描いている間：バーの後ろにタスク名を書かない（名前は左の列）/ while drawing an export: no task name after the bars (it's in the name column)
+  private bare = false; // 書き出しを描いている間：バーの後ろに ✓・⚠ を付けない（✓ は左の列）/ while drawing an export: no ✓ or ⚠ after the bars (the ✓ is in the name column)
   private undoBtn: HTMLButtonElement | null = null;
   private redoBtn: HTMLButtonElement | null = null;
 
@@ -2277,7 +2277,14 @@ export class GanttView extends ItemView {
       setIcon(ic, none ? "circle-dashed" : this.groupIcon(this.headingKey(row), row.group, isCollapsed));
       const color = this.groupColor(this.groupBy, row.group);
       if (color) ic.style.color = color;
-      g.createSpan({ text: row.group });
+      g.createSpan({ cls: "ogantt-group-name", text: row.group });
+      // 未完了と期限切れの件数（担当者でグループ化すれば一人ずつの仕事量）。止めたタスクは数えない
+      // open and overdue counts (grouped by assignee, each person's load); disabled tasks don't count
+      const { statuses } = this.plugin.settings;
+      const today = this.today();
+      const live = (row.tasks ?? []).filter((t) => !this.disabled.has(t.path) && !["completed", "cancelled"].includes(statusGroupOf(statuses, t.status) ?? ""));
+      const late = live.filter((t) => isOverdue(t, statuses, today)).length;
+      if (live.length) g.createSpan({ cls: "ogantt-group-count" + (late ? " is-overdue" : ""), text: tr().headingCount(live.length, late) });
       // 見出しを右クリック＝色・アイコンを変更（(なし) は除く）/ right-click a heading to change its colour or icon (not "(none)")
       if (!none) g.addEventListener("contextmenu", (e) => this.openStyleMenu(e, this.groupBy, row.group, this.headingKey(row)));
       el.onclick = () => {
@@ -2606,7 +2613,9 @@ export class GanttView extends ItemView {
     const aStart = anchorStart(t);
     if (!aStart) return;
     const x = this.xOf(aStart);
-    const g = this.svgEl("g", { class: "ogantt-bar-g" + (group === "cancelled" ? " is-cancelled" : "") + (this.disabled.has(t.path) ? " is-disabled" : this.late?.has(t.path) ? " is-late" : ""), "data-path": t.path });
+    const flags = this.disabled.has(t.path) ? " is-disabled"
+      : (this.late?.has(t.path) ? " is-late" : "") + (isOverdue(t, this.plugin.settings.statuses, this.today()) ? " is-overdue" : "");
+    const g = this.svgEl("g", { class: "ogantt-bar-g" + (group === "cancelled" ? " is-cancelled" : "") + flags, "data-path": t.path });
     let lx = x; // 左端ハンドル位置 / left handle x
     let rx = x; // 右端ハンドル位置 / right handle x
     if (t.milestone) {
@@ -2696,12 +2705,12 @@ export class GanttView extends ItemView {
     return api;
   }
 
-  // バーの右に、担当者のアバター（頭文字の丸・共有タスクは重ねて並べる）、ラベル（タスク名・担当者）、タグの札を描く。完了は ✓ を前に付ける。
+  // バーの右に、担当者のアバター（頭文字の丸・共有タスクは重ねて並べる）、ラベル（担当者。タスク名は左の表にある）、タグの札を描く。完了は ✓、期限切れは ⚠ を前に付ける。
   // 見出しが示している値は繰り返さない：担当者でグループ化しているときは見出しの人を省いてほかの人を「+」付きで、タグでグループ化しているときは見出しのタグを省く。
-  // 書き出しではタスク名（と ✓）は左の列にあるので、バーの後ろは人とタグだけ
-  // to the right of a bar: assignee avatars (initials; overlapping for a shared task), the label (task name, assignees) and tag pills; ✓ marks
-  // completed. What the heading already says isn't repeated: grouped by assignee, the heading's person is left out and the others follow a "+";
-  // grouped by tag, the heading's tag is left out. In an export the task's name (and ✓) is in the name column, so only people and tags follow the bar
+  // 書き出しでは ✓ も左の列に描くので、バーの後ろは人とタグだけ
+  // to the right of a bar: assignee avatars (initials; overlapping for a shared task), the label (assignees; the task name is in the table on the left) and tag pills; ✓ marks
+  // completed and ⚠ overdue. What the heading already says isn't repeated: grouped by assignee, the heading's person is left out and the others follow a "+";
+  // grouped by tag, the heading's tag is left out. In an export the ✓ is drawn in the name column, so only people and tags follow the bar
   private drawLabel(g: SVGElement, t: Task, x: number, cy: number, group: StatusGroup | undefined, heading: string): void {
     const people = besideHeading(t.assignees, "assignees", this.groupBy, heading);
     const shown = people.slice(0, MAX_AVATARS);
@@ -2715,7 +2724,9 @@ export class GanttView extends ItemView {
     const others = people.length < t.assignees.length; // 見出しの人を省いた / the heading's person was left out
     const who = people.map(linkLabel).join(", ");
     let text = who && others ? `+ ${who}` : who;
-    if (!this.bare) text = `${group === "completed" ? "✓ " : ""}${t.name}${text ? (others ? " " : " · ") + text : ""}`;
+    // 名前は左の表に常に見えるので繰り返さない。印だけ付ける（期限切れは色だけに頼らず ⚠）/ the name is always in the table on the left, so only the marks are added (overdue gets a ⚠, not colour alone)
+    const mark = this.bare ? "" : group === "completed" ? "✓" : !this.disabled.has(t.path) && isOverdue(t, this.plugin.settings.statuses, this.today()) ? "⚠" : "";
+    text = [mark, text].filter(Boolean).join(" ");
     if (text) g.appendChild(this.svgEl("text", { x, y: cy + 4, class: "ogantt-bar-label", "font-size": LABEL_PX })).textContent = text;
     // タグはラベルの後ろに小さな札で、タグの色で控えめに（表示メニューで隠せる）/ tags follow the label as small pills, quietly in their colour (hidden from the Display menu)
     if (!this.showTags) return;

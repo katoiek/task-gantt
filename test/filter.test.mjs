@@ -1,6 +1,6 @@
 // フィルタ判定（matchFilter / applyFilters）とグループ再マッピング（regroup）の検証
 // Tests for filter matching (matchFilter / applyFilters) and group remapping (regroup)
-import { matchFilter, applyFilters, regroup, besideHeading } from "./filter.mjs";
+import { matchFilter, applyFilters, regroup, besideHeading, isOverdue } from "./filter.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -106,6 +106,15 @@ check("assignee is matches any of the task's assignees",
 check("assignee isNot drops a task that has the person among others",
   names(applyFilters([A, S, B], [cat("assignee", "isNot", ["kei"])], "all", STATUSES, TODAY)) === "Beta");
 check("regroup doesn't mutate the input", A.groups[0] === "Proj");
+
+// ── 期限切れ（バーの印と見出しの件数）/ overdue (the bar mark and the heading counts) ──
+const due = (end, status) => task({ name: "o", end, status });
+const OCT1 = Date.UTC(2024, 9, 1) / 864e5;
+check("overdue: due before today and still open", isOverdue(due("2024-09-30", "todo"), STATUSES, OCT1));
+check("overdue: no status counts as open", isOverdue(due("2024-09-30"), STATUSES, OCT1));
+check("not overdue: completed or cancelled",
+  !isOverdue(due("2024-09-30", "done"), STATUSES, OCT1) && !isOverdue(due("2024-09-30", "drop"), STATUSES, OCT1));
+check("not overdue: due today, or no dates", !isOverdue(due("2024-10-01", "todo"), STATUSES, OCT1) && !isOverdue(task({ name: "n" }), STATUSES, OCT1));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

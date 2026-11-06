@@ -136,6 +136,7 @@ interface Strings {
   addDependency: string;
   dropSubtask: (name: string) => string; // ドロップ先の説明 / what a drop will do
   dropMove: (folder: string) => string;
+  headingCount: (o: number, l: number) => string; // 見出しの件数：未完了・期限切れ / a heading's counts: open, overdue
   dropTag: (tag: string) => string;
   dropAssign: (name: string) => string;
   zoomDay: string;
@@ -621,6 +622,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     addDependency: "先行タスクを追加…",
     dropSubtask: (name) => `「${name}」のサブタスクにする`,
     dropMove: (folder) => `「${folder}」へ移動`,
+    headingCount: (o, l) => `未完了 ${o}` + (l ? ` · 期限切れ ${l}` : ""),
     dropTag: (tag) => `#${tag} を付ける`,
     dropAssign: (name) => `${name} を担当者に追加`,
     zoomDay: "日",
@@ -926,6 +928,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     addDependency: "Add dependency…",
     dropSubtask: (name) => `Make subtask of “${name}”`,
     dropMove: (folder) => `Move to “${folder}”`,
+    headingCount: (o, l) => `${o} open` + (l ? ` · ${l} overdue` : ""),
     dropTag: (tag) => `Add #${tag}`,
     dropAssign: (name) => `Assign to ${name}`,
     zoomDay: "Day",
@@ -1231,6 +1234,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     addDependency: "添加前置任务…",
     dropSubtask: (name) => `设为“${name}”的子任务`,
     dropMove: (folder) => `移动到“${folder}”`,
+    headingCount: (o, l) => `未完成 ${o}` + (l ? ` · 已逾期 ${l}` : ""),
     dropTag: (tag) => `添加 #${tag}`,
     dropAssign: (name) => `分配给 ${name}`,
     zoomDay: "日",
@@ -1536,6 +1540,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     addDependency: "新增前置任務…",
     dropSubtask: (name) => `設為「${name}」的子任務`,
     dropMove: (folder) => `移動到「${folder}」`,
+    headingCount: (o, l) => `未完成 ${o}` + (l ? ` · 已逾期 ${l}` : ""),
     dropTag: (tag) => `加上 #${tag}`,
     dropAssign: (name) => `指派給 ${name}`,
     zoomDay: "日",
@@ -1841,6 +1846,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     addDependency: "선행 작업 추가…",
     dropSubtask: (name) => `“${name}”의 하위 작업으로 만들기`,
     dropMove: (folder) => `“${folder}”(으)로 이동`,
+    headingCount: (o, l) => `미완료 ${o}` + (l ? ` · 기한 초과 ${l}` : ""),
     dropTag: (tag) => `#${tag} 추가`,
     dropAssign: (name) => `${name}에게 할당`,
     zoomDay: "일",
@@ -2146,6 +2152,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     addDependency: "Ajouter une dépendance…",
     dropSubtask: (name) => `Faire une sous-tâche de « ${name} »`,
     dropMove: (folder) => `Déplacer vers « ${folder} »`,
+    headingCount: (o, l) => `${o} en cours` + (l ? ` · ${l} en retard` : ""),
     dropTag: (tag) => `Ajouter #${tag}`,
     dropAssign: (name) => `Assigner à ${name}`,
     zoomDay: "Jour",
@@ -2451,6 +2458,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     addDependency: "Añadir dependencia…",
     dropSubtask: (name) => `Hacer subtarea de «${name}»`,
     dropMove: (folder) => `Mover a «${folder}»`,
+    headingCount: (o, l) => `${o} abiertas` + (l ? ` · ${l} vencidas` : ""),
     dropTag: (tag) => `Añadir #${tag}`,
     dropAssign: (name) => `Asignar a ${name}`,
     zoomDay: "Día",
@@ -2756,6 +2764,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     addDependency: "Добавить зависимость…",
     dropSubtask: (name) => `Сделать подзадачей «${name}»`,
     dropMove: (folder) => `Переместить в «${folder}»`,
+    headingCount: (o, l) => `открыто: ${o}` + (l ? ` · просрочено: ${l}` : ""),
     dropTag: (tag) => `Добавить #${tag}`,
     dropAssign: (name) => `Назначить: ${name}`,
     zoomDay: "День",

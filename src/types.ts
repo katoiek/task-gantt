@@ -148,6 +148,7 @@ export interface Row {
   task?: Task;
   // グループ行/親タスク行のまとめバー範囲（配下の集約）/ rolled-up span for a group or parent-task row
   span?: { start: string; end: string };
+  tasks?: Task[]; // グループ行の配下のタスク（見出しの件数用）/ a group row's tasks underneath (for the heading counts)
   hasChildren?: boolean; // 親タスク行（子サブタスクを持つ）/ a parent task row (has subtasks)
 }
 

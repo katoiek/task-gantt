@@ -441,7 +441,8 @@ export function buildRows(
     for (const name of [...node.folders.keys()].sort((a, b) => a.localeCompare(b))) {
       const child = node.folders.get(name)!;
       const key = prefix ? `${prefix}/${name}` : name;
-      rows.push({ kind: "group", group: name, depth, key, span: spanOf(descendantTasks(child)) });
+      const under = descendantTasks(child);
+      rows.push({ kind: "group", group: name, depth, key, span: spanOf(under), tasks: under });
       if (!collapsed.has(key)) walk(child, depth + 1, key);
     }
   };

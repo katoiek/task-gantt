@@ -55,6 +55,14 @@ export function applyFilters(tasks: Task[], filters: Filter[], match: FilterMatc
   );
 }
 
+// 期限切れ＝期限が今日より前で、完了でもキャンセルでもない（「期限切れ」プリセットと同じ期限の読み方）
+// overdue = due before today and neither completed nor cancelled (the due date read as the Overdue preset reads it)
+export function isOverdue(t: Task, statuses: StatusDef[], today: number): boolean {
+  const end = anchorEnd(t);
+  const group = statusGroupOf(statuses, t.status);
+  return !!end && dayIndex(end) < today && group !== "completed" && group !== "cancelled";
+}
+
 // グループ化の軸に合わせて groups を合成グループへ差し替える / remap `groups` to synthetic groups for the chosen axis
 // 行の見出しが既に示している値（担当者・タグ）を除いた残り。見出しのキーは regroup と同じ作り方（担当者は表示名、タグはそのまま）。
 // フラット表示の行は見出しが "" なので何も除かない
