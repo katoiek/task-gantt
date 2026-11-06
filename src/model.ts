@@ -683,7 +683,7 @@ export function kanbanStep(lanes: KanbanLane[], statuses: StatusDef[], startedId
 
 // カードの文字から Kanban の書式を外す：[[a|b]] → b、[[a]] → a、@{日付} @@{時刻} @[[日付]] は消す
 // card text without the Kanban markup: [[a|b]] → b, [[a]] → a, and @{date} @@{time} @[[date]] dropped
-function cardLabel(text: string): string {
+export function cardLabel(text: string): string {
   return text.replace(/@{1,2}(\{[^}]*\}|\[\[[^\]]*\]\])/g, "").replace(/\[\[([^\]|]*\|)?([^\]]*)\]\]/g, "$2").replace(/\s+/g, " ").trim();
 }
 

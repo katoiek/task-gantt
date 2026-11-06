@@ -28,6 +28,7 @@ import {
   bodyOf,
   kanbanLanes,
   kanbanStep,
+  cardLabel,
   newStatus,
   anchorStart,
   anchorEnd,
@@ -61,7 +62,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { isConnected } from "./gcal/auth";
-import { ATTENTION, EXCEPTIONS, applyFilters, besideHeading, exceptionsOf, interruptions, isOpen, isOverdue, isUrgent, regroup, runningWorkOf, subtaskSummary, urgentFirst, Exception, GroupBy, Interruptions } from "./filter";
+import { ATTENTION, EXCEPTIONS, applyFilters, besideHeading, exceptionsOf, interruptions, isOpen, isOverdue, isUrgent, nextToStart, regroup, runningWorkOf, subtaskSummary, urgentFirst, Exception, GroupBy, Interruptions } from "./filter";
 import { BoardContext, Move, MutateResult, StatusChange } from "./board";
 import { CellColumn, ColumnDef, allColumns, columnList, columnWidth, disabledLast, manualComparator, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
 
@@ -2348,7 +2349,14 @@ export class GanttView extends ItemView {
       const live = (row.tasks ?? []).filter((t) => !this.disabled.has(t.path) && isOpen(t, statuses));
       const late = live.filter((t) => isOverdue(t, statuses, today)).length;
       const hot = live.filter(isUrgent).length;
-      if (live.length) g.createSpan({ cls: "ogantt-group-count" + (late || hot ? " is-alert" : ""), text: tr().headingCount(live.length, late, hot) });
+      // 今：進行中（「始めた」ステータス）と止まっているもの。次：今日より後に始まる一番早いタスク（部長が「今」と「次」を一行で読めるように）
+      // now: in progress (the started status) and blocked; next: the earliest task starting after today (so a section head reads "now" and "next" in one line)
+      const startedId = autoStatusTargets(statuses, this.plugin.settings.autoStatus).started;
+      const running = live.filter((t) => t.status === startedId).length;
+      const blocked = live.filter((t) => statusGroupOf(statuses, t.status) === "deferred").length;
+      if (live.length) g.createSpan({ cls: "ogantt-group-count" + (late || hot ? " is-alert" : ""), text: tr().headingCount(live.length, running, blocked, late, hot) });
+      const next = nextToStart(live, today);
+      if (next) g.createSpan({ cls: "ogantt-group-next", text: tr().nextUp(isolate(next.name), formatDate(anchorStart(next)!, this.plugin.settings.dateFormat)) });
       // 見出しを右クリック＝色・アイコンを変更（(なし) は除く）/ right-click a heading to change its colour or icon (not "(none)")
       if (!none) g.addEventListener("contextmenu", (e) => this.openStyleMenu(e, this.groupBy, row.group, this.headingKey(row)));
       el.onclick = () => {
@@ -2424,7 +2432,8 @@ export class GanttView extends ItemView {
         const words = all.map((e) => EXC_TEXT[e]()).join(", ");
         const tag = nameTd.createSpan({ cls: `ogantt-exc is-${exc}`, attr: { title: words, "aria-label": words } });
         setIcon(tag.createSpan({ cls: "ogantt-exc-icon", attr: { "aria-hidden": "true" } }), EXC_ICON[exc]);
-        tag.createSpan({ cls: "ogantt-exc-text", text: EXC_TEXT[exc]() + (all.length > 1 ? ` +${all.length - 1}` : "") });
+        const more = all.filter((e) => e !== exc && !(e === "blocked" && said)).length; // ステータス列が言う「止まっている」は数えない / blocked shown by the Status column isn't counted
+        tag.createSpan({ cls: "ogantt-exc-text", text: EXC_TEXT[exc]() + (more ? ` +${more}` : "") });
       }
       // ガントの階層（シェブロンと字下げ）：親は終わったサブタスクの数だけ。行は開けば見える
       // the Gantt hierarchy (chevron and indent): a parent shows only how many subtasks are done; the rows are there on expanding
@@ -3202,17 +3211,13 @@ export class GanttView extends ItemView {
     const say = step?.card ? (step.now ? tr().nowStep : tr().nextStep) : null;
     const text = say ? say(isolate(step!.card!)) : tr().boardCue;
     const hint = [tr().openBoardHint, t.cards ? tr().cardsChecked(t.cards.done, t.cards.total) : "", step?.stage ? isolate(step.stage) : ""].filter(Boolean).join(" · ");
-    const cue = host.createEl("button", { cls: "ogantt-board-cue", attr: { "aria-label": hint, title: `${hint}\n${text}`, tabindex: "-1" } });
+    const cue = host.createEl("button", { cls: "ogantt-board-cue", attr: { "aria-label": `${text} · ${hint}`, title: `${text}\n${hint}`, tabindex: "-1" } });
     setIcon(cue.createSpan({ cls: "ogantt-board-cue-icon", attr: { "aria-hidden": "true" } }), KIND_ICON.kanban);
     // カードの文字は自分の向きで、自分の端で省略する（ヘブライ語なら頭が残る）。言葉の部分は訳のまま前後に
     // the card text keeps its own direction and is cut at its own end (a Hebrew card keeps its beginning); the translated words go around it
-    if (!say) cue.createSpan({ cls: "ogantt-board-cue-text", text });
-    else {
-      const [pre, post] = say(" ").split(" ");
-      if (pre) cue.createSpan({ cls: "ogantt-board-cue-label", text: pre });
-      cue.createSpan({ cls: "ogantt-board-cue-text", text: step!.card!, attr: { dir: "auto" } });
-      if (post) cue.createSpan({ cls: "ogantt-board-cue-label", text: post });
-    }
+    // 行ではボードの印とカードの文字だけ（狭くても読める）。「次のカード／進行中のカード」は札の説明と読み上げに
+    // in the row only the board icon and the card text (readable when narrow); "Next card / Current card" goes into the tooltip and the label
+    cue.createSpan({ cls: "ogantt-board-cue-text", text: say ? step!.card! : text, attr: { dir: "auto" } });
     cue.addEventListener("click", (e) => {
       e.stopPropagation(); // 行のクリック（詳細を開く）にしない / not the row's click (which opens the details)
       this.openTask(t.path, Keymap.isModEvent(e) || "tab");
@@ -3788,7 +3793,8 @@ export class GanttView extends ItemView {
 
     // 進捗 / progress（スライダー＋%表示。ドラッグ中は表示のみ更新、離したら保存＝バーに反映）
     // progress slider + % label; updates the label while dragging, saves on release (reflected in the bar)
-    const progField = fieldRow(tr().fieldProgress);
+    // カードのあるボードは数を「実行」に出すので、ここには出さない（同じことを二度言わない）/ a board with cards shows its count under Execution, not here too
+    const progField = t.cards ? createDiv() : fieldRow(tr().fieldProgress);
     progField.addClass("ogantt-progress-field");
     if (t.cards) {
       // カードのあるカンバンは、チェックしたカードの割合が進捗（ボードでカードをチェックすると進む。ここでは編集しない）
@@ -3862,6 +3868,24 @@ export class GanttView extends ItemView {
       const step = kanbanStep(kanbanLanes(this.app.metadataCache.getFileCache(file), text), statuses, autoStatusTargets(statuses, autoStatus).started);
       if (step.card) ex.createDiv({ cls: "ogantt-exec-card", text: (step.now ? tr().nowStep : tr().nextStep)(isolate(step.card)) });
       if (step.stage) ex.createDiv({ cls: "ogantt-exec-stage", text: step.stage, attr: { dir: "auto" } });
+      // 部長が中身を見たいとき：全部のカードを列ごとに（読むだけ・畳んである）。編集と並べ替えはボードで
+      // for a section head who wants the specifics: every card, lane by lane (read-only, collapsed); editing and reordering happen on the board
+      const lanes = kanbanLanes(this.app.metadataCache.getFileCache(file), text);
+      const count = lanes.reduce((n, l) => n + l.cards.length, 0);
+      if (count) {
+        const all = ex.createEl("details", { cls: "ogantt-exec-all" });
+        all.createEl("summary", { text: tr().allCards(count) });
+        for (const lane of lanes) {
+          all.createDiv({ cls: "ogantt-exec-lane", text: lane.title, attr: { dir: "auto" } });
+          const ul = all.createEl("ul", { cls: "ogantt-exec-cards" });
+          for (const c of lane.cards) {
+            // 行ごとに文字の向きで並ぶ（ヘブライ語のカードはチェックが右）/ each row follows its text's direction (a Hebrew card has its check on the right)
+            const li = ul.createEl("li", { cls: c.done ? "is-done" : "", attr: { dir: "auto" } });
+            setIcon(li.createSpan({ cls: "ogantt-exec-check", attr: { "aria-label": c.done ? tr().cardChecked : tr().cardOpen } }), c.done ? "check-square" : "square");
+            li.createSpan({ text: cardLabel(c.text) });
+          }
+        }
+      }
       const open = ex.createEl("button", { cls: "mod-cta ogantt-exec-open", text: tr().openBoard, attr: { "aria-label": tr().openBoardHint } });
       open.onclick = (e) => this.openTask(here(), Keymap.isModEvent(e) || "tab");
       this.lockIfReadOnly(d, t.path);

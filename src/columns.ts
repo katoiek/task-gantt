@@ -1,8 +1,9 @@
+import { setIcon } from "obsidian";
 // テーブル列の定義（ラベル・幅・並べ替え・描画・インライン編集を 1 か所に）
 // table column definitions: label, width, sorting, painting and inline editing in one place
 import type { BoardContext } from "./board";
 import type { GanttSettings } from "./settings";
-import type { Row, Task, CustomField, CustomValue } from "./types";
+import type { Row, Task, CustomField, CustomValue, StatusDef } from "./types";
 import {
   anchorStart,
   anchorEnd,
@@ -12,7 +13,7 @@ import {
   parseCustomInput,
 } from "./model";
 import { formatDate, dayIndex, dayToStr, todayIndex } from "./timeline";
-import { endForDuration, parseDuration, scheduleOptions, taskDuration, workdaysBetween } from "./schedule";
+import { autoStatusTargets, endForDuration, parseDuration, scheduleOptions, taskDuration, workdaysBetween } from "./schedule";
 import { linkLabel } from "./links";
 import { besideHeading } from "./filter";
 import { handleLinkClick, renderLinkValue } from "./linkui";
@@ -454,8 +455,12 @@ export function progressPct(t: Task): number | null {
 export function paintProgress(td: HTMLElement, t: Task): void {
   td.empty();
   td.addClass("ogantt-td-progress");
+  // カンバンはチェックしたカードの数だけ（労力や予定どおりかではない）。値の無いセルは空（"—" や空のメーターを並べない）
+  // a kanban shows only how many cards are checked (not effort, nor being on schedule); a cell without a value stays empty (no rows of "—" and empty meters)
+  if (t.cards) return void td.createSpan({ cls: "ogantt-meter-num ogantt-cards", text: tr().cardsShort(t.cards.done, t.cards.total) });
   const p = progressPct(t);
   td.toggleClass("is-empty", p == null);
+  if (p == null) return;
   const track = td.createDiv({ cls: "ogantt-meter" });
   if (p != null) track.createDiv({ cls: "ogantt-meter-fill" }).style.width = `${p}%`;
   td.createSpan({ cls: "ogantt-meter-num", text: p != null ? `${p}%` : "—" });
@@ -486,13 +491,23 @@ function paintAssignee(ctx: BoardContext, td: HTMLElement, t: Task, people: stri
   });
 }
 
-// ステータスセル（色ドット＋ラベル）/ status cell (color dot + label)
+// ステータスの印：色に形を重ねる（白黒でも分かる）。始めた＝塗りの丸、それ以外のアクティブ＝輪、延期＝四角、完了＝チェック、中止＝×
+// a status mark: a shape on top of the colour (readable in greyscale): started = filled dot, other Active = ring, Deferred = square,
+// Completed = check, Cancelled = cross
+export function statusMark(host: HTMLElement, s: StatusDef, startedId: string | undefined): HTMLElement {
+  const kind = s.group === "completed" ? "done" : s.group === "cancelled" ? "cancelled" : s.group === "deferred" ? "blocked" : s.id === startedId ? "running" : "queued";
+  const mark = host.createSpan({ cls: `ogantt-status-dot is-${kind}`, attr: { "aria-hidden": "true" } });
+  mark.style.setProperty("--ogantt-status", s.color);
+  if (kind === "done" || kind === "cancelled") setIcon(mark, kind === "done" ? "check" : "x");
+  return mark;
+}
+
+// ステータスセル（形と色の印＋ラベル）/ status cell (shape-and-colour mark + label)
 function paintStatus(ctx: BoardContext, td: HTMLElement, t: Task): void {
   td.empty();
   const s = ctx.settings.statuses.find((x) => x.id === t.status);
   if (!s) return;
-  const dot = td.createSpan({ cls: "ogantt-status-dot" });
-  dot.style.background = s.color;
+  statusMark(td, s, autoStatusTargets(ctx.settings.statuses, ctx.settings.autoStatus).started);
   td.createSpan({ cls: "ogantt-td-text", text: s.label });
 }
 

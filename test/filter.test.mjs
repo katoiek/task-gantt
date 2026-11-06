@@ -1,6 +1,6 @@
 // フィルタ判定（matchFilter / applyFilters）とグループ再マッピング（regroup）の検証
 // Tests for filter matching (matchFilter / applyFilters) and group remapping (regroup)
-import { matchFilter, applyFilters, regroup, besideHeading, isOverdue, isUrgent, interruptions, runningWorkOf, attentionOf, exceptionOf, exceptionsOf, subtaskSummary, urgentFirst, strongest } from "./filter.mjs";
+import { matchFilter, applyFilters, regroup, besideHeading, isOverdue, isUrgent, interruptions, runningWorkOf, attentionOf, exceptionOf, exceptionsOf, nextToStart, subtaskSummary, urgentFirst, strongest } from "./filter.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -175,6 +175,11 @@ check("urgent first among siblings; finished urgent work sorts normally",
   [U({ name: "b" }), U({ name: "z", priority: "urgent" }), U({ name: "a", priority: "urgent", status: "done" })].sort(urgentFirst(ST, byName)).map((t) => t.name).join() === "z,a,b");
 check("work waiting to be resumed comes right after urgent work",
   [U({ name: "b", path: "b.md" }), U({ name: "r", path: "r.md" }), U({ name: "z", priority: "urgent" })].sort(urgentFirst(ST, byName, new Map([["r.md", hot]]))).map((t) => t.name).join() === "z,r,b");
+
+// 見出しの「次」/ the heading's "next"
+check("next to start: earliest start after today; today, past and undated don't count",
+  nextToStart([U({ name: "past", start: "2024-09-01" }), U({ name: "today", start: "2024-10-01" }), U({ name: "later", start: "2024-10-20" }), U({ name: "soon", start: "2024-10-03" }), U({ name: "none" })], OCT1)?.name === "soon"
+  && nextToStart([U({ name: "none" })], OCT1) === undefined);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

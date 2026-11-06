@@ -154,6 +154,16 @@ export function exceptionOf(t: Task, statuses: StatusDef[], today: number, confl
   return exceptionsOf(t, statuses, today, conflicts, ints)[0];
 }
 
+// 次に始まるタスク：今日より後に始まる一番早いもの（日付の無いものは入らない）/ the next task to start: the earliest one starting after today (undated ones don't count)
+export function nextToStart(tasks: Task[], today: number): Task | undefined {
+  let best: Task | undefined;
+  for (const t of tasks) {
+    const s = anchorStart(t);
+    if (s && dayIndex(s) > today && (!best || s < anchorStart(best)!)) best = t;
+  }
+  return best;
+}
+
 // 親タスクの要約：完了したサブタスクの数／（キャンセルを除く）全体、と次にやる（並び順で最初の残っている）サブタスク
 // a parent's summary: subtasks done / all (cancelled left out), and the next one to do (the first outstanding one in order)
 export function subtaskSummary(children: Task[], statuses: StatusDef[]): { done: number; total: number; next?: Task } {

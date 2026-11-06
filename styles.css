@@ -539,13 +539,36 @@ button.ogantt-preset-del {
 }
 /* ステータス列の色ドット / status column color dot */
 .ogantt-status-dot {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   margin-right: 6px;
   flex: none;
   vertical-align: middle;
+  background: var(--ogantt-status);
+  color: var(--ogantt-status);
+}
+/* 形で区別：輪＝待ち、塗り＝進行中、四角＝止まっている、チェック／×＝終わった（色は補うだけ）
+   shape tells them apart: ring = queued, filled = in progress, square = blocked, check / cross = finished (colour only reinforces) */
+.ogantt-status-dot.is-queued {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--ogantt-status);
+}
+.ogantt-status-dot.is-blocked {
+  border-radius: 2px;
+}
+.ogantt-status-dot.is-done,
+.ogantt-status-dot.is-cancelled {
+  background: transparent;
+  border-radius: 0;
+}
+.ogantt-status-dot .svg-icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 3;
 }
 /* オプションのアイコン（意味はツールチップで補助）/ option icon (meaning via tooltip) */
 .ogantt-opt-ico {
@@ -1886,6 +1909,18 @@ input.ogantt-swatch {
 
 /* ── 実行ボード（カンバン）：行の目印と詳細パネルの要約。ガントの階層（シェブロン・字下げ）とは別の見た目 ──
    the execution board (kanban): the row cue and the panel summary; a different look from the Gantt hierarchy (chevron, indent) ── */
+.ogantt-group-next {
+  font-weight: 400;
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.ogantt-cards {
+  color: var(--text-muted);
+}
 .ogantt-board-cue {
   display: inline-flex;
   align-items: center;
@@ -1893,7 +1928,7 @@ input.ogantt-swatch {
   gap: 4px;
   flex: 0 5000 auto; /* 例外の札より先、名前よりずっと先に縮む / shrinks before the exception tag, long before the name */
   min-width: 24px;
-  min-height: 22px;
+  min-height: 24px; /* 押しやすさ（WCAG 2.5.8）/ target size (WCAG 2.5.8) */
   margin-left: 8px;
   padding: 0 6px;
   overflow: hidden;
@@ -1943,6 +1978,41 @@ button.ogantt-board-cue:hover {
 }
 .ogantt-exec-open {
   margin-top: 4px;
+}
+.ogantt-exec-all {
+  align-self: stretch;
+  font-size: var(--font-ui-smaller);
+}
+.ogantt-exec-all > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.ogantt-exec-lane {
+  margin-top: 8px;
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+}
+.ogantt-exec-cards {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.ogantt-exec-cards li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 2px 0;
+}
+.ogantt-exec-cards li.is-done {
+  color: var(--text-faint);
+}
+.ogantt-exec-check,
+.ogantt-exec-check .svg-icon {
+  display: inline-flex;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
 }
 /* 読むだけの部屋（Vault Rooms）のノート：パネルの先頭に一行。入力は止める / a note in a read-only room (Vault Rooms): one line at the top of the panel; inputs are disabled */
 .ogantt-readonly {
