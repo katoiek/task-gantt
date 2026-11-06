@@ -1,4 +1,4 @@
-import { Component, ItemView, Keymap, Menu, MarkdownRenderer, PaneType, Platform, Scope, WorkspaceLeaf, normalizePath, setIcon, Notice, TFile, TFolder, ViewStateResult, moment } from "obsidian";
+import { CachedMetadata, Component, ItemView, Keymap, Menu, MarkdownRenderer, PaneType, Platform, Scope, WorkspaceLeaf, normalizePath, setIcon, Notice, TFile, TFolder, ViewStateResult, moment } from "obsidian";
 import type GanttPlugin from "./main";
 import { ME_KEY } from "./settings";
 import { Task, TaskKind, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, DateValue, DateOp, DateField, DateUnit, DateDir, StatusDef, StatusGroup, STATUS_GROUPS } from "./types";
@@ -253,7 +253,7 @@ export class GanttView extends ItemView {
   private cardFocus: string | null = null; // チェックしたカードの行（描き直した後もそこへフォーカスを戻す）/ the line of the card just ticked (focus goes back to it after the redraw)
   private cardsOpen = false; // パネルの「すべてのカード」を開いているか（チェックで描き直しても閉じない）/ whether the panel's card list is open (a tick's redraw keeps it open)
   // カンバンの今か次のカードと列。ファイルの更新時刻ごとに覚え、変わったボードだけ読み直す / each kanban's current or next card and lane, kept per file mtime so only changed boards are read again
-  private cardSteps = new Map<string, { mtime: number; started?: string; step: CardStep }>();
+  private cardSteps = new Map<string, { mtime: number; meta: CachedMetadata | null; started?: string; step: CardStep }>();
   private exporting = false; // PNG の書き出し中 / a PNG export is running
   private historyRunning = false; // 取り消し・やり直しの最中 / an undo or redo is running
   private dragging: "bar" | "link" | "column" | null = null; // ドラッグ中のもの（描き直しを待たせる）/ what is being dragged (redraws wait)
@@ -3197,15 +3197,17 @@ export class GanttView extends ItemView {
     const { statuses, autoStatus } = this.plugin.settings;
     const started = autoStatusTargets(statuses, autoStatus).started;
     const sig = JSON.stringify(statuses);
-    const steps = new Map<string, { mtime: number; started?: string; step: CardStep }>();
+    const steps = new Map<string, { mtime: number; meta: CachedMetadata | null; started?: string; step: CardStep }>();
     await Promise.all(this.tasks.filter((t) => t.kind === "kanban" && t.cards).map(async (t) => {
       const file = this.app.vault.getAbstractFileByPath(t.path);
       if (!(file instanceof TFile)) return;
       const key = `${started}|${sig}`;
       const had = this.cardSteps.get(t.path);
-      if (had && had.mtime === file.stat.mtime && had.started === key) return void steps.set(t.path, had);
-      const step = kanbanStep(kanbanLanes(this.app.metadataCache.getFileCache(file), await this.app.vault.cachedRead(file)), statuses, started);
-      steps.set(t.path, { mtime: file.stat.mtime, started: key, step });
+      // 書いた直後はまだ前の解析のことがあるので、更新時刻だけでなく解析結果も同じときだけ使い回す / right after a write the parse may still be the old one, so reuse only when the parse is the same too
+      const meta = this.app.metadataCache.getFileCache(file);
+      if (had && had.mtime === file.stat.mtime && had.meta === meta && had.started === key) return void steps.set(t.path, had);
+      const step = kanbanStep(kanbanLanes(meta, await this.app.vault.cachedRead(file)), statuses, started);
+      steps.set(t.path, { mtime: file.stat.mtime, meta, started: key, step });
     }));
     this.cardSteps = steps;
   }
