@@ -61,7 +61,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { isConnected } from "./gcal/auth";
-import { applyFilters, besideHeading, exceptionOf, interruptedPaths, isOpen, isOverdue, isUrgent, regroup, subtaskSummary, strongest, urgentFirst, Exception, GroupBy } from "./filter";
+import { ATTENTION, applyFilters, besideHeading, exceptionOf, interruptions, isOpen, isOverdue, isUrgent, regroup, runningWorkOf, subtaskSummary, strongest, urgentFirst, Exception, GroupBy, Interruptions } from "./filter";
 import { BoardContext, Move, MutateResult, StatusChange } from "./board";
 import { CellColumn, ColumnDef, allColumns, columnList, columnWidth, disabledLast, manualComparator, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
 
@@ -97,8 +97,12 @@ const BUSY_FILES = 10;
 // タスクの種類のアイコン（ノートは付けない）/ task-kind icons (plain notes get none)
 const KIND_ICON: Record<TaskKind, string> = { note: "file-text", kanban: "square-kanban", canvas: "layout-dashboard" };
 // 例外の札の印と言葉 / the icon and word of each exception tag
-const EXC_ICON: Record<Exception, string> = { urgent: "zap", overdue: "alarm-clock", dependency: "unlink", interrupted: "pause" };
-const EXC_TEXT: Record<Exception, () => string> = { urgent: () => tr().excUrgent, overdue: () => tr().excOverdue, dependency: () => tr().excDependency, interrupted: () => tr().excInterrupted };
+const EXC_ICON: Record<Exception, string> = { urgent: "zap", overdue: "alarm-clock", dependency: "unlink", interrupted: "pause", resume: "play" };
+const EXC_TEXT: Record<Exception, () => string> = { urgent: () => tr().excUrgent, overdue: () => tr().excOverdue, dependency: () => tr().excDependency, interrupted: () => tr().excInterrupted, resume: () => tr().excResume };
+// 右から左の文字（ヘブライ語など）が混ざっても崩れないよう、名前やカードの文字を前後から切り離す（FSI … PDI）
+// isolate a name or card text from what surrounds it (FSI … PDI), so Hebrew and other right-to-left text doesn't reorder the sentence
+const isolate = (text: string): string => `\u2068${text}\u2069`;
+type CardStep = { card?: string; stage?: string; now?: boolean };
 
 // 名前の頭文字（アバター用・最大 2 文字）/ initials of a name for an avatar (up to two letters)
 function initials(name: string): string {
@@ -240,8 +244,9 @@ export class GanttView extends ItemView {
   private peopleColors: Map<string, string> | null = null; // 担当者の自動の色（同上）/ the assignees' automatic colours (likewise)
   private late: Set<string> | null = null; // 矢印を隠しているときの、依存が守られていない後続 / with arrows hidden, successors whose dependency is broken
   private conflicts = new Set<string>(); // 依存が守られていない後続（表の札用・矢印の有無に関係なく）/ successors whose dependency is broken (for the table's tag, arrows or not)
-  private interrupted = new Set<string>(); // 急ぎ仕事に割り込まれたタスク / tasks interrupted by urgent work
-  private cardSteps = new Map<string, { now?: string; next?: string }>(); // カンバンの中の今と次のカード（読み直しごと）/ each kanban's current and next card (per reload)
+  private ints: Interruptions = { interrupted: new Map(), resume: new Map() }; // 割り込みと再開待ち / interruptions and work waiting to be resumed
+  // カンバンの今か次のカードと列。ファイルの更新時刻ごとに覚え、変わったボードだけ読み直す / each kanban's current or next card and lane, kept per file mtime so only changed boards are read again
+  private cardSteps = new Map<string, { mtime: number; started?: string; step: CardStep }>();
   private exporting = false; // PNG の書き出し中 / a PNG export is running
   private historyRunning = false; // 取り消し・やり直しの最中 / an undo or redo is running
   private dragging: "bar" | "link" | "column" | null = null; // ドラッグ中のもの（描き直しを待たせる）/ what is being dragged (redraws wait)
@@ -593,7 +598,7 @@ export class GanttView extends ItemView {
 
   // 詳細パネルが見せている内容の印（タスクのデータと本文）/ a fingerprint of what the detail panel shows (the task's data and its body)
   private sigOf(t: Task, body: string): string {
-    return `${JSON.stringify(t)}\u0000${body}`;
+    return `${JSON.stringify(t)}\u0000${body}\u0000${this.ints.interrupted.get(t.path)?.path ?? ""}|${this.ints.resume.get(t.path)?.path ?? ""}`;
   }
 
   // ボードごとの表示オプション（グループ・色分け・表示切替・折りたたみ）を読む / load this board's view options (grouping, colour, toggles, collapsed rows)
@@ -655,6 +660,8 @@ export class GanttView extends ItemView {
     this.tagColorCache.clear();
     this.renderLegend(); // 凡例はデータ（担当者）で変わる / the legend depends on the data (the assignees)
     this.renderFilterBar(); // 統合フィルタ行を最新データで更新 / refresh the unified filter row
+    // 割り込みは絞り込みと関係なく全部のタスクから（並びの「再開待ちを先に」にも使う）/ interruptions come from every task, filters aside (the sort puts resumable work early too)
+    this.ints = interruptions(this.tasks, this.plugin.settings.statuses, this.today());
     const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
     const compare = this.comparator();
     if (this.flat) {
@@ -717,7 +724,7 @@ export class GanttView extends ItemView {
   private comparator(): (a: Task, b: Task) => number {
     const s = this.plugin.settings;
     const byColumn = taskComparator(this.columns(), s); // "manual" は列に無いので開始日順 / "manual" is no column, so this is by start
-    return disabledLast(this.disabled, urgentFirst(s.statuses, s.sortBy === "manual" ? manualComparator(this.order, byColumn) : byColumn));
+    return disabledLast(this.disabled, urgentFirst(s.statuses, s.sortBy === "manual" ? manualComparator(this.order, byColumn) : byColumn, this.ints.resume));
   }
 
   // 行を兄弟の中で 1 つ上・下へ（並べ替えは「手動」になる）。動かせたら true
@@ -937,6 +944,7 @@ export class GanttView extends ItemView {
       case "statusGroup": return tr().fieldStatusGroup;
       case "assignee": return tr().fieldAssignee;
       case "tag": return tr().fieldTags;
+      case "attention": return tr().fieldAttention;
     }
   }
   // チップ/メニューのアイコン / chip & menu icon
@@ -948,6 +956,7 @@ export class GanttView extends ItemView {
       case "statusGroup": return "flag";
       case "assignee": return "user";
       case "tag": return "tag";
+      case "attention": return "alert-triangle";
     }
   }
   // カテゴリ値のラベル（""＝未設定、ステータスは id→ラベル）/ a category value's label ("" = unset; status maps id→label)
@@ -955,6 +964,7 @@ export class GanttView extends ItemView {
     if (value === "") return tr().noneLabel; // 未設定 / unset
     if (field === "status") return this.plugin.settings.statuses.find((s) => s.id === value)?.label ?? value;
     if (field === "statusGroup") return statusGroupLabel(value as StatusGroup);
+    if (field === "attention") return value === "blocked" ? tr().attBlocked : value === "overdue" ? tr().excOverdue : tr().excUrgent;
     return value;
   }
   // カテゴリの選択肢＋末尾に「未設定(")」/ available category values, plus an "unset" ("") entry at the end
@@ -964,6 +974,7 @@ export class GanttView extends ItemView {
     // グループは 4 固定なので、そのグループを使っているステータスが 1 つも無くても全部出す
     // the four groups are fixed, so list them all even when no status currently uses one
     else if (field === "statusGroup") base = STATUS_GROUPS.map((g) => [g, statusGroupLabel(g)] as [string, string]);
+    else if (field === "attention") base = ATTENTION.map((a) => [a, this.catValueLabel("attention", a)] as [string, string]);
     else if (field === "assignee") base = this.assigneeList().map((a) => [a, linkLabel(a)] as [string, string]);
     else base = [...new Set(this.tasks.flatMap((t) => t.tags))].sort().map((tg) => [tg, tg] as [string, string]);
     return [...base, ["", tr().noneLabel]]; // 「未設定」を選べるように / allow filtering by "unset"
@@ -1059,6 +1070,7 @@ export class GanttView extends ItemView {
     addCat("status", tr().fieldStatus, "filter");
     addCat("statusGroup", tr().fieldStatusGroup, "flag");
     addCat("assignee", tr().fieldAssignee, "user");
+    addCat("attention", tr().fieldAttention, "alert-triangle");
     if (this.tasks.some((t) => t.tags.length > 0)) addCat("tag", tr().fieldTags, "tag");
     const addDate = (field: DateField, label: string) => {
       m.addItem((i) => i.setTitle(label).setIcon("calendar").onClick(() => {
@@ -1086,9 +1098,13 @@ export class GanttView extends ItemView {
     const open: Filter = { kind: "category", field: "statusGroup", op: "isNot", values: ["completed", "cancelled"] };
     const me = (this.app.loadLocalStorage(ME_KEY) as string | null)?.trim();
     return [
-      // 今と次の 2 週間＝残っている仕事（止まっている・急ぎも）のうち 2 週間以内に始まる（始まった）もの。部長・リーダー向け
-      // now & next 2 weeks = outstanding work (blocked and urgent included) that has started or starts within two weeks; for heads and leads
-      { name: tr().presetNowNext, filterMatch: "all", filters: [open, { kind: "date", field: "start", op: "onOrBefore", value: { kind: "relative", amount: 2, unit: "week", dir: "fromNow" } }] },
+      // 役割ごとの入口（グループ化も切り替える）：概要＝始まっている残りの仕事をプロジェクト（フォルダ）ごと、チーム＝同じものを人ごと、
+      // 要対応＝止まっている・期限切れ・急ぎ。日付の無い仕事は「始まっている」に入らない
+      // role entry points (they switch the grouping too): Overview = outstanding work that has started, by project (folder); Team = the same,
+      // by person; Attention = blocked, overdue or urgent. Work without dates doesn't count as started
+      { name: tr().presetOverview, filterMatch: "all", groupBy: "folder", filters: [open, { kind: "date", field: "start", op: "onOrBefore", value: today }] },
+      { name: tr().presetTeam, filterMatch: "all", groupBy: "assignee", filters: [open, { kind: "date", field: "start", op: "onOrBefore", value: today }] },
+      { name: tr().presetAttention, filterMatch: "all", filters: [{ kind: "category", field: "attention", op: "is", values: [...ATTENTION] }] },
       // 自分の仕事（この端末の名前を設定したときだけ）/ my work (only once this device's name is set)
       ...(me ? [{ name: tr().presetMyWork, filterMatch: "all" as const, filters: [open, { kind: "category" as const, field: "assignee" as const, op: "is" as const, values: [me] }] }] : []),
       // 日付なし＝開始も期限も未設定（＝ガントバーが出ない）/ no start and no end → no bar
@@ -1128,6 +1144,11 @@ export class GanttView extends ItemView {
     const clone = JSON.parse(JSON.stringify(p)) as FilterPreset; // 参照共有を避ける / avoid sharing references
     this.plugin.settings.filters = clone.filters;
     this.plugin.settings.filterMatch = clone.filterMatch;
+    if (clone.groupBy) {
+      this.groupBy = clone.groupBy;
+      this.groupSel.value = clone.groupBy;
+      this.saveBoard();
+    }
     this.commitFilters();
   }
 
@@ -2093,7 +2114,6 @@ export class GanttView extends ItemView {
     // with arrows hidden, a successor whose dependency is broken still gets a dashed outline, even when its predecessor is collapsed or filtered out
     this.conflicts = this.lateTasks();
     this.late = this.showDeps ? null : this.conflicts;
-    this.interrupted = interruptedPaths(this.tasks, this.plugin.settings.statuses, this.today());
 
     // 行かバーにマウスを載せると、同じタスクの行・バー・複製（担当者やタグごとの重複表示）をまとめて強調する
     // hovering a row or bar highlights every row, bar and copy of that task (copies come from grouping by assignee or tag)
@@ -2369,12 +2389,12 @@ export class GanttView extends ItemView {
       const nameText = nameTd.createSpan({ cls: "ogantt-name-text", text: t.name });
       // 種類（カンバン・キャンバス）と共有（担当者が複数）の印は名前の後ろに置き、名前の左端を揃えたままにする
       // markers for the kind (kanban, canvas) and for shared tasks (2+ assignees) trail the name, so names stay left-aligned
-      if (t.kind !== "note") setIcon(nameTd.createSpan({ cls: "ogantt-name-icon", attr: { "aria-label": t.kind === "kanban" ? tr().kindKanban : tr().kindCanvas } }), KIND_ICON[t.kind]);
+      if (t.kind === "canvas") setIcon(nameTd.createSpan({ cls: "ogantt-name-icon", attr: { "aria-label": tr().kindCanvas } }), KIND_ICON[t.kind]);
       if (t.assignees.length > 1) setIcon(nameTd.createSpan({ cls: "ogantt-name-icon", attr: { "aria-label": t.assignees.map(linkLabel).join(", ") } }), "users");
       // 例外は 1 つだけ、印と言葉で（色だけに頼らない）/ one exception at most, as an icon and a word (never colour alone)
       // 畳んだ親は、サブタスクの例外も引き受ける（中を開かなくても気づける）/ a collapsed parent also carries its subtasks' exceptions (noticed without expanding)
       const today = this.today();
-      const excOf = (x: Task) => (this.disabled.has(x.path) ? undefined : exceptionOf(x, this.plugin.settings.statuses, today, this.conflicts, this.interrupted));
+      const excOf = (x: Task) => (this.disabled.has(x.path) ? undefined : exceptionOf(x, this.plugin.settings.statuses, today, this.conflicts, this.ints));
       // 要約と例外は絞り込みに関係なく全部のサブタスクから（並びは画面と同じ）/ the summary and exceptions come from every subtask, filters aside (in screen order)
       const kids = row.hasChildren ? this.tasks.filter((x) => x.parent === t.path).sort(this.comparator()) : [];
       const exc = strongest([excOf(t), ...(this.isCollapsed(row.key) ? kids.map(excOf) : [])]);
@@ -2383,13 +2403,14 @@ export class GanttView extends ItemView {
         setIcon(tag.createSpan({ cls: "ogantt-exc-icon", attr: { "aria-hidden": "true" } }), EXC_ICON[exc]);
         tag.createSpan({ cls: "ogantt-exc-text", text: EXC_TEXT[exc]() });
       }
-      // 親タスク：サブタスクの進み具合と次の一歩（畳んだままでも分かる）/ a parent: its subtasks' progress and the next step (readable while collapsed)
-      // サブタスクのノートが無いカンバンは、中のカードが実行の手順 / a kanban without subtask notes keeps its steps as cards inside it
-      const step = this.cardSteps.get(t.path);
-      const sum = kids.length ? subtaskSummary(kids, this.plugin.settings.statuses) : null;
-      const text = sum ? `${sum.done}/${sum.total}` + (sum.next ? ` · ${tr().nextStep(sum.next.name)}` : "")
-        : t.cards ? `${t.cards.done}/${t.cards.total}` + (step?.now ? ` · ${tr().nowStep(step.now)}` : step?.next ? ` · ${tr().nextStep(step.next)}` : "") : "";
-      if (text) nameTd.createSpan({ cls: "ogantt-subtask-sum", text, attr: { title: text } });
+      // ガントの階層（シェブロンと字下げ）：親は終わったサブタスクの数だけ。行は開けば見える
+      // the Gantt hierarchy (chevron and indent): a parent shows only how many subtasks are done; the rows are there on expanding
+      if (kids.length) {
+        const sum = subtaskSummary(kids, this.plugin.settings.statuses);
+        nameTd.createSpan({ cls: "ogantt-subtask-sum", text: `${sum.done}/${sum.total}`, attr: { title: tr().execComplete(sum.done, sum.total) } });
+      }
+      // 実行ボード（カンバン）は別の層：カードは行にせず、開くための目印を 1 つだけ / the execution board (kanban) is a separate layer: no rows for its cards, just one cue that opens it
+      if (t.kind === "kanban") this.boardCue(nameTd, t);
       // 詳細パネルがこのタスクで開いている状態でのダブルクリック＝その場でリネーム。
       // 閉じている状態では 1 回目のクリックでパネルが開くだけにする（誤ってリネームに入らない）。
       // ダブルクリックの 1 回目でもパネルは開き直されるので、判定は 1 回目を押した瞬間の状態で行う
@@ -2537,10 +2558,10 @@ export class GanttView extends ItemView {
       this.setDisabled([t.path], !off, off ? tr().menuEnable : tr().menuDisable)));
     // 急ぎ（割り込み）の印はノートの優先度に書く（取り消し可）/ urgent (interrupting) goes in the note's priority (undoable)
     const hot = isUrgent(t);
-    m.addItem((it) => it.setTitle(hot ? tr().menuClearUrgent : tr().menuMarkUrgent).setIcon("zap").onClick(() => void (async () => {
-      await this.mutate(tr().undoEdit(t.name), [t.path], () => writeField(this.app, t.path, this.plugin.settings.keys.priority, hot ? undefined : "urgent"));
-      await this.refresh();
-    })()));
+    m.addItem((it) => it.setTitle(hot ? tr().menuClearUrgent : tr().menuMarkUrgent).setIcon("zap").onClick(() => void this.setUrgent(t, !hot)));
+    for (const [target, from] of this.resumable(t)) {
+      m.addItem((it) => it.setTitle(tr().resumeTask(this.nameOf(target))).setIcon("play").onClick(() => void this.resume(from, target)));
+    }
     m.addSeparator();
     m.addItem((i) => i.setTitle(tr().menuDelete).setIcon("trash-2").onClick(() => this.confirmDelete(t.path)));
     if ("clientX" in at) m.showAtMouseEvent(at); // instanceof はポップアウトの窓では成り立たない / instanceof fails across popout windows
@@ -3132,18 +3153,97 @@ export class GanttView extends ItemView {
 
   // 依存が守られていない後続（矢印を隠しているときの赤い縁）。先行が画面に無くても（畳まれた・絞り込まれた）判定する
   // successors whose dependency is broken (the red outline while arrows are hidden), judged even when the predecessor isn't on screen
-  // カードのあるカンバンだけ本文を読み、今と次のカードを覚える（cachedRead なので変わっていなければ読み直さない）
-  // read only kanbans that have cards and remember their current and next card (cachedRead, so unchanged files aren't read again)
+  // カードのあるカンバンだけ読み、今か次のカードと列を覚える。更新時刻が同じボードは読み直さない（ステータスの設定が変わったときは読み直す）
+  // read only kanbans that have cards and remember their current or next card and lane; a board with the same mtime isn't read again (unless the status setup changed)
   private async readCardSteps(): Promise<void> {
     const { statuses, autoStatus } = this.plugin.settings;
     const started = autoStatusTargets(statuses, autoStatus).started;
-    const steps = new Map<string, { now?: string; next?: string }>();
+    const sig = JSON.stringify(statuses);
+    const steps = new Map<string, { mtime: number; started?: string; step: CardStep }>();
     await Promise.all(this.tasks.filter((t) => t.kind === "kanban" && t.cards).map(async (t) => {
       const file = this.app.vault.getAbstractFileByPath(t.path);
       if (!(file instanceof TFile)) return;
-      steps.set(t.path, kanbanStep(kanbanLanes(this.app.metadataCache.getFileCache(file), await this.app.vault.cachedRead(file)), statuses, started));
+      const key = `${started}|${sig}`;
+      const had = this.cardSteps.get(t.path);
+      if (had && had.mtime === file.stat.mtime && had.started === key) return void steps.set(t.path, had);
+      const step = kanbanStep(kanbanLanes(this.app.metadataCache.getFileCache(file), await this.app.vault.cachedRead(file)), statuses, started);
+      steps.set(t.path, { mtime: file.stat.mtime, started: key, step });
     }));
     this.cardSteps = steps;
+  }
+
+  // 実行ボードの目印（行に 1 つ）：今か次のカード、読めなければ「ボード」。押すとボードを新しいタブで開く（行のクリック＝詳細とは別）
+  // the execution board cue (one per row): the current or next card, else "Board". It opens the board in a new tab (separate from the row's click = details)
+  private boardCue(host: HTMLElement, t: Task): void {
+    const step = this.cardSteps.get(t.path)?.step;
+    const text = step?.card ? (step.now ? tr().nowStep : tr().nextStep)(isolate(step.card)) : tr().boardCue;
+    const hint = [tr().openBoardHint, t.cards ? tr().execComplete(t.cards.done, t.cards.total) : "", step?.stage ? isolate(step.stage) : ""].filter(Boolean).join(" · ");
+    const cue = host.createEl("button", { cls: "ogantt-board-cue", attr: { "aria-label": hint, title: `${hint}\n${text}`, tabindex: "-1" } });
+    setIcon(cue.createSpan({ cls: "ogantt-board-cue-icon", attr: { "aria-hidden": "true" } }), KIND_ICON.kanban);
+    cue.createSpan({ cls: "ogantt-board-cue-text", text });
+    cue.addEventListener("click", (e) => {
+      e.stopPropagation(); // 行のクリック（詳細を開く）にしない / not the row's click (which opens the details)
+      this.openTask(t.path, Keymap.isModEvent(e) || "tab");
+    });
+  }
+
+  // 詳細パネルの「気にかけること」1 行：割り込み・再開・急ぎ・期限切れ・依存。再開には戻るボタン / the panel's one attention line: interrupted, resume, urgent, overdue, dependency; resuming gets its button
+  private buildAttention(d: HTMLElement, t: Task): void {
+    const exc = this.disabled.has(t.path) ? undefined : exceptionOf(t, this.plugin.settings.statuses, this.today(), this.conflicts, this.ints);
+    const resumable = this.resumable(t);
+    const links = isUrgent(t) && isOpen(t, this.plugin.settings.statuses) ? (t.interrupts ?? []).filter((p) => this.ints.interrupted.get(p)?.path === t.path) : [];
+    if (!exc && !resumable.length && !links.length) return;
+    const box = d.createDiv({ cls: "ogantt-attention" + (exc ? ` is-${exc}` : "") });
+    if (exc) {
+      const line = box.createDiv({ cls: "ogantt-attention-line" });
+      setIcon(line.createSpan({ cls: "ogantt-exc-icon", attr: { "aria-hidden": "true" } }), EXC_ICON[exc]);
+      const by = this.ints.interrupted.get(t.path);
+      line.createSpan({ text: exc === "interrupted" && by ? tr().interruptedBy(isolate(by.name)) : EXC_TEXT[exc]() });
+    }
+    if (links.length) box.createDiv({ cls: "ogantt-attention-line", text: tr().interruptsWhat(links.map((p) => isolate(this.nameOf(p))).join(", ")) });
+    for (const [target, from] of resumable) {
+      const b = box.createEl("button", { cls: "mod-cta ogantt-attention-btn", text: tr().resumeTask(isolate(this.nameOf(target))) });
+      b.onclick = () => void this.resume(from, target);
+    }
+  }
+
+  private nameOf(path: string): string {
+    return this.tasks.find((x) => x.path === path)?.name ?? path.split("/").pop()!.replace(/\.md$/, "");
+  }
+
+  // このタスクから再開できる先 [再開するタスク, 終わった急ぎ仕事]：自分が再開待ちか、自分が終わった急ぎ仕事で割り込んだ先
+  // what can be resumed from this task, as [task to resume, finished urgent task]: itself when waiting, or what it interrupted when it is finished urgent work
+  private resumable(t: Task): [string, Task][] {
+    const own = this.ints.resume.get(t.path);
+    if (own) return [[t.path, own]];
+    return [...this.ints.resume].filter(([, u]) => u.path === t.path).map(([p]) => [p, t]);
+  }
+
+  // 急ぎにする：優先度と、その人がいま進めている仕事へのリンクを急ぎ仕事のノートに書く（割り込まれた側のノートは触らない・取り消し可）
+  // mark as urgent: write the priority, and links to the work that person has running, into the urgent note (the interrupted notes aren't touched; undoable)
+  private async setUrgent(t: Task, on: boolean): Promise<void> {
+    const { keys, statuses } = this.plugin.settings;
+    const running = on ? runningWorkOf(t, this.tasks, statuses, this.today()) : [];
+    await this.mutate(tr().undoEdit(t.name), [t.path], async () => {
+      await writeField(this.app, t.path, keys.priority, on ? "urgent" : undefined);
+      await writeField(this.app, t.path, keys.interrupts, running.length ? running.map((x) => this.linkTo(x.path, t.path)) : undefined);
+    });
+    await this.refresh();
+  }
+
+  // 再開：急ぎ仕事のリンクからそのタスクを外し（取り消し可）、そのタスクへ戻る（カンバンならボード、ほかは詳細）
+  // resume: drop that task from the urgent note's links (undoable) and go back to it (its board for a kanban, its details otherwise)
+  private async resume(from: Task, target: string): Promise<void> {
+    const rest = (from.interrupts ?? []).filter((p) => p !== target).map((p) => this.linkTo(p, from.path));
+    await this.mutate(tr().undoEdit(from.name), [from.path], () => writeField(this.app, from.path, this.plugin.settings.keys.interrupts, rest.length ? rest : undefined));
+    await this.refresh();
+    if (this.tasks.find((x) => x.path === target)?.kind === "kanban") this.openTask(target, "tab");
+    else void this.openDetail(target);
+  }
+
+  private linkTo(path: string, from: string): string {
+    const f = this.app.vault.getAbstractFileByPath(path);
+    return f instanceof TFile ? `[[${this.app.metadataCache.fileToLinktext(f, from, true)}]]` : path;
   }
 
   private lateTasks(): Set<string> {
@@ -3481,6 +3581,7 @@ export class GanttView extends ItemView {
     setIcon(closeBtn, "x");
     closeBtn.onclick = () => this.closeDetail(true);
 
+    this.buildAttention(d, t);
     const meta = d.createDiv({ cls: "ogantt-detail-meta" });
     const fieldRow = (label: string): HTMLElement => {
       const r = meta.createDiv({ cls: "ogantt-detail-row" });
@@ -3560,7 +3661,6 @@ export class GanttView extends ItemView {
       // カードのあるカンバンは、チェックしたカードの割合が進捗（ボードでカードをチェックすると進む。ここでは編集しない）
       // a kanban with cards takes its progress from the share of checked cards (checking cards on the board moves it; not edited here)
       paintProgress(progField.createDiv(), t);
-      progField.createDiv({ cls: "ogantt-progress-note", text: tr().kanbanProgress(t.cards.done, t.cards.total) });
     } else {
       const progRange = progField.createEl("input", { type: "range", attr: { "aria-label": tr().fieldProgress } });
       progRange.min = "0";
@@ -3613,18 +3713,18 @@ export class GanttView extends ItemView {
     if (seq !== this.detailSeq) return; // 読んでいる間に別の描画が始まった / a newer build started while reading
     this.panelSig = this.sigOf(t, bodyText);
     if (t.kind === "kanban") {
-      // カンバンは列とカードを小さく並べるだけ（編集はクリックか Enter で開くボードで）。列とカードは進捗と同じ決まりで数える
-      // a kanban shows its lanes and cards in miniature (a click or Enter opens the board to edit); lanes and cards follow the same rule as its progress
-      d.createDiv({ cls: "ogantt-detail-label", text: tr().kindKanban });
-      const board = d.createDiv({ cls: "ogantt-kanban", attr: { role: "button", tabindex: "0", "aria-label": tr().openAsNote } });
+      // カンバンは実行の層：狭いパネルにボードを詰め込まず、短い要約と「ボードを開く」だけ。数と次のカードは確かに読めるときだけ
+      // a kanban is the execution layer: no board squeezed into the narrow panel, just a short summary and "Open board"; counts and the next card only when they can be read for sure
       if (!(file instanceof TFile)) return;
-      for (const lane of kanbanLanes(this.app.metadataCache.getFileCache(file), text)) {
-        const col = board.createDiv({ cls: "ogantt-kanban-lane" });
-        col.createDiv({ cls: "ogantt-kanban-title", text: `${lane.title} · ${lane.cards.length}` });
-        for (const c of lane.cards) col.createDiv({ cls: "ogantt-kanban-card" + (c.done ? " is-done" : ""), text: c.text });
-      }
-      board.onclick = (e) => this.openTask(here(), Keymap.isModEvent(e));
-      board.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.openTask(here(), Keymap.isModEvent(e)); } };
+      d.createDiv({ cls: "ogantt-detail-label", text: tr().execution });
+      const ex = d.createDiv({ cls: "ogantt-exec" });
+      if (t.cards) ex.createDiv({ text: tr().execComplete(t.cards.done, t.cards.total) });
+      const { statuses, autoStatus } = this.plugin.settings;
+      const step = kanbanStep(kanbanLanes(this.app.metadataCache.getFileCache(file), text), statuses, autoStatusTargets(statuses, autoStatus).started);
+      if (step.card) ex.createDiv({ cls: "ogantt-exec-card", text: (step.now ? tr().nowStep : tr().nextStep)(isolate(step.card)) });
+      if (step.stage) ex.createDiv({ cls: "ogantt-exec-stage", text: step.stage, attr: { dir: "auto" } });
+      const open = ex.createEl("button", { cls: "mod-cta ogantt-exec-open", text: tr().openBoard, attr: { "aria-label": tr().openBoardHint } });
+      open.onclick = (e) => this.openTask(here(), Keymap.isModEvent(e) || "tab");
       d.scrollTop = keepScroll;
       return;
     }

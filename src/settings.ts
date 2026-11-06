@@ -150,6 +150,7 @@ export interface GanttSettings {
     gcal: string; // オプトインフラグ / the opt-in flag
     canvas: string; // キャンバス型タスクの .canvas へのリンク / a canvas task's link to its .canvas
     priority: string; // 優先度（urgent で割り込みの急ぎ仕事）/ priority (urgent marks interrupting work)
+    interrupts: string; // 急ぎ仕事が割り込んだタスクへのリンク / links from urgent work to the tasks it interrupted
   };
 }
 
@@ -254,6 +255,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
     gcal: "gcal",
     canvas: "canvas",
     priority: "priority",
+    interrupts: "interrupts",
   },
 };
 

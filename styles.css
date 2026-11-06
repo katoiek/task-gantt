@@ -35,6 +35,7 @@ button.ogantt-preset-del,
 button.ogantt-date-val,
 button.ogantt-legend-chip,
 button.ogantt-dep-add,
+button.ogantt-board-cue,
 button.ogantt-task-chevron {
   height: auto;
   border: none;
@@ -1883,41 +1884,78 @@ input.ogantt-swatch {
   justify-content: space-between;
 }
 
-/* ── カンバン型タスクの詳細パネル（列とカードの縮小表示）/ a kanban task in the detail panel: lanes and cards in miniature ── */
-.ogantt-kanban {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 4px 0 8px;
+/* ── 実行ボード（カンバン）：行の目印と詳細パネルの要約。ガントの階層（シェブロン・字下げ）とは別の見た目 ──
+   the execution board (kanban): the row cue and the panel summary; a different look from the Gantt hierarchy (chevron, indent) ── */
+.ogantt-board-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 5000 auto; /* 例外の札より先、名前よりずっと先に縮む / shrinks before the exception tag, long before the name */
+  min-width: 24px;
+  min-height: 22px;
+  margin-left: 8px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: var(--radius-s);
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  white-space: nowrap;
   cursor: pointer;
 }
-.ogantt-kanban-lane {
-  flex: 1 0 104px;
+button.ogantt-board-cue:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.ogantt-board-cue-icon,
+.ogantt-board-cue-icon .svg-icon {
+  display: inline-flex;
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.ogantt-board-cue-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  unicode-bidi: plaintext;
+}
+.ogantt-exec {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
-  padding: 6px;
-  border-radius: 6px;
-  background: var(--background-secondary);
+  margin-bottom: 12px;
 }
-.ogantt-kanban:hover .ogantt-kanban-lane {
-  background: var(--background-modifier-hover);
+.ogantt-exec-card {
+  unicode-bidi: plaintext;
 }
-.ogantt-kanban-title {
+.ogantt-exec-stage {
   font-size: var(--font-ui-smaller);
-  font-weight: 600;
   color: var(--text-muted);
 }
-.ogantt-kanban-card {
-  padding: 4px 6px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  background: var(--background-primary);
-  font-size: var(--font-ui-smaller);
+.ogantt-exec-open {
+  margin-top: 4px;
 }
-.ogantt-kanban-card.is-done {
-  color: var(--text-faint);
-  text-decoration: line-through;
+/* 詳細パネルの「気にかけること」：細い縁と言葉だけ（色は急ぎと期限切れの縁だけ）/ the panel's attention line: a thin edge and words (colour only on the urgent and overdue edges) */
+.ogantt-attention {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0 10px;
+  padding: 4px 0 4px 8px;
+  border-left: 2px solid var(--background-modifier-border-hover);
+}
+.ogantt-attention.is-urgent {
+  border-left-color: var(--color-orange);
+}
+.ogantt-attention.is-overdue {
+  border-left-color: var(--color-red);
+}
+.ogantt-attention-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  unicode-bidi: plaintext;
 }
 
 /* キーボードの現在位置は必ず見せる（見た目を消したボタン・行・ボタン役の要素も同じ輪郭で）

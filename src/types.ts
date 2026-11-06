@@ -43,6 +43,7 @@ export interface Task {
   endTime?: string; // HH:mm
   // 期限日が無く、描くために開始日を写した（日付で動く決まりは期限日として数えない）/ no due date in the note: end was copied from start for drawing (date rules don't count it)
   endFilled?: boolean;
+  interrupts?: string[]; // 急ぎ仕事が割り込んだタスク（解決済みパス・「急ぎにする」で書く）/ tasks this urgent work interrupted (resolved paths; written by "Mark as urgent")
   priority?: string; // 優先度（urgent / expedite / דחוף なら割り込みの急ぎ仕事）/ priority (urgent / expedite / דחוף = urgent interrupting work)
   status?: string; // StatusDef.id を参照
   // 担当者（多値・フロントマターは単一値でもリストでも可）/ assignees (multi-valued; frontmatter may hold one value or a list)
@@ -106,7 +107,7 @@ export interface DateFilterItem {
 }
 
 // ── カテゴリ系フィルタ（ステータス/ステータスグループ/担当者/タグ）/ category filter ──
-export type CategoryField = "status" | "statusGroup" | "assignee" | "tag";
+export type CategoryField = "status" | "statusGroup" | "assignee" | "tag" | "attention"; // attention = blocked / overdue / urgent
 // と一致 / 以外 / 未設定 / 設定あり / is / is not / is empty / is not empty
 export type CategoryOp = "is" | "isNot" | "empty" | "notEmpty";
 export interface CategoryFilter {
@@ -138,6 +139,7 @@ export interface FilterPreset {
   name: string;
   filters: Filter[];
   filterMatch: FilterMatch;
+  groupBy?: "folder" | "status" | "assignee" | "tag"; // 組み込みの役割別プリセットだけ：グループ化も切り替える / built-in role presets only: switch the grouping too
 }
 
 // グループ（フォルダ）見出し or タスク、を一列に並べた表示行 / a display row

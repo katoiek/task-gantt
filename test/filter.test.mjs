@@ -1,6 +1,6 @@
 // フィルタ判定（matchFilter / applyFilters）とグループ再マッピング（regroup）の検証
 // Tests for filter matching (matchFilter / applyFilters) and group remapping (regroup)
-import { matchFilter, applyFilters, regroup, besideHeading, isOverdue, isUrgent, interruptedPaths, exceptionOf, subtaskSummary, urgentFirst, strongest } from "./filter.mjs";
+import { matchFilter, applyFilters, regroup, besideHeading, isOverdue, isUrgent, interruptions, runningWorkOf, attentionOf, exceptionOf, subtaskSummary, urgentFirst, strongest } from "./filter.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -126,17 +126,34 @@ const cur = U({ name: "Adapter", path: "cur.md", status: "doing", assignees: ["D
 const later = U({ name: "Later", path: "later.md", status: "doing", assignees: ["Dana"], start: "2024-10-20" });
 const held = U({ name: "Held", path: "held.md", status: "hold", assignees: ["Dana"], start: "2024-09-20", end: "2024-10-30" });
 const other = U({ name: "Other", path: "other.md", status: "doing", assignees: ["Eli"], start: "2024-09-20", end: "2024-10-30" });
-const ip = interruptedPaths([hot, cur, later, held, other], ST, OCT1);
-check("interrupted: the same person's other started, active work only", [...ip].join() === "cur.md");
-check("interrupted: nothing once the urgent task is done", interruptedPaths([{ ...hot, status: "done" }, cur], ST, OCT1).size === 0);
-check("interrupted: an urgent task that hasn't started yet interrupts nobody", interruptedPaths([{ ...hot, start: "2024-10-05" }, cur], ST, OCT1).size === 0);
+const NONE = { interrupted: new Map(), resume: new Map() };
+const keys = (m) => [...m.keys()].join();
+// 明示のリンクが無い急ぎ：同じ人の始まっている進行中の仕事だけを割り込み中に（再開待ちは出さない）/ urgent work without links: only the same person's started, running work is interrupted (no resume)
+const ip = interruptions([hot, cur, later, held, other], ST, OCT1);
+check("interrupted (derived): the same person's other started, active work only", keys(ip.interrupted) === "cur.md" && ip.resume.size === 0);
+check("interrupted (derived): nothing, and nothing to resume, once the urgent task is done", (() => { const r = interruptions([{ ...hot, status: "done" }, cur], ST, OCT1); return r.interrupted.size === 0 && r.resume.size === 0; })());
+check("interrupted: an urgent task that hasn't started yet interrupts nobody", interruptions([{ ...hot, start: "2024-10-05" }, cur], ST, OCT1).interrupted.size === 0);
+check("running work to link: same person, started, active, not urgent", runningWorkOf(hot, [hot, cur, later, held, other], ST, OCT1).map((t) => t.path).join() === "cur.md");
+// 明示のリンク（「急ぎにする」で書く）：急ぎが残っている間は割り込み中、終わったら再開待ち。リンク先が終わっていたら何も無し
+// explicit links (written by "Mark as urgent"): interrupted while the urgent work is outstanding, waiting to be resumed once it is finished; nothing when the target is finished
+const linked = { ...hot, interrupts: ["cur.md"] };
+check("linked: interrupted while the urgent work runs, by that urgent task", interruptions([linked, cur, other], ST, OCT1).interrupted.get("cur.md")?.path === "hot.md");
+const after = interruptions([{ ...linked, status: "done" }, cur], ST, OCT1);
+check("linked: once the urgent work is done the task waits to be resumed", after.interrupted.size === 0 && after.resume.get("cur.md")?.path === "hot.md");
+check("linked: a finished target needs no resuming", interruptions([{ ...linked, status: "done" }, { ...cur, status: "done" }], ST, OCT1).resume.size === 0);
+check("linked: only the linked task, not the person's other running work", keys(interruptions([{ ...hot, interrupts: ["cur.md"] }, cur, { ...cur, path: "cur2.md" }], ST, OCT1).interrupted) === "cur.md");
 const late = U({ path: "late.md", status: "doing", end: "2024-09-01", priority: "urgent" });
-check("exception: urgent wins over overdue", exceptionOf(late, ST, OCT1, new Set(), new Set()) === "urgent");
-check("exception: overdue, then dependency, then interrupted",
-  exceptionOf({ ...late, priority: undefined }, ST, OCT1, new Set(["late.md"]), new Set(["late.md"])) === "overdue"
-  && exceptionOf(cur, ST, OCT1, new Set(["cur.md"]), ip) === "dependency" && exceptionOf(cur, ST, OCT1, new Set(), ip) === "interrupted");
+check("exception: urgent wins over overdue", exceptionOf(late, ST, OCT1, new Set(), NONE) === "urgent");
+check("exception: overdue, then dependency, then interrupted, then resume",
+  exceptionOf({ ...late, priority: undefined }, ST, OCT1, new Set(["late.md"]), ip) === "overdue"
+  && exceptionOf(cur, ST, OCT1, new Set(["cur.md"]), ip) === "dependency" && exceptionOf(cur, ST, OCT1, new Set(), ip) === "interrupted"
+  && exceptionOf(cur, ST, OCT1, new Set(), after) === "resume");
 check("exception: none for finished or blocked work",
-  exceptionOf({ ...late, status: "done" }, ST, OCT1, new Set(), new Set()) === undefined && exceptionOf(held, ST, OCT1, new Set(), new Set()) === undefined);
+  exceptionOf({ ...late, status: "done" }, ST, OCT1, new Set(), NONE) === undefined && exceptionOf(held, ST, OCT1, new Set(), NONE) === undefined);
+check("attention: blocked, overdue and urgent; finished work needs none",
+  attentionOf(held, ST, OCT1).join() === "blocked" && attentionOf(late, ST, OCT1).join() === "overdue,urgent" && attentionOf({ ...late, status: "done" }, ST, OCT1).length === 0 && attentionOf(cur, ST, OCT1).length === 0);
+check("attention filter: is blocked/overdue/urgent keeps only those",
+  names(applyFilters([U({ name: "calm", path: "c.md", status: "doing" }), { ...held, name: "held" }], [cat("attention", "is", ["blocked", "overdue", "urgent"])], "all", ST, OCT1)) === "held");
 const kids = [U({ name: "a", status: "done" }), U({ name: "b", status: "drop" }), U({ name: "c", status: "todo" }), U({ name: "d" })];
 const sum = subtaskSummary(kids, ST);
 check("subtask summary: done/total without cancelled, next = first outstanding in order", sum.done === 1 && sum.total === 3 && sum.next?.name === "c");
@@ -145,6 +162,8 @@ const byName = (a, b) => a.name.localeCompare(b.name);
 check("strongest exception wins, none when none", strongest([undefined, "interrupted", "overdue"]) === "overdue" && strongest([undefined]) === undefined);
 check("urgent first among siblings; finished urgent work sorts normally",
   [U({ name: "b" }), U({ name: "z", priority: "urgent" }), U({ name: "a", priority: "urgent", status: "done" })].sort(urgentFirst(ST, byName)).map((t) => t.name).join() === "z,a,b");
+check("work waiting to be resumed comes right after urgent work",
+  [U({ name: "b", path: "b.md" }), U({ name: "r", path: "r.md" }), U({ name: "z", priority: "urgent" })].sort(urgentFirst(ST, byName, new Map([["r.md", hot]]))).map((t) => t.name).join() === "z,r,b");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

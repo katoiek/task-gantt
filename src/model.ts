@@ -250,6 +250,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
   const k = settings.keys;
   const fields = validCustomFields(settings);
   const rawAfter = new Map<string, string[]>(); // path -> 生の after / raw after entries
+  const rawInterrupts = new Map<string, string[]>(); // path -> 生の interrupts / raw interrupts entries
   const rawParent = new Map<string, string>(); // path -> 生の parent リンク / raw parent link
   const tasks: Task[] = files.map((file) => {
     const cache = app.metadataCache.getFileCache(file);
@@ -272,6 +273,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
     if (endFilled) end = start;
 
     rawAfter.set(file.path, fmList(fm[k.after]));
+    rawInterrupts.set(file.path, fmList(fm[k.interrupts]));
     // parent は any を直接受けず unknown 経由で安全に文字列化 / coerce parent via unknown (avoid unsafe any)
     const pv: unknown = fm[k.parent];
     if (pv != null && pv !== "") {
@@ -324,6 +326,9 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       const dest = resolveLink(app, link, t.path);
       if (dest && byPath.has(dest.path)) t.deps.push({ path: dest.path, type });
     }
+    // 割り込んだ先（解決できたものだけ）/ what it interrupted (only links that resolve)
+    const ints = (rawInterrupts.get(t.path) ?? []).map((raw) => resolveLink(app, raw, t.path)?.path).filter((p): p is string => !!p && p !== t.path);
+    if (ints.length) t.interrupts = ints;
     // 親リンクを解決（解決できない＝宙ぶらりんはトップレベル扱い）/ resolve parent (unresolved = treated as top-level)
     const rp = rawParent.get(t.path);
     if (rp) {
@@ -655,18 +660,25 @@ export interface KanbanLane {
   cards: { text: string; done: boolean }[];
 }
 
-// カンバンの中のサブタスクの今と次。列の名前がステータス（ラベルか id）と同じなら、その種類で読む：「始めた」ステータスの列の最初の
-// 未チェックが今。次は、終わった・止めた・中止の列を飛ばした最初の未チェック（工程ごとの列のようにステータスでない列はそのまま順に読む）
-// a kanban's current and next card. A lane named like a status (label or id) is read by that status: the first unchecked card in the
-// "started" status's lane is now. Next is the first unchecked card outside completed, deferred and cancelled lanes (lanes that aren't
-// statuses, such as one per phase, are read in order as they are)
-export function kanbanStep(lanes: KanbanLane[], statuses: StatusDef[], startedId?: string): { now?: string; next?: string } {
+// カンバンの今と次のカード、とそのカードがある列（工程）。列の名前がステータス（ラベルか id）と同じなら、その種類で読む（このプラグインが
+// 作るボードはステータスごとの列）：「始めた」ステータスの列の最初の未チェックが今。次は、終わった・止めた・中止の列を飛ばした、ボードの
+// 並びで最初の未チェック（工程ごとの列のようにステータスでない列はそのまま順に読む）。カードの止まりや期限は読まない
+// a kanban's current or next card and the lane (stage) it sits in. A lane named like a status (label or id) is read by that status (boards
+// this plugin creates have one lane per status): the first unchecked card in the "started" status's lane is now. Next is the first
+// unchecked card in board order outside completed, deferred and cancelled lanes (lanes that aren't statuses, such as one per phase, are
+// read in order as they are). Cards' blockers and dates aren't read
+export function kanbanStep(lanes: KanbanLane[], statuses: StatusDef[], startedId?: string): { card?: string; stage?: string; now?: boolean } {
   const statusOf = (title: string) => statuses.find((s) => [s.label, s.id].some((x) => x.trim().toLowerCase() === title.trim().toLowerCase()));
-  const open = (l: KanbanLane) => l.cards.find((c) => !c.done)?.text;
-  const now = lanes.filter((l) => startedId && statusOf(l.title)?.id === startedId).map(open).find(Boolean);
-  if (now) return { now: cardLabel(now) };
-  const next = lanes.filter((l) => (statusOf(l.title)?.group ?? "active") === "active").map(open).find(Boolean);
-  return next ? { next: cardLabel(next) } : {};
+  const first = (pick: (l: KanbanLane) => boolean) => {
+    for (const l of lanes.filter(pick)) {
+      const c = l.cards.find((x) => !x.done);
+      if (c) return { card: cardLabel(c.text), stage: l.title };
+    }
+    return undefined;
+  };
+  const now = startedId ? first((l) => statusOf(l.title)?.id === startedId) : undefined;
+  if (now) return { ...now, now: true };
+  return first((l) => (statusOf(l.title)?.group ?? "active") === "active") ?? {};
 }
 
 // カードの文字から Kanban の書式を外す：[[a|b]] → b、[[a]] → a、@{日付} @@{時刻} @[[日付]] は消す
