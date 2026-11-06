@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { bodyOf, withBody, movePaths, buildRows, kanbanLanes, listWith, newStatus, moveCollapsed, cardProgress, kanbanStep, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
+import { bodyOf, withBody, movePaths, buildRows, kanbanLanes, listWith, newStatus, moveCollapsed, cardProgress, kanbanStep, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput, setCardDone } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -42,6 +42,14 @@ check("kanbanLanes: 箇条書きはすべてカード", lanesOf(["## Todo", "- i
 const archived = ["## Doing", "- [ ] a", "- [ ] b", "## Done", "- [x] c", "", "***", "", "## Archive", "", "- [x] old 1", "- [x] old 2"].join("\n");
 check("kanbanLanes: アーカイブは数えない", lanesOf(archived) === "Doing:a+b | Done:c✓");
 check("kanbanLanes: 文字なしでも数は同じ", kanbanLanes(fakeCache(archived)[0]).flatMap((l) => l.cards).length === 3);
+
+// パネルからカードのチェックを付け外し：その行だけ、同じカードのときだけ / ticking a card from the panel: that line only, and only while it's the same card
+const board = ["## Doing", "- [ ] a [[x|y]]", "- b", "## Done", "- [x] c\r"].join("\n");
+const cardLine = (text) => kanbanLanes(...fakeCache(text)).flatMap((l) => l.cards).find((c) => c.text === "a [[x|y]]").line;
+check("setCardDone: チェックを付ける", setCardDone(board, cardLine(board), "a [[x|y]]", true) === board.replace("- [ ] a", "- [x] a"));
+check("setCardDone: チェックの無いカードには付ける", setCardDone(board, 2, "b", true) === board.replace("- b", "- [x] b"));
+check("setCardDone: CRLF の行も外せる", setCardDone(board, 4, "c", false) === board.replace("- [x] c", "- [ ] c"));
+check("setCardDone: 行が別のカードなら書かない", setCardDone(board, 2, "a [[x|y]]", true) === null);
 
 // 担当者などの多値フィールドに 1 件足す・外す / adding or removing one entry of a multi-valued field
 check("listWith: 1 人に足すとリスト", JSON.stringify(listWith("Ana", "Ben", true)) === '["Ana","Ben"]');

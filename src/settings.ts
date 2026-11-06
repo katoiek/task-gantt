@@ -82,6 +82,9 @@ export interface GanttSettings {
   // `fired` holds the date each rule fired for, per note path (not applied again while that date stands, even if undone or set back by hand)
   autoStatus: { enabled: boolean; started: string; finished: string; notStarted: string[]; fired: AutoFired };
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
+  // 詳細パネルでのカンバンのカード：工程ごとのチェックリスト（既定）か、Kanban と同じ横並びの列か
+  // a kanban's cards in the detail panel: a checklist by lane (default) or side-by-side lanes like the Kanban plugin
+  cardView: "list" | "board";
   visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
   // 任意列の並び（列 id。無い列は定義順で後ろ）/ the optional columns' order (column ids; missing ones follow in definition order)
   columnOrder: string[];
@@ -200,6 +203,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   autoScheduleFS: true,
   autoStatus: { enabled: false, started: "", finished: "", notStarted: [], fired: {} },
   detailWidth: 380,
+  cardView: "list", // 狭いパネルでも横スクロールなしで上から順に読める / reads top to bottom in a narrow panel, no sideways scrolling
   // 一目で要るもの：担当・ステータス・進捗・期限（開始はバーが示す）/ what a glance needs: assignee, status, progress, due (the bar shows the start)
   visibleColumns: ["assignee", "status", "progress", "end"],
   columnOrder: ["assignee", "status", "progress", "end", "start", "duration", "tags"], // 誰が・どの状態・どこまで・いつまで / who, what state, how far, by when
@@ -512,6 +516,16 @@ export class GanttSettingTab extends PluginSettingTab {
   private ctlMe(setting: Setting): void {
     const app = this.plugin.app;
     setting.addText((t) => t.setValue((app.loadLocalStorage(ME_KEY) as string | null) ?? "").onChange((v) => app.saveLocalStorage(ME_KEY, v.trim() || null)));
+  }
+
+  private ctlCardView(setting: Setting): void {
+    const s = this.plugin.settings;
+    setting.addDropdown((d) =>
+      d.addOptions({ list: tr().setCardViewList, board: tr().setCardViewBoard }).setValue(s.cardView).onChange((v) => {
+        s.cardView = v === "board" ? "board" : "list";
+        this.save();
+      })
+    );
   }
 
   private ctlProgressLineColor(setting: Setting): void {
@@ -974,6 +988,7 @@ export class GanttSettingTab extends PluginSettingTab {
       { name: tr().setTimezoneName, desc: tr().setTimezoneDesc, render: (x) => this.ctlTimezone(x) },
       { name: tr().setNonWorkingDaysName, desc: tr().setNonWorkingDaysDesc, render: (x) => this.ctlNonWorkingDays(x) },
       { name: tr().setAutoScheduleFSName, desc: tr().setAutoScheduleFSDesc, render: (x) => this.ctlAutoScheduleFS(x) },
+      { name: tr().setCardViewName, desc: tr().setCardViewDesc, render: (x) => this.ctlCardView(x) },
       {
         name: tr().setProgressLineColorName,
         desc: tr().setProgressLineColorDesc,

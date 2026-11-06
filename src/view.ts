@@ -29,6 +29,8 @@ import {
   kanbanLanes,
   kanbanStep,
   cardLabel,
+  setCardDone,
+  KanbanLane,
   newStatus,
   anchorStart,
   anchorEnd,
@@ -248,6 +250,8 @@ export class GanttView extends ItemView {
   private readOnlySeen = ""; // 読むだけのタスクの一覧（役割が変わったか見るため）/ the read-only tasks last seen (to tell when a role changed)
   private conflicts = new Set<string>(); // 依存が守られていない後続（表の札用・矢印の有無に関係なく）/ successors whose dependency is broken (for the table's tag, arrows or not)
   private ints: Interruptions = { interrupted: new Map(), resume: new Map() }; // 割り込みと再開待ち / interruptions and work waiting to be resumed
+  private cardFocus: string | null = null; // チェックしたカードの行（描き直した後もそこへフォーカスを戻す）/ the line of the card just ticked (focus goes back to it after the redraw)
+  private cardsOpen = false; // パネルの「すべてのカード」を開いているか（チェックで描き直しても閉じない）/ whether the panel's card list is open (a tick's redraw keeps it open)
   // カンバンの今か次のカードと列。ファイルの更新時刻ごとに覚え、変わったボードだけ読み直す / each kanban's current or next card and lane, kept per file mtime so only changed boards are read again
   private cardSteps = new Map<string, { mtime: number; started?: string; step: CardStep }>();
   private exporting = false; // PNG の書き出し中 / a PNG export is running
@@ -522,7 +526,7 @@ export class GanttView extends ItemView {
     const t = this.tasks.find((x) => x.path === path);
     if (!t) return this.closeDetail();
     const ae = activeDocument.activeElement;
-    if (ae && ae !== this.detailEl && this.detailEl.contains(ae) && ae.matches("input, textarea, select")) return;
+    if (ae && ae !== this.detailEl && this.detailEl.contains(ae) && ae.matches("input:not([type=checkbox]), textarea, select")) return; // a checkbox has already saved
     if (this.panelSig !== this.sigOf(t, await readBody(this.app, path))) await this.openDetail(path);
   }
 
@@ -3276,7 +3280,7 @@ export class GanttView extends ItemView {
   private lockIfReadOnly(d: HTMLElement, path: string): void {
     if (!this.readOnly(path)) return;
     d.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>(
-      ".ogantt-detail-head input, .ogantt-detail-meta input, .ogantt-detail-meta select, .ogantt-detail-meta textarea, .ogantt-detail-meta button, .ogantt-detail-body textarea, .ogantt-attention-btn",
+      ".ogantt-detail-head input, .ogantt-exec input, .ogantt-detail-meta input, .ogantt-detail-meta select, .ogantt-detail-meta textarea, .ogantt-detail-meta button, .ogantt-detail-body textarea, .ogantt-attention-btn",
     ).forEach((el) => (el.disabled = true));
   }
 
@@ -3865,24 +3869,65 @@ export class GanttView extends ItemView {
       const ex = d.createDiv({ cls: "ogantt-exec" });
       if (t.cards) ex.createDiv({ text: tr().cardsChecked(t.cards.done, t.cards.total) });
       const { statuses, autoStatus } = this.plugin.settings;
-      const step = kanbanStep(kanbanLanes(this.app.metadataCache.getFileCache(file), text), statuses, autoStatusTargets(statuses, autoStatus).started);
+      const lanes = kanbanLanes(this.app.metadataCache.getFileCache(file), text);
+      const step = kanbanStep(lanes, statuses, autoStatusTargets(statuses, autoStatus).started);
       if (step.card) ex.createDiv({ cls: "ogantt-exec-card", text: (step.now ? tr().nowStep : tr().nextStep)(isolate(step.card)) });
       if (step.stage) ex.createDiv({ cls: "ogantt-exec-stage", text: step.stage, attr: { dir: "auto" } });
-      // 部長が中身を見たいとき：全部のカードを列ごとに（読むだけ・畳んである）。編集と並べ替えはボードで
-      // for a section head who wants the specifics: every card, lane by lane (read-only, collapsed); editing and reordering happen on the board
-      const lanes = kanbanLanes(this.app.metadataCache.getFileCache(file), text);
+      // 中身を見たいとき：全部のカードを列ごとに。チェックはここで付け外しでき（取り消し可）、文字の編集と並べ替えはボードで
+      // for the specifics: every card, lane by lane. A card can be checked here (undoable); editing its text and reordering happen on the board
       const count = lanes.reduce((n, l) => n + l.cards.length, 0);
       if (count) {
-        const all = ex.createEl("details", { cls: "ogantt-exec-all" });
-        all.createEl("summary", { text: tr().allCards(count) });
-        for (const lane of lanes) {
-          all.createDiv({ cls: "ogantt-exec-lane", text: lane.title, attr: { dir: "auto" } });
-          const ul = all.createEl("ul", { cls: "ogantt-exec-cards" });
+        // ボード全体で一つの向き（ヘブライ語などが多ければ右から）。行ごとに向きが揺れない / one direction for the whole board (right-to-left when mostly Hebrew and the like), so rows don't flip one by one
+        const words = lanes.map((l) => l.title + " " + l.cards.map((c) => c.text).join(" ")).join(" ");
+        const dir = (words.match(/[\p{Script=Hebrew}\p{Script=Arabic}]/gu)?.length ?? 0) * 2 > (words.match(/\p{L}/gu)?.length ?? 0) ? "rtl" : "ltr";
+        let marked = false; // 今か次のカードを 1 枚だけ目立たせる / the current or next card is marked once
+        const tick = (c: KanbanLane["cards"][number], done: boolean) => void this.mutate(tr().undoEdit(t.name), [t.path], async () => {
+          let stale = false;
+          await this.app.vault.process(file, (s) => setCardDone(s, c.line, c.text, done) ?? ((stale = true), s));
+          if (stale) {
+            new Notice(tr().cardStale);
+            void this.refresh();
+          }
+          return !stale;
+        });
+        const cards = (host: HTMLElement, lane: KanbanLane) => {
           for (const c of lane.cards) {
-            // 行ごとに文字の向きで並ぶ（ヘブライ語のカードはチェックが右）/ each row follows its text's direction (a Hebrew card has its check on the right)
-            const li = ul.createEl("li", { cls: c.done ? "is-done" : "", attr: { dir: "auto" } });
-            setIcon(li.createSpan({ cls: "ogantt-exec-check", attr: { "aria-label": c.done ? tr().cardChecked : tr().cardOpen } }), c.done ? "check-square" : "square");
-            li.createSpan({ text: cardLabel(c.text) });
+            const next = !marked && !c.done && lane.title === step.stage && cardLabel(c.text) === step.card;
+            if (next) marked = true;
+            // ラベルで包むので文字を押してもチェックが切り替わる / wrapped in a label, so a click on the text toggles it too
+            const row = host.createEl("label", { cls: "ogantt-exec-item" + (c.done ? " is-done" : "") + (next ? " is-next" : "") });
+            const box = row.createEl("input", { type: "checkbox" });
+            box.checked = c.done;
+            box.onchange = () => { this.cardFocus = `${t.path}:${c.line}`; tick(c, box.checked); };
+            if (this.cardFocus === `${t.path}:${c.line}`) {
+              this.cardFocus = null;
+              window.setTimeout(() => box.focus({ preventScroll: true }));
+            }
+            row.createSpan({ text: cardLabel(c.text), attr: { dir: "auto" } });
+          }
+        };
+        const counted = (lane: KanbanLane) => `${lane.cards.filter((c) => c.done).length}/${lane.cards.length}`;
+        if (this.plugin.settings.cardView === "board") {
+          // Kanban と同じ横並びの列（列の順は Kanban どおり左から）/ side-by-side lanes like the Kanban plugin (in its left-to-right order)
+          const board = ex.createDiv({ cls: "ogantt-kanban" });
+          for (const lane of lanes) {
+            const col = board.createDiv({ cls: "ogantt-kanban-lane", attr: { dir } });
+            const head = col.createDiv({ cls: "ogantt-kanban-title" });
+            head.createSpan({ text: lane.title });
+            head.createSpan({ cls: "ogantt-exec-count", text: counted(lane) });
+            cards(col, lane);
+          }
+        } else {
+          const all = ex.createEl("details", { cls: "ogantt-exec-all" });
+          all.open = this.cardsOpen;
+          all.ontoggle = () => (this.cardsOpen = all.open);
+          all.createEl("summary", { text: tr().allCards(count) });
+          const list = all.createDiv({ attr: { dir } });
+          for (const lane of lanes) {
+            const head = list.createDiv({ cls: "ogantt-exec-lane" });
+            head.createSpan({ text: lane.title });
+            head.createSpan({ cls: "ogantt-exec-count", text: counted(lane) });
+            cards(list.createDiv({ cls: "ogantt-exec-cards" }), lane);
           }
         }
       }

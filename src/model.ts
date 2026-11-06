@@ -657,7 +657,7 @@ export function newStatus(statuses: StatusDef[], label: string): StatusDef {
 
 export interface KanbanLane {
   title: string;
-  cards: { text: string; done: boolean }[];
+  cards: { text: string; done: boolean; line: number }[]; // line: ノートの行（0 始まり）/ the card's line in the note (0-based)
 }
 
 // カンバンの今と次のカード、とそのカードがある列（工程）。列の名前がステータス（ラベルか id）と同じなら、その種類で読む（このプラグインが
@@ -709,9 +709,20 @@ export function kanbanLanes(cache: CachedMetadata | null, text = ""): KanbanLane
     const line = li.position.start.line;
     if (li.parent >= 0 || line <= first || line >= end) continue;
     const raw = text.slice(li.position.start.offset, li.position.end.offset).split("\n")[0];
-    lanes.filter((l) => l.line < line).pop()?.cards.push({ text: raw.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[.\]\s+)?/, "").trim(), done: li.task !== undefined && li.task !== " " });
+    lanes.filter((l) => l.line < line).pop()?.cards.push({ text: raw.replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[.\]\s+)?/, "").trim(), done: li.task !== undefined && li.task !== " ", line });
   }
   return lanes.map(({ title, cards }) => ({ title, cards }));
+}
+
+// カード 1 枚のチェックを付け外しした全文。その行がもう同じカードでなければ null（読んだ後にボードが書き換わった）。チェックボックスの無いカードには付ける
+// the note's text with one card checked or unchecked; null when that line no longer holds the same card (the board changed after it was read).
+// A card without a checkbox gets one
+export function setCardDone(text: string, line: number, card: string, done: boolean): string | null {
+  const lines = text.split("\n");
+  const m = /^(\s*(?:[-*+]|\d+[.)])\s+)(?:\[.\]\s+)?([^\n]*)$/.exec(lines[line] ?? "");
+  if (!m || m[2].trim() !== card) return null;
+  lines[line] = `${m[1]}[${done ? "x" : " "}] ${m[2]}`;
+  return lines.join("\n");
 }
 
 // タスク（ファイル）をリネーム。リンクも更新される / rename the task file (updates links)

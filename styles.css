@@ -1987,32 +1987,79 @@ button.ogantt-board-cue:hover {
   cursor: pointer;
   color: var(--text-muted);
 }
-.ogantt-exec-lane {
+.ogantt-exec-lane,
+.ogantt-kanban-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   margin-top: 8px;
   font-weight: var(--font-semibold);
   color: var(--text-muted);
 }
-.ogantt-exec-cards {
-  margin: 2px 0 0;
-  padding: 0;
-  list-style: none;
+/* 列ごとのチェック数（目立たせない）/ a lane's checked count, kept quiet */
+.ogantt-exec-count {
+  font-weight: normal;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
-.ogantt-exec-cards li {
+.ogantt-exec-cards {
+  margin-top: 2px;
+}
+/* カード 1 枚：押すとチェックが切り替わる / one card: a click toggles its check */
+.ogantt-exec-item {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  padding: 2px 0;
+  padding: 3px 6px;
+  border-radius: var(--radius-s);
+  border-inline-start: 2px solid transparent;
+  cursor: pointer;
 }
-.ogantt-exec-cards li.is-done {
-  color: var(--text-faint);
+.ogantt-exec-item:hover {
+  background: var(--background-modifier-hover);
 }
-.ogantt-exec-check,
-.ogantt-exec-check .svg-icon {
-  display: inline-flex;
+.ogantt-exec-item input {
   flex: none;
-  width: 14px;
-  height: 14px;
-  margin-top: 2px;
+  margin: 2px 0 0;
+}
+.ogantt-exec-item.is-done {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+/* 今か次のカード（要約の「次」と同じ 1 枚）/ the current or next card (the same one the summary names) */
+.ogantt-exec-item.is-next {
+  border-inline-start-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  font-weight: var(--font-semibold);
+}
+/* Kanban と同じ横並びの列（設定で選んだとき）/ side-by-side lanes like Kanban (when chosen in settings) */
+.ogantt-kanban {
+  align-self: stretch;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  font-size: var(--font-ui-smaller);
+}
+.ogantt-kanban-lane {
+  flex: 1 0 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+.ogantt-kanban-title {
+  margin: 0 0 2px;
+}
+.ogantt-kanban .ogantt-exec-item {
+  border: 1px solid var(--background-modifier-border);
+  border-inline-start-width: 2px;
+  background: var(--background-primary);
+}
+.ogantt-kanban .ogantt-exec-item.is-next {
+  border-inline-start-color: var(--interactive-accent);
 }
 /* 読むだけの部屋（Vault Rooms）のノート：パネルの先頭に一行。入力は止める / a note in a read-only room (Vault Rooms): one line at the top of the panel; inputs are disabled */
 .ogantt-readonly {
