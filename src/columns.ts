@@ -60,7 +60,7 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
     kind: "name",
     id: "name",
     label: () => tr().colTask,
-    width: 160,
+    width: 240, // 表が主な読み場所：名前・例外の札・サブタスクの要約が並ぶ / the table is the main reading surface: name, exception tag and subtask summary share it
     optional: false,
     sortKey: (t) => t.name.toLowerCase(),
   },

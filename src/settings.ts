@@ -149,8 +149,12 @@ export interface GanttSettings {
     gcalId: string; // イベント ID の保存先 / where the event id is stored
     gcal: string; // オプトインフラグ / the opt-in flag
     canvas: string; // キャンバス型タスクの .canvas へのリンク / a canvas task's link to its .canvas
+    priority: string; // 優先度（urgent で割り込みの急ぎ仕事）/ priority (urgent marks interrupting work)
   };
 }
+
+// この端末の利用者の名前（「自分の仕事」用。端末ごとで同期しない）/ this device's user name (for "My work"; per device, never synced)
+export const ME_KEY = "task-gantt-me";
 
 // ボードの表示の組み立て（開き直しても保つ）/ a board's view setup, kept across reopening
 export interface BoardState {
@@ -163,6 +167,7 @@ export interface BoardState {
   showDeps: boolean; // 依存の矢印を描くか / whether dependency arrows are drawn
   showTags: boolean; // バーにタグを出すか / whether tags show on the bars
   collapsed: string[];
+  expanded?: string[]; // 開いた親タスク（パス。親は既定で畳む）/ expanded parent tasks (paths; parents start collapsed)
   order?: string[]; // 手で決めた行の並び（タスクのパス）/ the manual row order (task paths)
   disabled?: string[]; // 止めたタスク（パス。ノートには書かない）/ disabled tasks (paths; nothing is written to the notes)
 }
@@ -194,8 +199,9 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   autoScheduleFS: true,
   autoStatus: { enabled: false, started: "", finished: "", notStarted: [], fired: {} },
   detailWidth: 380,
-  visibleColumns: ["start", "end"],
-  columnOrder: [],
+  // 一目で要るもの：担当・ステータス・進捗・期限（開始はバーが示す）/ what a glance needs: assignee, status, progress, due (the bar shows the start)
+  visibleColumns: ["assignee", "status", "progress", "end"],
+  columnOrder: ["assignee", "status", "progress", "end", "start", "duration", "tags"], // 誰が・どの状態・どこまで・いつまで / who, what state, how far, by when
   columnWidths: {},
   sortBy: "start",
   sortDir: "asc",
@@ -247,6 +253,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
     gcalId: "gcalId",
     gcal: "gcal",
     canvas: "canvas",
+    priority: "priority",
   },
 };
 
@@ -499,6 +506,12 @@ export class GanttSettingTab extends PluginSettingTab {
   }
 
   // 稲妻線の色（パレット＋既定に戻すボタン）/ progress line color (palette + reset to default)
+  // この端末の名前は data.json ではなく端末のローカルストレージへ（共有の Vault で人ごとに違う）/ this device's name lives in local storage, not data.json (it differs per person in a shared vault)
+  private ctlMe(setting: Setting): void {
+    const app = this.plugin.app;
+    setting.addText((t) => t.setValue((app.loadLocalStorage(ME_KEY) as string | null) ?? "").onChange((v) => app.saveLocalStorage(ME_KEY, v.trim() || null)));
+  }
+
   private ctlProgressLineColor(setting: Setting): void {
     const s = this.plugin.settings;
     this.ctlColor(setting, () => s.progressLineColor || DEFAULT_SETTINGS.progressLineColor, (c) => (s.progressLineColor = c))
@@ -955,6 +968,7 @@ export class GanttSettingTab extends PluginSettingTab {
       { name: tr().setRecurseName, desc: tr().setRecurseDesc, render: (x) => this.ctlRecurse(x) },
       { name: tr().setDefaultZoomName, render: (x) => this.ctlZoom(x) },
       { name: tr().setDateFormatName, render: (x) => this.ctlDateFormat(x) },
+      { name: tr().setMeName, desc: tr().setMeDesc, render: (x) => this.ctlMe(x) },
       { name: tr().setTimezoneName, desc: tr().setTimezoneDesc, render: (x) => this.ctlTimezone(x) },
       { name: tr().setNonWorkingDaysName, desc: tr().setNonWorkingDaysDesc, render: (x) => this.ctlNonWorkingDays(x) },
       { name: tr().setAutoScheduleFSName, desc: tr().setAutoScheduleFSDesc, render: (x) => this.ctlAutoScheduleFS(x) },

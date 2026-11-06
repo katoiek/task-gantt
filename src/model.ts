@@ -301,6 +301,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       startTime: ps?.time,
       endTime: pe?.time,
       endFilled: endFilled || undefined,
+      priority: fmText(fm[k.priority]) || undefined,
       status: fm[k.status] != null ? String(fm[k.status]) : undefined,
       assignees: fmList(fm[k.assignee]),
       kind,
@@ -483,15 +484,15 @@ export function buildRows(
     for (const r of roots) mark(r.path);
 
     const emitted = new Set<string>();
-    const emit = (task: Task, d: number) => {
+    const emit = (task: Task, d: number, sub = false) => {
       if (emitted.has(task.path)) return; // 重複ガード / dup guard
       emitted.add(task.path);
       const children = childrenOf(task.path);
       const has = children.length > 0;
       const span = has ? spanOf(subtree(task, new Set())) : undefined;
-      rows.push({ kind: "task", group: node.name, depth: d, task, key: has ? task.path : undefined, span, hasChildren: has });
+      rows.push({ kind: "task", group: node.name, depth: d, task, key: has ? task.path : undefined, span, hasChildren: has, sub: sub || undefined });
       // 折りたたみ中は子を出さない / hide children while collapsed
-      if (has && !collapsed.has(task.path)) for (const c of children) emit(c, d + 1);
+      if (has && !collapsed.has(task.path)) for (const c of children) emit(c, d + 1, true);
     };
     for (const r of roots) emit(r, depth);
     // フォレストに到達できない＝循環で孤立したタスクだけトップレベルで出す / surface only cycle-orphaned tasks

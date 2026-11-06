@@ -1,6 +1,6 @@
 // フィルタ判定（matchFilter / applyFilters）とグループ再マッピング（regroup）の検証
 // Tests for filter matching (matchFilter / applyFilters) and group remapping (regroup)
-import { matchFilter, applyFilters, regroup, besideHeading, isOverdue } from "./filter.mjs";
+import { matchFilter, applyFilters, regroup, besideHeading, isOverdue, isUrgent, interruptedPaths, exceptionOf, subtaskSummary, urgentFirst, strongest } from "./filter.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -115,6 +115,36 @@ check("overdue: no status counts as open", isOverdue(due("2024-09-30"), STATUSES
 check("not overdue: completed or cancelled",
   !isOverdue(due("2024-09-30", "done"), STATUSES, OCT1) && !isOverdue(due("2024-09-30", "drop"), STATUSES, OCT1));
 check("not overdue: due today, or no dates", !isOverdue(due("2024-10-01", "todo"), STATUSES, OCT1) && !isOverdue(task({ name: "n" }), STATUSES, OCT1));
+
+// ── 急ぎ・割り込み・例外・サブタスクの要約 / urgent, interrupted, exceptions, subtask summary ──
+const U = (o) => task({ name: "u", ...o });
+check("urgent: urgent / expedite / דחוף in any case; other priorities are normal work",
+  isUrgent(U({ priority: "Urgent" })) && isUrgent(U({ priority: " expedite " })) && isUrgent(U({ priority: "דחוף" })) && !isUrgent(U({ priority: "high" })) && !isUrgent(U({})));
+const ST = [...STATUSES, { id: "doing", label: "Doing", color: "#00f", group: "active" }, { id: "hold", label: "Blocked", color: "#f00", group: "deferred" }];
+const hot = U({ name: "Hotfix", path: "hot.md", priority: "urgent", status: "doing", assignees: ["[[Dana]]"], start: "2024-09-30", end: "2024-10-30" });
+const cur = U({ name: "Adapter", path: "cur.md", status: "doing", assignees: ["Dana"], start: "2024-09-20", end: "2024-10-30" });
+const later = U({ name: "Later", path: "later.md", status: "doing", assignees: ["Dana"], start: "2024-10-20" });
+const held = U({ name: "Held", path: "held.md", status: "hold", assignees: ["Dana"], start: "2024-09-20", end: "2024-10-30" });
+const other = U({ name: "Other", path: "other.md", status: "doing", assignees: ["Eli"], start: "2024-09-20", end: "2024-10-30" });
+const ip = interruptedPaths([hot, cur, later, held, other], ST, OCT1);
+check("interrupted: the same person's other started, active work only", [...ip].join() === "cur.md");
+check("interrupted: nothing once the urgent task is done", interruptedPaths([{ ...hot, status: "done" }, cur], ST, OCT1).size === 0);
+check("interrupted: an urgent task that hasn't started yet interrupts nobody", interruptedPaths([{ ...hot, start: "2024-10-05" }, cur], ST, OCT1).size === 0);
+const late = U({ path: "late.md", status: "doing", end: "2024-09-01", priority: "urgent" });
+check("exception: urgent wins over overdue", exceptionOf(late, ST, OCT1, new Set(), new Set()) === "urgent");
+check("exception: overdue, then dependency, then interrupted",
+  exceptionOf({ ...late, priority: undefined }, ST, OCT1, new Set(["late.md"]), new Set(["late.md"])) === "overdue"
+  && exceptionOf(cur, ST, OCT1, new Set(["cur.md"]), ip) === "dependency" && exceptionOf(cur, ST, OCT1, new Set(), ip) === "interrupted");
+check("exception: none for finished or blocked work",
+  exceptionOf({ ...late, status: "done" }, ST, OCT1, new Set(), new Set()) === undefined && exceptionOf(held, ST, OCT1, new Set(), new Set()) === undefined);
+const kids = [U({ name: "a", status: "done" }), U({ name: "b", status: "drop" }), U({ name: "c", status: "todo" }), U({ name: "d" })];
+const sum = subtaskSummary(kids, ST);
+check("subtask summary: done/total without cancelled, next = first outstanding in order", sum.done === 1 && sum.total === 3 && sum.next?.name === "c");
+check("subtask summary: no next when all are done", subtaskSummary([kids[0]], ST).next === undefined);
+const byName = (a, b) => a.name.localeCompare(b.name);
+check("strongest exception wins, none when none", strongest([undefined, "interrupted", "overdue"]) === "overdue" && strongest([undefined]) === undefined);
+check("urgent first among siblings; finished urgent work sorts normally",
+  [U({ name: "b" }), U({ name: "z", priority: "urgent" }), U({ name: "a", priority: "urgent", status: "done" })].sort(urgentFirst(ST, byName)).map((t) => t.name).join() === "z,a,b");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

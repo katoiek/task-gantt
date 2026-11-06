@@ -159,6 +159,8 @@ check("親のロールアップ span = 3/1..3/8", pRow.span?.start === "2026-03-
 // 親を畳むと子が消える（キー＝親パス）/ collapsing the parent hides the child
 const nestCollapsed = buildRows(sub, new Set(["p/F/Parent.md"]), [], undefined, true);
 check("親を畳むと子が消える", !nestCollapsed.some((r) => r.task?.name === "Child"));
+// 入れ子の子には sub の印 / a nested child is marked sub
+check("入れ子の子だけ sub", cRow.sub === true && !pRow.sub);
 
 // nest=false（既定）では親子は同じ深さのフラット / without nesting, siblings stay flat
 const flatRows = buildRows(sub);

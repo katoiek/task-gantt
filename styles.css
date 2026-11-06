@@ -716,6 +716,77 @@ button.ogantt-legend-chip {
 .ogantt-tr.is-disabled {
   opacity: 0.5;
 }
+/* 階層：親は太字、入れ子のサブタスクは親の印の下から縦の線、終わったものは控えめ / hierarchy: parents bold, a guide line under the parent's chevron for nested subtasks, finished rows subdued */
+.ogantt-tr.is-parent .ogantt-name-text {
+  font-weight: var(--font-semibold);
+}
+.ogantt-tr.is-sub .ogantt-td-name {
+  background: linear-gradient(var(--background-modifier-border-hover), var(--background-modifier-border-hover)) no-repeat calc(var(--ogantt-indent) - 9px) 0 / 1px 100%;
+}
+.ogantt-tr.is-done .ogantt-name-text {
+  color: var(--text-muted);
+}
+/* 色の意味が表の列に出ているときは凡例を出さない / no legend while a table column spells out the colours */
+.ogantt-legend.is-hidden {
+  display: none;
+}
+/* 例外の札（1 行に 1 つ・印と言葉）。色が付くのは急ぎと期限切れだけ / the exception tag (one per row, icon and word); only urgent and overdue are coloured */
+.ogantt-exc {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  /* 狭いときは名前より先に縮み、印だけ残る（言葉は title に）/ when narrow it shrinks before the name, down to its icon (the word stays in the title) */
+  flex: 0 1000 auto;
+  min-width: 22px;
+  overflow: hidden;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-s);
+  font-size: var(--font-smallest);
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ogantt-exc.is-urgent .ogantt-exc-icon {
+  color: var(--color-orange);
+}
+.ogantt-exc.is-overdue .ogantt-exc-icon {
+  color: var(--color-red);
+}
+.ogantt-exc-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ogantt-exc-icon,
+.ogantt-exc-icon .svg-icon {
+  display: inline-flex;
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+.ogantt-exc.is-urgent,
+.ogantt-exc.is-overdue {
+  color: var(--text-normal); /* 小さい文字は本文色で（コントラスト）。色は印と下地だけ / small text stays in the body colour (contrast); colour goes to the icon and tint */
+}
+.ogantt-exc.is-urgent {
+  background: rgba(var(--color-orange-rgb), 0.14);
+  font-weight: var(--font-semibold);
+}
+.ogantt-exc.is-overdue {
+  background: rgba(var(--color-red-rgb), 0.12);
+}
+/* 親のサブタスクの要約（名前より先に縮む）/ a parent's subtask summary (shrinks before the name does) */
+.ogantt-subtask-sum {
+  flex: 0 10000 auto;
+  min-width: 0;
+  margin-left: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: var(--font-smallest);
+  unicode-bidi: plaintext;
+}
 .ogantt-bar-g.is-disabled {
   opacity: 0.35;
 }
@@ -1954,15 +2025,16 @@ button.ogantt-dep-add {
   stroke: var(--color-red);
   stroke-width: 2;
 }
-/* 見出しの件数は控えめに、期限切れがあるときだけ赤 / a heading's counts stay quiet, red only when something is overdue */
+/* 見出しの件数は控えめに、期限切れや急ぎがあるときは本文色の太字 / a heading's counts stay quiet; bold body text when something is overdue or urgent */
 .ogantt-group-count {
   font-weight: 400;
   font-size: var(--font-smallest);
   color: var(--text-muted);
   white-space: nowrap;
 }
-.ogantt-group-count.is-overdue {
-  color: var(--color-red);
+.ogantt-group-count.is-alert {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
 }
 /* 詳細パネルのカンバンの進捗（表の進捗列と同じメーター）/ a kanban's progress in the detail panel (the Progress column's own meter) */
 .ogantt-progress-field .ogantt-td-progress {

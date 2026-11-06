@@ -129,8 +129,9 @@ export default class GanttPlugin extends Plugin {
       // 手の並びと止めたタスク（キーはパス）も / the manual order and disabled tasks (keyed by path) too
       const order = movePaths(b.order ?? [], from, to);
       const disabled = movePaths(b.disabled ?? [], from, to);
-      if (collapsed.some((k, i) => k !== b.collapsed[i]) || order.some((k, i) => k !== b.order?.[i]) || disabled.some((k, i) => k !== b.disabled?.[i])) {
-        boards[key] = { ...b, collapsed, order, disabled };
+      const expanded = movePaths(b.expanded ?? [], from, to);
+      if (collapsed.some((k, i) => k !== b.collapsed[i]) || order.some((k, i) => k !== b.order?.[i]) || disabled.some((k, i) => k !== b.disabled?.[i]) || expanded.some((k, i) => k !== b.expanded?.[i])) {
+        boards[key] = { ...b, collapsed, order, disabled, expanded };
         moved = true;
       }
       const path = key.startsWith("folder:") ? key.slice(7) : null;

@@ -35,7 +35,7 @@ The UI follows Obsidian's display language. Supported: English, Japanese, Korean
 
 ## View options
 
-The right end of the toolbar shapes how the board is displayed: **Group by**, **Color by**, and the **Display** menu. A thin legend under the toolbar explains the colors.
+The right end of the toolbar shapes how the board is displayed: **Group by**, **Color by**, and the **Display** menu. A thin legend under the toolbar explains the colors; it hides while the table already shows that column (Status when coloring by status, Assignee when coloring by assignee), since the column spells the colors out. Statuses can still be edited in settings.
 
 **Group by** folder, status, assignee or tag, and **color by** status or assignee. **Display** holds what you switch less often, in three sections: **Timeline** (**Dependency arrows**, **Tags on bars**, **Progress line**), **Rows** (**Flat**, **Roll up**, **Show empty folders**) and which table **Columns** to show. Each board remembers all of this, plus which groups are collapsed. Rarer actions, **Export as PNG** and **Reload**, are in the view's **⋯** menu and the command palette. Status never relies on color alone: completed tasks get a ✓ on their label, deferred ones are hatched, and cancelled ones are faded and struck through. **Overdue** tasks (due before today and neither completed nor cancelled) get a red outline and a ⚠ beside the bar. The name is only in the table on the left, so the bar is followed by just the marks, the assignees and the tags. Each group heading counts its open and overdue tasks (*5 open · 2 overdue*); grouped by assignee, that is each person's workload. The today line is a solid line in the accent color.
 
@@ -91,9 +91,17 @@ With two or more filters, choose **Show items matching → Match all** (AND) or 
 
 ### Presets
 
-Open **Presets** for one-click filter sets. Built-in presets are **No dates (no bar)**, **Has dates**, **Overdue**, **Unassigned**, **Completed**, and **Incomplete**. The last two read the **status group** rather than status names: *Completed* is everything in the Completed group, and *Incomplete* is everything that is neither Completed nor Cancelled — active work, deferred work, and tasks with no status at all. Build any combination of filters and **save it as a preset** by typing a name — saved presets can be re-applied or deleted, and **Clear filters** removes them all. Filters and presets persist across sessions.
+Open **Presets** for one-click filter sets. **Now & next 2 weeks** keeps outstanding work (blocked and urgent included) that has started or starts within two weeks — the overview for a section head, or for a team leader together with **Group by → Assignee**. **My work** keeps your own outstanding tasks; it appears once you set **Settings → Task Gantt → Your name on this device** (stored on the device only, so each person in a shared vault sets their own). The other built-in presets are **No dates (no bar)**, **Has dates**, **Overdue**, **Unassigned**, **Completed**, and **Incomplete**. The last two read the **status group** rather than status names: *Completed* is everything in the Completed group, and *Incomplete* is everything that is neither Completed nor Cancelled — active work, deferred work, and tasks with no status at all. Build any combination of filters and **save it as a preset** by typing a name — saved presets can be re-applied or deleted, and **Clear filters** removes them all. Filters and presets persist across sessions.
 
 ![Built-in and saved filter presets](docs/images/filter-preset-en.webp)
+
+## At a glance
+
+The table is the main reading surface. A new board shows **Assignee, Status, Progress and Due** next to a wider task name (existing setups keep their columns). Each row carries **at most one exception**, as an icon and a word: **Urgent**, **Overdue** (due before today and not finished), **Dependency conflict** (a predecessor's dates break the link, arrows shown or not) or **Interrupted** (see below). Blocked work is already named in the Status column, so it gets no extra tag. Group headings count *open · overdue · urgent* tasks. On narrow panes a tag shrinks to its icon before a task name is cut, and its word stays in the tooltip.
+
+## Urgent work
+
+Mark unplanned, interrupting work as urgent from the row's right-click menu (**Mark as urgent / Clear urgent**, undoable) or by writing `priority: urgent` in its frontmatter. Urgent work that isn't finished sorts first among its siblings, carries an **Urgent** tag and a ⚡ beside its bar, and is counted in its group heading — group by assignee to see who is handling it. While someone's urgent task is under way, their other running tasks (active, started, not urgent) show **Interrupted**. Nothing is written to those notes: their status stays as it was, and once the urgent task is done the tag disappears, leaving the task to resume exactly where it was. Small tasks outside a project stay normal queued work unless you mark them.
 
 ## Moving tasks between folders
 
@@ -101,7 +109,7 @@ When grouped by folder, **drag a task row** onto a folder to move the task into 
 
 ## Subtasks
 
-Give a task a `parent` (a single wikilink to another task) and it nests under that parent in the table, with a chevron to collapse or expand. When grouped by folder, **drag a task onto another task** to make it a subtask — it moves into the parent's folder with its whole subtree; **drag it onto a folder** to detach it back to the top level. Cycles are blocked, and every move is undoable. The **Roll up** toggle draws a parent's bar (and its Start/Due cells) as the span of its descendants. Set or clear the parent from the detail panel.
+Give a task a `parent` (a single wikilink to another task) and it nests under that parent in the table — under every grouping except Flat — joined by a thin guide line. **Parents start collapsed**: the chevron expands one inline (or →/← on the keyboard), the title still opens the detail panel, and the board remembers which parents you opened. A parent shows its subtasks' progress and next step beside its name (*2/5 · Next: Adapter tests*: done of all, cancelled left out, then the first outstanding subtask in order), and while collapsed it also carries its subtasks' strongest exception, so an overdue step isn't hidden. When grouped by folder, **drag a task onto another task** to make it a subtask — it moves into the parent's folder with its whole subtree; **drag it onto a folder** to detach it back to the top level. Cycles are blocked, and every move is undoable. The **Roll up** toggle draws a parent's bar (and its Start/Due cells) as the span of its descendants. Set or clear the parent from the detail panel.
 
 ## Tags
 
@@ -168,6 +176,7 @@ The body is the task description (shown in the detail panel).
 | `progress` | Progress 0–100 (fill inside the bar; editable with the detail-panel slider, or by double-clicking the **Progress** column). |
 | `after` | Array of wikilinks to predecessors (dependency arrows; violations turn red). |
 | `milestone` | `true` for a diamond (zero duration). |
+| `priority` | `urgent` (or `expedite`, `דחוף`, any case) marks [urgent interrupting work](#urgent-work). Other values (`high`, …) are normal work. |
 | `gcal` | `true` opts the task into [Google Calendar sync](#google-calendar-sync-optional-desktop-only) (only used when **Sync flagged tasks only** is on). |
 | `gcalId` | Set automatically once the task is pushed to Google Calendar — the linked event's ID. Don't edit by hand. |
 | `canvas` | Link to a [Canvas task](#task-kinds-note-kanban-canvas)'s `.canvas` (set when the task is created). |

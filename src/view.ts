@@ -1,5 +1,6 @@
 import { Component, ItemView, Keymap, Menu, MarkdownRenderer, PaneType, Platform, Scope, WorkspaceLeaf, normalizePath, setIcon, Notice, TFile, TFolder, ViewStateResult, moment } from "obsidian";
 import type GanttPlugin from "./main";
+import { ME_KEY } from "./settings";
 import { Task, TaskKind, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, DateValue, DateOp, DateField, DateUnit, DateDir, StatusDef, StatusGroup, STATUS_GROUPS } from "./types";
 import {
   collectTasks,
@@ -59,7 +60,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { isConnected } from "./gcal/auth";
-import { applyFilters, besideHeading, isOverdue, regroup, GroupBy } from "./filter";
+import { applyFilters, besideHeading, exceptionOf, interruptedPaths, isOpen, isOverdue, isUrgent, regroup, subtaskSummary, strongest, urgentFirst, Exception, GroupBy } from "./filter";
 import { BoardContext, Move, MutateResult, StatusChange } from "./board";
 import { CellColumn, ColumnDef, allColumns, columnList, columnWidth, disabledLast, manualComparator, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
 
@@ -94,6 +95,9 @@ const BUSY_FILES = 10;
 
 // タスクの種類のアイコン（ノートは付けない）/ task-kind icons (plain notes get none)
 const KIND_ICON: Record<TaskKind, string> = { note: "file-text", kanban: "square-kanban", canvas: "layout-dashboard" };
+// 例外の札の印と言葉 / the icon and word of each exception tag
+const EXC_ICON: Record<Exception, string> = { urgent: "zap", overdue: "alarm-clock", dependency: "unlink", interrupted: "pause" };
+const EXC_TEXT: Record<Exception, () => string> = { urgent: () => tr().excUrgent, overdue: () => tr().excOverdue, dependency: () => tr().excDependency, interrupted: () => tr().excInterrupted };
 
 // 名前の頭文字（アバター用・最大 2 文字）/ initials of a name for an avatar (up to two letters)
 function initials(name: string): string {
@@ -168,6 +172,7 @@ export class GanttView extends ItemView {
   private collapsed = new Set<string>(); // 折りたたみ中フォルダのキー / collapsed folder keys
   private order: string[] = []; // 手で決めた行の並び（タスクのパス。並べ替えが「手動」のとき）/ the manual row order (task paths; used while the sort is "manual")
   private disabled = new Set<string>(); // 止めたタスク（薄く、兄弟の最後に）/ disabled tasks (greyed, last among their siblings)
+  private expanded = new Set<string>(); // 開いた親タスク（パス）。親は既定で畳む / expanded parent tasks (paths); parents start collapsed
 
   // 表示オプション（ボードごとに settings.boards へ覚える）/ view options (remembered per board in settings.boards)
   private colorBy: "status" | "assignee" = "status";
@@ -233,6 +238,8 @@ export class GanttView extends ItemView {
   private assigneeCache: string[] | null = null; // ボードの担当者一覧（描き直しごとに作る）/ the board's assignees, built once per redraw
   private peopleColors: Map<string, string> | null = null; // 担当者の自動の色（同上）/ the assignees' automatic colours (likewise)
   private late: Set<string> | null = null; // 矢印を隠しているときの、依存が守られていない後続 / with arrows hidden, successors whose dependency is broken
+  private conflicts = new Set<string>(); // 依存が守られていない後続（表の札用・矢印の有無に関係なく）/ successors whose dependency is broken (for the table's tag, arrows or not)
+  private interrupted = new Set<string>(); // 急ぎ仕事に割り込まれたタスク / tasks interrupted by urgent work
   private exporting = false; // PNG の書き出し中 / a PNG export is running
   private historyRunning = false; // 取り消し・やり直しの最中 / an undo or redo is running
   private dragging: "bar" | "link" | "column" | null = null; // ドラッグ中のもの（描き直しを待たせる）/ what is being dragged (redraws wait)
@@ -321,10 +328,12 @@ export class GanttView extends ItemView {
       // 手の並びと止めたタスク（キーはパス）も / the manual order and disabled tasks (keyed by path) too
       const order = movePaths(this.order, oldPath, file.path);
       const disabled = movePaths([...this.disabled], oldPath, file.path);
-      if (collapsed.some((k, i) => k !== before[i]) || order.some((k, i) => k !== this.order[i]) || disabled.some((k) => !this.disabled.has(k))) {
+      const expanded = movePaths([...this.expanded], oldPath, file.path);
+      if (collapsed.some((k, i) => k !== before[i]) || order.some((k, i) => k !== this.order[i]) || disabled.some((k) => !this.disabled.has(k)) || expanded.some((k) => !this.expanded.has(k))) {
         this.collapsed = new Set(collapsed);
         this.order = order;
         this.disabled = new Set(disabled);
+        this.expanded = new Set(expanded);
         this.saveBoard();
       }
       if (inScope(oldPath) || inScope(file.path)) this.scheduleRefresh();
@@ -600,6 +609,7 @@ export class GanttView extends ItemView {
     this.collapsed = new Set((b?.collapsed ?? []).map((k) => (/^(folder|status|assignee|tag):/.test(k) ? k : `folder:${k}`)));
     this.order = [...(b?.order ?? [])];
     this.disabled = new Set(b?.disabled ?? []);
+    this.expanded = new Set(b?.expanded ?? []);
     this.groupSel.value = this.groupBy;
     this.colorSel.value = this.colorBy;
   }
@@ -611,7 +621,8 @@ export class GanttView extends ItemView {
     const exists = (p: string) => this.app.vault.getAbstractFileByPath(p) instanceof TFile;
     this.order = this.order.filter(exists);
     this.disabled = new Set([...this.disabled].filter(exists));
-    this.plugin.settings.boards[`folder:${this.folder}`] = { groupBy, colorBy, flat, rollup, progressLine, showEmptyFolders, showDeps, showTags, collapsed: [...this.collapsed], order: this.order, disabled: [...this.disabled] };
+    this.expanded = new Set([...this.expanded].filter(exists));
+    this.plugin.settings.boards[`folder:${this.folder}`] = { groupBy, colorBy, flat, rollup, progressLine, showEmptyFolders, showDeps, showTags, collapsed: [...this.collapsed], order: this.order, disabled: [...this.disabled], expanded: [...this.expanded] };
     this.saveSoon();
   }
 
@@ -649,10 +660,12 @@ export class GanttView extends ItemView {
     } else {
       // フォルダグループ化＋オプションON のときだけ空フォルダもノード化 / seed empty folders only when grouping by folder and the option is on
       const folders = this.showEmptyFolders && this.groupBy === "folder" ? this.allFolders : [];
-      // 親子ネストはフォルダグループ化のときだけ / nest by parent only when grouping by folder
+      // 見出しは畳んだものだけ閉じる。親タスクは開いたもの以外を閉じる（全体を先に、細部は開いてから）。親子はどのグループ化でも入れ子に
+      // headings close only when collapsed; parent tasks stay closed unless expanded (the summary first, details on demand). Subtasks nest under every grouping
       const axis = `${this.groupBy}:`;
-      const shut = new Set([...this.collapsed].filter((k) => k.startsWith(axis)).map((k) => k.slice(axis.length)));
-      this.rows = buildRows(view, shut, folders, compare, this.groupBy === "folder");
+      const shut = new Set([...this.collapsed].filter((k) => k.startsWith(axis) && !k.endsWith(".md")).map((k) => k.slice(axis.length)));
+      for (const t of view) if (t.parent && !this.expanded.has(t.parent)) shut.add(t.parent);
+      this.rows = buildRows(view, shut, folders, compare, true);
     }
     // 描き直してもスクロール位置を保つ。縦はそのまま、横は画面中央の日付で（縮尺を変えても同じ日が中央に残る）
     // keep the scroll position across redraws: vertical as is, horizontal by the date in the middle (a zoom change keeps that day centred)
@@ -701,7 +714,7 @@ export class GanttView extends ItemView {
   private comparator(): (a: Task, b: Task) => number {
     const s = this.plugin.settings;
     const byColumn = taskComparator(this.columns(), s); // "manual" は列に無いので開始日順 / "manual" is no column, so this is by start
-    return disabledLast(this.disabled, s.sortBy === "manual" ? manualComparator(this.order, byColumn) : byColumn);
+    return disabledLast(this.disabled, urgentFirst(s.statuses, s.sortBy === "manual" ? manualComparator(this.order, byColumn) : byColumn));
   }
 
   // 行を兄弟の中で 1 つ上・下へ（並べ替えは「手動」になる）。動かせたら true
@@ -1067,7 +1080,14 @@ export class GanttView extends ItemView {
   // 組み込みプリセット（コード内蔵・削除不可・名前は表示言語で都度生成）/ built-in presets (not deletable)
   private builtinPresets(): FilterPreset[] {
     const today: DateValue = { kind: "preset", preset: "today" };
+    const open: Filter = { kind: "category", field: "statusGroup", op: "isNot", values: ["completed", "cancelled"] };
+    const me = (this.app.loadLocalStorage(ME_KEY) as string | null)?.trim();
     return [
+      // 今と次の 2 週間＝残っている仕事（止まっている・急ぎも）のうち 2 週間以内に始まる（始まった）もの。部長・リーダー向け
+      // now & next 2 weeks = outstanding work (blocked and urgent included) that has started or starts within two weeks; for heads and leads
+      { name: tr().presetNowNext, filterMatch: "all", filters: [open, { kind: "date", field: "start", op: "onOrBefore", value: { kind: "relative", amount: 2, unit: "week", dir: "fromNow" } }] },
+      // 自分の仕事（この端末の名前を設定したときだけ）/ my work (only once this device's name is set)
+      ...(me ? [{ name: tr().presetMyWork, filterMatch: "all" as const, filters: [open, { kind: "category" as const, field: "assignee" as const, op: "is" as const, values: [me] }] }] : []),
       // 日付なし＝開始も期限も未設定（＝ガントバーが出ない）/ no start and no end → no bar
       { name: tr().presetNoDates, filterMatch: "all", filters: [
         { kind: "date", field: "start", op: "empty" },
@@ -1503,6 +1523,11 @@ export class GanttView extends ItemView {
   private renderLegend(): void {
     const legend = this.legendHost;
     legend.empty();
+    // 色の意味が表の列（ステータス・担当者）に文字で出ているときは凡例を出さない（ステータスの編集は設定にもある）
+    // no legend while a table column already spells out what the colours mean (statuses can still be edited in settings)
+    const said = this.visibleColumns().some((c) => c.id === this.colorBy);
+    legend.toggleClass("is-hidden", said);
+    if (said) return;
     for (const k of this.colorKey()) this.legendChip(legend, k.color, k.label, k.edit);
     if (this.colorBy !== "status") return;
     const add = legend.createEl("button", { cls: "ogantt-legend-chip ogantt-legend-add clickable-icon", attr: { "aria-label": tr().setAddStatus } });
@@ -2061,9 +2086,11 @@ export class GanttView extends ItemView {
     const depX = this.showDeps ? this.makeDepX(layer("ogantt-depx-layer")) : null;
     const fill = this.barFill(svg);
     const deps = this.showDeps ? this.depRows() : [];
-    // 矢印を隠しても、依存が守られていない後続はバーの赤い縁で分かる。先行が畳まれていたり絞り込まれていたりしても同じ
-    // with arrows hidden, a successor whose dependency is broken still gets a red outline, even when its predecessor is collapsed or filtered out
-    this.late = this.showDeps ? null : this.lateTasks();
+    // 矢印を隠しても、依存が守られていない後続はバーの破線の縁で分かる。先行が畳まれていたり絞り込まれていたりしても同じ
+    // with arrows hidden, a successor whose dependency is broken still gets a dashed outline, even when its predecessor is collapsed or filtered out
+    this.conflicts = this.lateTasks();
+    this.late = this.showDeps ? null : this.conflicts;
+    this.interrupted = interruptedPaths(this.tasks, this.plugin.settings.statuses, this.today());
 
     // 行かバーにマウスを載せると、同じタスクの行・バー・複製（担当者やタグごとの重複表示）をまとめて強調する
     // hovering a row or bar highlights every row, bar and copy of that task (copies come from grouping by assignee or tag)
@@ -2278,13 +2305,14 @@ export class GanttView extends ItemView {
       const color = this.groupColor(this.groupBy, row.group);
       if (color) ic.style.color = color;
       g.createSpan({ cls: "ogantt-group-name", text: row.group });
-      // 未完了と期限切れの件数（担当者でグループ化すれば一人ずつの仕事量）。止めたタスクは数えない
-      // open and overdue counts (grouped by assignee, each person's load); disabled tasks don't count
+      // 未完了・期限切れ・急ぎの件数（担当者でグループ化すれば一人ずつの仕事量と割り込み）。止めたタスクは数えない
+      // open, overdue and urgent counts (grouped by assignee, each person's load and interruptions); disabled tasks don't count
       const { statuses } = this.plugin.settings;
       const today = this.today();
-      const live = (row.tasks ?? []).filter((t) => !this.disabled.has(t.path) && !["completed", "cancelled"].includes(statusGroupOf(statuses, t.status) ?? ""));
+      const live = (row.tasks ?? []).filter((t) => !this.disabled.has(t.path) && isOpen(t, statuses));
       const late = live.filter((t) => isOverdue(t, statuses, today)).length;
-      if (live.length) g.createSpan({ cls: "ogantt-group-count" + (late ? " is-overdue" : ""), text: tr().headingCount(live.length, late) });
+      const hot = live.filter(isUrgent).length;
+      if (live.length) g.createSpan({ cls: "ogantt-group-count" + (late || hot ? " is-alert" : ""), text: tr().headingCount(live.length, late, hot) });
       // 見出しを右クリック＝色・アイコンを変更（(なし) は除く）/ right-click a heading to change its colour or icon (not "(none)")
       if (!none) g.addEventListener("contextmenu", (e) => this.openStyleMenu(e, this.groupBy, row.group, this.headingKey(row)));
       el.onclick = () => {
@@ -2309,6 +2337,10 @@ export class GanttView extends ItemView {
     if (row.hasChildren && row.key != null) el.setAttr("aria-expanded", String(!this.isCollapsed(row.key)));
     if (t.path === this.selectedPath) el.addClass("is-selected");
     if (this.disabled.has(t.path)) el.addClass("is-disabled");
+    // 親は太字、入れ子のサブタスクは縦の線でつなぐ、終わったものは控えめに / parents in bold, nested subtasks joined by a guide line, finished ones subdued
+    el.toggleClass("is-parent", !!row.hasChildren);
+    el.toggleClass("is-sub", !!row.sub);
+    el.toggleClass("is-done", !isOpen(t, this.plugin.settings.statuses));
     // 表示中の列を順に描画 / render each visible column
     for (const col of cols) {
       if (col.kind !== "name") {
@@ -2319,6 +2351,7 @@ export class GanttView extends ItemView {
       }
       const nameTd = el.createDiv({ cls: "ogantt-td ogantt-td-name" });
       nameTd.style.paddingLeft = `${indent}px`;
+      nameTd.style.setProperty("--ogantt-indent", `${indent}px`);
       // シェブロン枠は常に確保＝親でも単独タスクでも名前位置を揃える。親はボタンで開閉 / always reserve the chevron slot; for a parent it's the toggle button
       if (row.hasChildren && row.key != null) {
         const key = row.key;
@@ -2335,6 +2368,24 @@ export class GanttView extends ItemView {
       // markers for the kind (kanban, canvas) and for shared tasks (2+ assignees) trail the name, so names stay left-aligned
       if (t.kind !== "note") setIcon(nameTd.createSpan({ cls: "ogantt-name-icon", attr: { "aria-label": t.kind === "kanban" ? tr().kindKanban : tr().kindCanvas } }), KIND_ICON[t.kind]);
       if (t.assignees.length > 1) setIcon(nameTd.createSpan({ cls: "ogantt-name-icon", attr: { "aria-label": t.assignees.map(linkLabel).join(", ") } }), "users");
+      // 例外は 1 つだけ、印と言葉で（色だけに頼らない）/ one exception at most, as an icon and a word (never colour alone)
+      // 畳んだ親は、サブタスクの例外も引き受ける（中を開かなくても気づける）/ a collapsed parent also carries its subtasks' exceptions (noticed without expanding)
+      const today = this.today();
+      const excOf = (x: Task) => (this.disabled.has(x.path) ? undefined : exceptionOf(x, this.plugin.settings.statuses, today, this.conflicts, this.interrupted));
+      // 要約と例外は絞り込みに関係なく全部のサブタスクから（並びは画面と同じ）/ the summary and exceptions come from every subtask, filters aside (in screen order)
+      const kids = row.hasChildren ? this.tasks.filter((x) => x.parent === t.path).sort(this.comparator()) : [];
+      const exc = strongest([excOf(t), ...(this.isCollapsed(row.key) ? kids.map(excOf) : [])]);
+      if (exc) {
+        const tag = nameTd.createSpan({ cls: `ogantt-exc is-${exc}`, attr: { title: EXC_TEXT[exc]() } });
+        setIcon(tag.createSpan({ cls: "ogantt-exc-icon", attr: { "aria-hidden": "true" } }), EXC_ICON[exc]);
+        tag.createSpan({ cls: "ogantt-exc-text", text: EXC_TEXT[exc]() });
+      }
+      // 親タスク：サブタスクの進み具合と次の一歩（畳んだままでも分かる）/ a parent: its subtasks' progress and the next step (readable while collapsed)
+      if (kids.length) {
+        const sum = subtaskSummary(kids, this.plugin.settings.statuses);
+        const text = `${sum.done}/${sum.total}` + (sum.next ? ` · ${tr().nextStep(sum.next.name)}` : "");
+        nameTd.createSpan({ cls: "ogantt-subtask-sum", text, attr: { title: text } });
+      }
       // 詳細パネルがこのタスクで開いている状態でのダブルクリック＝その場でリネーム。
       // 閉じている状態では 1 回目のクリックでパネルが開くだけにする（誤ってリネームに入らない）。
       // ダブルクリックの 1 回目でもパネルは開き直されるので、判定は 1 回目を押した瞬間の状態で行う
@@ -2383,15 +2434,18 @@ export class GanttView extends ItemView {
   // 折りたたみの切り替え（表示だけの変更。ボードごとに覚える）/ toggle a group or parent (display only; remembered per board)
   private toggleCollapse(key?: string): void {
     if (key == null) return;
-    const k = `${this.groupBy}:${key}`;
-    if (this.collapsed.has(k)) this.collapsed.delete(k);
-    else this.collapsed.add(k);
+    // 親タスク（キーはノートのパス）は開いたものを覚える。見出しは畳んだものを覚える / parent tasks (keyed by note path) remember being open; headings remember being closed
+    const set = key.endsWith(".md") ? this.expanded : this.collapsed;
+    const k = key.endsWith(".md") ? key : `${this.groupBy}:${key}`;
+    if (set.has(k)) set.delete(k);
+    else set.add(k);
     this.saveBoard();
     this.rerender();
   }
 
   // 今のグループ化の軸で畳んでいるか / whether a row is collapsed under the current grouping
   private isCollapsed(key?: string): boolean {
+    if (key?.endsWith(".md")) return !this.expanded.has(key);
     return key != null && this.collapsed.has(`${this.groupBy}:${key}`);
   }
 
@@ -2477,6 +2531,12 @@ export class GanttView extends ItemView {
     const off = this.disabled.has(t.path);
     m.addItem((it) => it.setTitle(off ? tr().menuEnable : tr().menuDisable).setIcon(off ? "circle-play" : "circle-off").onClick(() =>
       this.setDisabled([t.path], !off, off ? tr().menuEnable : tr().menuDisable)));
+    // 急ぎ（割り込み）の印はノートの優先度に書く（取り消し可）/ urgent (interrupting) goes in the note's priority (undoable)
+    const hot = isUrgent(t);
+    m.addItem((it) => it.setTitle(hot ? tr().menuClearUrgent : tr().menuMarkUrgent).setIcon("zap").onClick(() => void (async () => {
+      await this.mutate(tr().undoEdit(t.name), [t.path], () => writeField(this.app, t.path, this.plugin.settings.keys.priority, hot ? undefined : "urgent"));
+      await this.refresh();
+    })()));
     m.addSeparator();
     m.addItem((i) => i.setTitle(tr().menuDelete).setIcon("trash-2").onClick(() => this.confirmDelete(t.path)));
     if ("clientX" in at) m.showAtMouseEvent(at); // instanceof はポップアウトの窓では成り立たない / instanceof fails across popout windows
@@ -2722,10 +2782,12 @@ export class GanttView extends ItemView {
     });
     if (shown.length) x += 18 + (shown.length - 1) * 10;
     const others = people.length < t.assignees.length; // 見出しの人を省いた / the heading's person was left out
-    const who = people.map(linkLabel).join(", ");
+    // 担当者の列が出ているときは名前を繰り返さず、頭文字の丸だけ / with the Assignee column shown, the initials are enough (no repeated names)
+    const who = !this.bare && this.visibleColumns().some((c) => c.id === "assignee") ? "" : people.map(linkLabel).join(", ");
     let text = who && others ? `+ ${who}` : who;
     // 名前は左の表に常に見えるので繰り返さない。印だけ付ける（期限切れは色だけに頼らず ⚠）/ the name is always in the table on the left, so only the marks are added (overdue gets a ⚠, not colour alone)
-    const mark = this.bare ? "" : group === "completed" ? "✓" : !this.disabled.has(t.path) && isOverdue(t, this.plugin.settings.statuses, this.today()) ? "⚠" : "";
+    const live = !this.bare && group !== "completed" && !this.disabled.has(t.path);
+    const mark = this.bare ? "" : group === "completed" ? "✓" : live && isUrgent(t) && group !== "cancelled" ? "⚡" : live && isOverdue(t, this.plugin.settings.statuses, this.today()) ? "⚠" : "";
     text = [mark, text].filter(Boolean).join(" ");
     if (text) g.appendChild(this.svgEl("text", { x, y: cy + 4, class: "ogantt-bar-label", "font-size": LABEL_PX })).textContent = text;
     // タグはラベルの後ろに小さな札で、タグの色で控えめに（表示メニューで隠せる）/ tags follow the label as small pills, quietly in their colour (hidden from the Display menu)

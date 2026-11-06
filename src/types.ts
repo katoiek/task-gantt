@@ -43,6 +43,7 @@ export interface Task {
   endTime?: string; // HH:mm
   // 期限日が無く、描くために開始日を写した（日付で動く決まりは期限日として数えない）/ no due date in the note: end was copied from start for drawing (date rules don't count it)
   endFilled?: boolean;
+  priority?: string; // 優先度（urgent / expedite / דחוף なら割り込みの急ぎ仕事）/ priority (urgent / expedite / דחוף = urgent interrupting work)
   status?: string; // StatusDef.id を参照
   // 担当者（多値・フロントマターは単一値でもリストでも可）/ assignees (multi-valued; frontmatter may hold one value or a list)
   assignees: string[];
@@ -149,6 +150,7 @@ export interface Row {
   // グループ行/親タスク行のまとめバー範囲（配下の集約）/ rolled-up span for a group or parent-task row
   span?: { start: string; end: string };
   tasks?: Task[]; // グループ行の配下のタスク（見出しの件数用）/ a group row's tasks underneath (for the heading counts)
+  sub?: boolean; // 親の下に入れ子で出ているサブタスク / a subtask nested under its parent
   hasChildren?: boolean; // 親タスク行（子サブタスクを持つ）/ a parent task row (has subtasks)
 }
 
