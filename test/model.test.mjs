@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { bodyOf, withBody, movePaths, buildRows, kanbanLanes, listWith, newStatus, moveCollapsed, cardProgress, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
+import { bodyOf, withBody, movePaths, buildRows, kanbanLanes, listWith, newStatus, moveCollapsed, cardProgress, kanbanStep, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -142,6 +142,14 @@ check("ルート直下のタスクがフォルダより先", mixed[0].kind === "
 // ----- カンバン本文 / kanban bodies -----
 check("カンバン: 列とカードと完了", lanesOf(["## To do", "", "- [ ] Header", "- [ ] Footer", "  - [x] nested, not a card", "", "## Done", "", "**Complete**", "- [x] Setup"].join("\n")) === "To do:Header+Footer | Done:Setup✓");
 check("カンバン: 列より前のリストは無視", lanesOf("- [ ] stray\n## L\n- card") === "L:card");
+
+// カンバンの今と次のカード / a kanban's current and next card
+const KS = [{ id: "todo", label: "To do", group: "active" }, { id: "in-progress", label: "In progress", group: "active" }, { id: "blocked", label: "Blocked", group: "deferred" }, { id: "done", label: "Done", group: "completed" }];
+const lane = (title, ...cards) => ({ title, cards: cards.map((c) => ({ text: c.replace(/^x /, ""), done: c.startsWith("x ") })) });
+check("カンバン: 「始めた」列の最初の未チェックが今", JSON.stringify(kanbanStep([lane("To do", "a"), lane("In progress", "x b", "c"), lane("Done", "x d")], KS, "in-progress")) === '{"now":"c"}');
+check("カンバン: 今が無ければ止めた・完了の列を飛ばして次", JSON.stringify(kanbanStep([lane("Blocked", "z"), lane("To do", "x a", "b"), lane("In progress", "x c")], KS, "in-progress")) === '{"next":"b"}');
+check("カンバン: 工程の列（ステータスでない）は順に読む・書式は外す", JSON.stringify(kanbanStep([lane("שלב 1", "x א"), lane("שלב 2", "[[DB|חיבור]] @{2026-11-10}")], KS, "in-progress")) === '{"next":"חיבור"}');
+check("カンバン: 全部済みなら何も無し", JSON.stringify(kanbanStep([lane("To do", "x a")], KS, "in-progress")) === "{}");
 
 // ----- サブタスク（parent ネスト）/ subtask nesting -----
 const sub = [

@@ -655,6 +655,26 @@ export interface KanbanLane {
   cards: { text: string; done: boolean }[];
 }
 
+// カンバンの中のサブタスクの今と次。列の名前がステータス（ラベルか id）と同じなら、その種類で読む：「始めた」ステータスの列の最初の
+// 未チェックが今。次は、終わった・止めた・中止の列を飛ばした最初の未チェック（工程ごとの列のようにステータスでない列はそのまま順に読む）
+// a kanban's current and next card. A lane named like a status (label or id) is read by that status: the first unchecked card in the
+// "started" status's lane is now. Next is the first unchecked card outside completed, deferred and cancelled lanes (lanes that aren't
+// statuses, such as one per phase, are read in order as they are)
+export function kanbanStep(lanes: KanbanLane[], statuses: StatusDef[], startedId?: string): { now?: string; next?: string } {
+  const statusOf = (title: string) => statuses.find((s) => [s.label, s.id].some((x) => x.trim().toLowerCase() === title.trim().toLowerCase()));
+  const open = (l: KanbanLane) => l.cards.find((c) => !c.done)?.text;
+  const now = lanes.filter((l) => startedId && statusOf(l.title)?.id === startedId).map(open).find(Boolean);
+  if (now) return { now: cardLabel(now) };
+  const next = lanes.filter((l) => (statusOf(l.title)?.group ?? "active") === "active").map(open).find(Boolean);
+  return next ? { next: cardLabel(next) } : {};
+}
+
+// カードの文字から Kanban の書式を外す：[[a|b]] → b、[[a]] → a、@{日付} @@{時刻} @[[日付]] は消す
+// card text without the Kanban markup: [[a|b]] → b, [[a]] → a, and @{date} @@{time} @[[date]] dropped
+function cardLabel(text: string): string {
+  return text.replace(/@{1,2}(\{[^}]*\}|\[\[[^\]]*\]\])/g, "").replace(/\[\[([^\]|]*\|)?([^\]]*)\]\]/g, "$2").replace(/\s+/g, " ").trim();
+}
+
 // チェックしたカードの割合（%）。100% は全部、0% は 1 枚も無いときだけ（199/200 を 100% に丸めない）
 // the share of checked cards in %; 100% only when all are done and 0% only when none are (199/200 doesn't round up to 100%)
 export function cardProgress(done: number, total: number): number {

@@ -27,12 +27,13 @@ import {
   readBody,
   bodyOf,
   kanbanLanes,
+  kanbanStep,
   newStatus,
   anchorStart,
   anchorEnd,
   statusGroupOf,
 } from "./model";
-import { autoStatusChanges, renameAutoStatusId, cascadeDates, depViolated, endForDuration, isWorkday, keepDurationOnStartChange, offDayGradient, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
+import { autoStatusChanges, autoStatusTargets, renameAutoStatusId, cascadeDates, depViolated, endForDuration, isWorkday, keepDurationOnStartChange, offDayGradient, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
 import {
   DateRange,
   computeRange,
@@ -240,6 +241,7 @@ export class GanttView extends ItemView {
   private late: Set<string> | null = null; // 矢印を隠しているときの、依存が守られていない後続 / with arrows hidden, successors whose dependency is broken
   private conflicts = new Set<string>(); // 依存が守られていない後続（表の札用・矢印の有無に関係なく）/ successors whose dependency is broken (for the table's tag, arrows or not)
   private interrupted = new Set<string>(); // 急ぎ仕事に割り込まれたタスク / tasks interrupted by urgent work
+  private cardSteps = new Map<string, { now?: string; next?: string }>(); // カンバンの中の今と次のカード（読み直しごと）/ each kanban's current and next card (per reload)
   private exporting = false; // PNG の書き出し中 / a PNG export is running
   private historyRunning = false; // 取り消し・やり直しの最中 / an undo or redo is running
   private dragging: "bar" | "link" | "column" | null = null; // ドラッグ中のもの（描き直しを待たせる）/ what is being dragged (redraws wait)
@@ -498,6 +500,7 @@ export class GanttView extends ItemView {
       this.updateUndoButton();
     }
     this.tasks = collectTasks(this.app, this.plugin.settings, this.folder);
+    await this.readCardSteps();
     this.allFolders = collectFolders(this.app, this.plugin.settings, this.folder);
     this.rerender();
     // 日付による自動ステータスはボードを開いたときに頼む（読み直しのたびには回さない）/ automatic status is requested when a board opens (not on every reload)
@@ -2381,11 +2384,12 @@ export class GanttView extends ItemView {
         tag.createSpan({ cls: "ogantt-exc-text", text: EXC_TEXT[exc]() });
       }
       // 親タスク：サブタスクの進み具合と次の一歩（畳んだままでも分かる）/ a parent: its subtasks' progress and the next step (readable while collapsed)
-      if (kids.length) {
-        const sum = subtaskSummary(kids, this.plugin.settings.statuses);
-        const text = `${sum.done}/${sum.total}` + (sum.next ? ` · ${tr().nextStep(sum.next.name)}` : "");
-        nameTd.createSpan({ cls: "ogantt-subtask-sum", text, attr: { title: text } });
-      }
+      // サブタスクのノートが無いカンバンは、中のカードが実行の手順 / a kanban without subtask notes keeps its steps as cards inside it
+      const step = this.cardSteps.get(t.path);
+      const sum = kids.length ? subtaskSummary(kids, this.plugin.settings.statuses) : null;
+      const text = sum ? `${sum.done}/${sum.total}` + (sum.next ? ` · ${tr().nextStep(sum.next.name)}` : "")
+        : t.cards ? `${t.cards.done}/${t.cards.total}` + (step?.now ? ` · ${tr().nowStep(step.now)}` : step?.next ? ` · ${tr().nextStep(step.next)}` : "") : "";
+      if (text) nameTd.createSpan({ cls: "ogantt-subtask-sum", text, attr: { title: text } });
       // 詳細パネルがこのタスクで開いている状態でのダブルクリック＝その場でリネーム。
       // 閉じている状態では 1 回目のクリックでパネルが開くだけにする（誤ってリネームに入らない）。
       // ダブルクリックの 1 回目でもパネルは開き直されるので、判定は 1 回目を押した瞬間の状態で行う
@@ -3128,6 +3132,20 @@ export class GanttView extends ItemView {
 
   // 依存が守られていない後続（矢印を隠しているときの赤い縁）。先行が画面に無くても（畳まれた・絞り込まれた）判定する
   // successors whose dependency is broken (the red outline while arrows are hidden), judged even when the predecessor isn't on screen
+  // カードのあるカンバンだけ本文を読み、今と次のカードを覚える（cachedRead なので変わっていなければ読み直さない）
+  // read only kanbans that have cards and remember their current and next card (cachedRead, so unchanged files aren't read again)
+  private async readCardSteps(): Promise<void> {
+    const { statuses, autoStatus } = this.plugin.settings;
+    const started = autoStatusTargets(statuses, autoStatus).started;
+    const steps = new Map<string, { now?: string; next?: string }>();
+    await Promise.all(this.tasks.filter((t) => t.kind === "kanban" && t.cards).map(async (t) => {
+      const file = this.app.vault.getAbstractFileByPath(t.path);
+      if (!(file instanceof TFile)) return;
+      steps.set(t.path, kanbanStep(kanbanLanes(this.app.metadataCache.getFileCache(file), await this.app.vault.cachedRead(file)), statuses, started));
+    }));
+    this.cardSteps = steps;
+  }
+
   private lateTasks(): Set<string> {
     const cal = scheduleOptions(this.plugin.settings).cal;
     const byPath = new Map(this.tasks.map((x) => [x.path, x]));

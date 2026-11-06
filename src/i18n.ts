@@ -138,6 +138,7 @@ interface Strings {
   dropMove: (folder: string) => string;
   headingCount: (o: number, l: number, u: number) => string; // 見出しの件数：未完了・期限切れ・急ぎ / a heading's counts: open, overdue, urgent
   nextStep: (n: string) => string; // 親タスクの次のサブタスク / a parent's next subtask
+  nowStep: (n: string) => string; // カンバンで今取り組んでいるカード / the kanban card being worked on now
   excUrgent: string; // 例外の札 / exception tags
   excOverdue: string;
   excDependency: string;
@@ -635,6 +636,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     dropMove: (folder) => `「${folder}」へ移動`,
     headingCount: (o, l, u) => [`未完了 ${o}`, l ? `期限切れ ${l}` : "", u ? `急ぎ ${u}` : ""].filter(Boolean).join(" · "),
     nextStep: (n) => `次: ${n}`,
+    nowStep: (n) => `今: ${n}`,
     excUrgent: "急ぎ",
     excOverdue: "期限切れ",
     excDependency: "依存の競合",
@@ -952,6 +954,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     dropMove: (folder) => `Move to “${folder}”`,
     headingCount: (o, l, u) => [`${o} open`, l ? `${l} overdue` : "", u ? `${u} urgent` : ""].filter(Boolean).join(" · "),
     nextStep: (n) => `Next: ${n}`,
+    nowStep: (n) => `Now: ${n}`,
     excUrgent: "Urgent",
     excOverdue: "Overdue",
     excDependency: "Dependency conflict",
@@ -1269,6 +1272,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     dropMove: (folder) => `移动到“${folder}”`,
     headingCount: (o, l, u) => [`未完成 ${o}`, l ? `已逾期 ${l}` : "", u ? `紧急 ${u}` : ""].filter(Boolean).join(" · "),
     nextStep: (n) => `下一步：${n}`,
+    nowStep: (n) => `当前：${n}`,
     excUrgent: "紧急",
     excOverdue: "已逾期",
     excDependency: "依赖冲突",
@@ -1586,6 +1590,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     dropMove: (folder) => `移動到「${folder}」`,
     headingCount: (o, l, u) => [`未完成 ${o}`, l ? `已逾期 ${l}` : "", u ? `緊急 ${u}` : ""].filter(Boolean).join(" · "),
     nextStep: (n) => `下一步：${n}`,
+    nowStep: (n) => `目前：${n}`,
     excUrgent: "緊急",
     excOverdue: "已逾期",
     excDependency: "依賴衝突",
@@ -1903,6 +1908,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     dropMove: (folder) => `“${folder}”(으)로 이동`,
     headingCount: (o, l, u) => [`미완료 ${o}`, l ? `기한 초과 ${l}` : "", u ? `긴급 ${u}` : ""].filter(Boolean).join(" · "),
     nextStep: (n) => `다음: ${n}`,
+    nowStep: (n) => `지금: ${n}`,
     excUrgent: "긴급",
     excOverdue: "기한 초과",
     excDependency: "의존성 충돌",
@@ -2220,6 +2226,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     dropMove: (folder) => `Déplacer vers « ${folder} »`,
     headingCount: (o, l, u) => [`${o} en cours`, l ? `${l} en retard` : "", u ? `${u} urgente${u > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · "),
     nextStep: (n) => `Suivant : ${n}`,
+    nowStep: (n) => `En cours : ${n}`,
     excUrgent: "Urgent",
     excOverdue: "En retard",
     excDependency: "Conflit de dépendance",
@@ -2537,6 +2544,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     dropMove: (folder) => `Mover a «${folder}»`,
     headingCount: (o, l, u) => [`${o} abiertas`, l ? `${l} vencidas` : "", u ? `${u} urgente${u > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · "),
     nextStep: (n) => `Siguiente: ${n}`,
+    nowStep: (n) => `Ahora: ${n}`,
     excUrgent: "Urgente",
     excOverdue: "Vencida",
     excDependency: "Conflicto de dependencia",
@@ -2854,6 +2862,7 @@ const STRINGS: Record<Lang, () => Strings> = {
     dropMove: (folder) => `Переместить в «${folder}»`,
     headingCount: (o, l, u) => [`открыто: ${o}`, l ? `просрочено: ${l}` : "", u ? `срочно: ${u}` : ""].filter(Boolean).join(" · "),
     nextStep: (n) => `Далее: ${n}`,
+    nowStep: (n) => `Сейчас: ${n}`,
     excUrgent: "Срочно",
     excOverdue: "Просрочено",
     excDependency: "Конфликт зависимостей",
