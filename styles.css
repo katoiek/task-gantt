@@ -1889,6 +1889,7 @@ input.ogantt-swatch {
 .ogantt-board-cue {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start; /* あふれても頭から見せる（ボタンは既定で中央寄せ）/ overflow keeps the start in view (buttons centre by default) */
   gap: 4px;
   flex: 0 5000 auto; /* 例外の札より先、名前よりずっと先に縮む / shrinks before the exception tag, long before the name */
   min-width: 24px;
@@ -1913,10 +1914,18 @@ button.ogantt-board-cue:hover {
   width: 12px;
   height: 12px;
 }
-.ogantt-board-cue-text {
+.ogantt-board-cue-label {
+  flex: 0 1 auto; /* カードの文字の後で縮む / shrinks after the card text */
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  unicode-bidi: plaintext;
+  white-space: pre;
+}
+.ogantt-board-cue-text {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ogantt-exec {
   display: flex;
@@ -1934,6 +1943,14 @@ button.ogantt-board-cue:hover {
 }
 .ogantt-exec-open {
   margin-top: 4px;
+}
+/* 読むだけの部屋（Vault Rooms）のノート：パネルの先頭に一行。入力は止める / a note in a read-only room (Vault Rooms): one line at the top of the panel; inputs are disabled */
+.ogantt-readonly {
+  margin: 2px 0 10px;
+  padding: 4px 0 4px 8px;
+  border-left: 2px solid var(--background-modifier-border-hover);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
 }
 /* 詳細パネルの「気にかけること」：細い縁と言葉だけ（色は急ぎと期限切れの縁だけ）/ the panel's attention line: a thin edge and words (colour only on the urgent and overdue edges) */
 .ogantt-attention {

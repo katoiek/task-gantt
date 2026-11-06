@@ -55,13 +55,13 @@ import {
 } from "./timeline";
 import { PALETTE, distinctColors, hashColor, inkOn, resolveTagColor } from "./colors";
 import { closePopovers, openPopover, paletteInto, pickColor, pickIcon } from "./popover";
-import { ConfirmModal, PickModal } from "./modals";
+import { ConfirmModal, PickModal, ChoiceModal } from "./modals";
 import { linkLabel } from "./links";
 import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } from "./linkui";
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { isConnected } from "./gcal/auth";
-import { ATTENTION, applyFilters, besideHeading, exceptionOf, interruptions, isOpen, isOverdue, isUrgent, regroup, runningWorkOf, subtaskSummary, strongest, urgentFirst, Exception, GroupBy, Interruptions } from "./filter";
+import { ATTENTION, EXCEPTIONS, applyFilters, besideHeading, exceptionsOf, interruptions, isOpen, isOverdue, isUrgent, regroup, runningWorkOf, subtaskSummary, urgentFirst, Exception, GroupBy, Interruptions } from "./filter";
 import { BoardContext, Move, MutateResult, StatusChange } from "./board";
 import { CellColumn, ColumnDef, allColumns, columnList, columnWidth, disabledLast, manualComparator, moveColumn, paintProgress, progressPct, taskComparator, toggleColumn, visibleColumns } from "./columns";
 
@@ -97,8 +97,8 @@ const BUSY_FILES = 10;
 // タスクの種類のアイコン（ノートは付けない）/ task-kind icons (plain notes get none)
 const KIND_ICON: Record<TaskKind, string> = { note: "file-text", kanban: "square-kanban", canvas: "layout-dashboard" };
 // 例外の札の印と言葉 / the icon and word of each exception tag
-const EXC_ICON: Record<Exception, string> = { urgent: "zap", overdue: "alarm-clock", dependency: "unlink", interrupted: "pause", resume: "play" };
-const EXC_TEXT: Record<Exception, () => string> = { urgent: () => tr().excUrgent, overdue: () => tr().excOverdue, dependency: () => tr().excDependency, interrupted: () => tr().excInterrupted, resume: () => tr().excResume };
+const EXC_ICON: Record<Exception, string> = { urgent: "zap", overdue: "alarm-clock", blocked: "circle-slash", dependency: "unlink", interrupted: "pause", resume: "play" };
+const EXC_TEXT: Record<Exception, () => string> = { urgent: () => tr().excUrgent, overdue: () => tr().excOverdue, blocked: () => tr().attBlocked, dependency: () => tr().excDependency, interrupted: () => tr().excInterrupted, resume: () => tr().excResume };
 // 右から左の文字（ヘブライ語など）が混ざっても崩れないよう、名前やカードの文字を前後から切り離す（FSI … PDI）
 // isolate a name or card text from what surrounds it (FSI … PDI), so Hebrew and other right-to-left text doesn't reorder the sentence
 const isolate = (text: string): string => `\u2068${text}\u2069`;
@@ -243,6 +243,8 @@ export class GanttView extends ItemView {
   private assigneeCache: string[] | null = null; // ボードの担当者一覧（描き直しごとに作る）/ the board's assignees, built once per redraw
   private peopleColors: Map<string, string> | null = null; // 担当者の自動の色（同上）/ the assignees' automatic colours (likewise)
   private late: Set<string> | null = null; // 矢印を隠しているときの、依存が守られていない後続 / with arrows hidden, successors whose dependency is broken
+  private roomsWatched = false;
+  private readOnlySeen = ""; // 読むだけのタスクの一覧（役割が変わったか見るため）/ the read-only tasks last seen (to tell when a role changed)
   private conflicts = new Set<string>(); // 依存が守られていない後続（表の札用・矢印の有無に関係なく）/ successors whose dependency is broken (for the table's tag, arrows or not)
   private ints: Interruptions = { interrupted: new Map(), resume: new Map() }; // 割り込みと再開待ち / interruptions and work waiting to be resumed
   // カンバンの今か次のカードと列。ファイルの更新時刻ごとに覚え、変わったボードだけ読み直す / each kanban's current or next card and lane, kept per file mtime so only changed boards are read again
@@ -535,6 +537,7 @@ export class GanttView extends ItemView {
     const was = new Map(tasks.map((t) => [t.path, t.status]));
     // 今のままでよいノートは見たことだけ覚える（あとで手で変えたら分かるように）/ notes already right are only remembered as seen, so a later hand edit can be told apart
     const changes = [...autoStatusChanges(tasks, s.statuses, s.autoStatus, this.today())].filter(([p, c]) => {
+      if (this.readOnly(p)) return false; // 読むだけの部屋のノートは自動でも書かない（戻されるだけ）/ never written automatically either (it would just be put back)
       if (c.status !== was.get(p)) return true;
       s.autoStatus.fired[p] = { dates: c.dates, status: c.status };
       return false;
@@ -598,7 +601,7 @@ export class GanttView extends ItemView {
 
   // 詳細パネルが見せている内容の印（タスクのデータと本文）/ a fingerprint of what the detail panel shows (the task's data and its body)
   private sigOf(t: Task, body: string): string {
-    return `${JSON.stringify(t)}\u0000${body}\u0000${this.ints.interrupted.get(t.path)?.path ?? ""}|${this.ints.resume.get(t.path)?.path ?? ""}`;
+    return `${JSON.stringify(t)}\u0000${body}\u0000${(this.ints.interrupted.get(t.path) ?? []).map((u) => u.path).join()}|${(this.ints.resume.get(t.path) ?? []).map((u) => u.path).join()}|${this.readOnly(t.path)}`;
   }
 
   // ボードごとの表示オプション（グループ・色分け・表示切替・折りたたみ）を読む / load this board's view options (grouping, colour, toggles, collapsed rows)
@@ -662,6 +665,8 @@ export class GanttView extends ItemView {
     this.renderFilterBar(); // 統合フィルタ行を最新データで更新 / refresh the unified filter row
     // 割り込みは絞り込みと関係なく全部のタスクから（並びの「再開待ちを先に」にも使う）/ interruptions come from every task, filters aside (the sort puts resumable work early too)
     this.ints = interruptions(this.tasks, this.plugin.settings.statuses, this.today());
+    this.watchRooms();
+    this.readOnlySeen = this.tasks.filter((t) => this.readOnly(t.path)).map((t) => t.path).join("|");
     const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
     const compare = this.comparator();
     if (this.flat) {
@@ -1098,12 +1103,15 @@ export class GanttView extends ItemView {
     const open: Filter = { kind: "category", field: "statusGroup", op: "isNot", values: ["completed", "cancelled"] };
     const me = (this.app.loadLocalStorage(ME_KEY) as string | null)?.trim();
     return [
-      // 役割ごとの入口（グループ化も切り替える）：概要＝始まっている残りの仕事をプロジェクト（フォルダ）ごと、チーム＝同じものを人ごと、
-      // 要対応＝止まっている・期限切れ・急ぎ。日付の無い仕事は「始まっている」に入らない
-      // role entry points (they switch the grouping too): Overview = outstanding work that has started, by project (folder); Team = the same,
-      // by person; Attention = blocked, overdue or urgent. Work without dates doesn't count as started
-      { name: tr().presetOverview, filterMatch: "all", groupBy: "folder", filters: [open, { kind: "date", field: "start", op: "onOrBefore", value: today }] },
-      { name: tr().presetTeam, filterMatch: "all", groupBy: "assignee", filters: [open, { kind: "date", field: "start", op: "onOrBefore", value: today }] },
+      // 役割ごとの入口（グループ化も切り替える）：概要＝残っている仕事をプロジェクト（フォルダ）ごと、チーム＝同じものを人ごと。日付の無い仕事・先の仕事も入る。
+      // 今後 2 週間＝これから始まる仕事（フィルタのチップがそのまま範囲を言う）
+      // role entry points (they switch the grouping too): Overview = outstanding work by project (folder), Team = the same by person; undated and
+      // future work included. Upcoming 2 weeks = work starting after today and within two weeks (the filter chips spell the range out)
+      { name: tr().presetOverview, filterMatch: "all", groupBy: "folder", filters: [open] },
+      { name: tr().presetUpcoming, filterMatch: "all", filters: [open,
+        { kind: "date", field: "start", op: "after", value: today },
+        { kind: "date", field: "start", op: "onOrBefore", value: { kind: "relative", amount: 2, unit: "week", dir: "fromNow" } }] },
+      { name: tr().presetTeam, filterMatch: "all", groupBy: "assignee", filters: [open] },
       { name: tr().presetAttention, filterMatch: "all", filters: [{ kind: "category", field: "attention", op: "is", values: [...ATTENTION] }] },
       // 自分の仕事（この端末の名前を設定したときだけ）/ my work (only once this device's name is set)
       ...(me ? [{ name: tr().presetMyWork, filterMatch: "all" as const, filters: [open, { kind: "category" as const, field: "assignee" as const, op: "is" as const, values: [me] }] }] : []),
@@ -1524,6 +1532,9 @@ export class GanttView extends ItemView {
         (el?.disabled ? box?.querySelector<HTMLElement>("button:not(:disabled)") ?? box?.querySelector("input") : el)?.focus();
       };
       paintCols();
+      // 表示の設定はこの端末のもの（Vault Rooms は .obsidian を同期しない）。タスクの編集はノートを変えて共有される
+      // view settings belong to this device (Vault Rooms doesn't sync .obsidian); editing a task changes its note, which is shared
+      menu.createDiv({ cls: "ogantt-colmenu-note", text: tr().viewIsLocal });
     });
   }
 
@@ -1801,6 +1812,7 @@ export class GanttView extends ItemView {
   // every write goes through here: snapshot only the affected files, run fn, record the entry.
   // fn returns false for "nothing changed" (not recorded); report new files via `created` (trashed on undo)
   private async mutate(label: string, paths: string[], fn: () => Promise<MutateResult>): Promise<boolean> {
+    if (this.refuseReadOnly(paths)) return false;
     return this.busy(new Set(paths).size, async () => {
       this.historyBusy++;
       let res: MutateResult = false;
@@ -2015,6 +2027,7 @@ export class GanttView extends ItemView {
   // タスクをリネーム（取り消し可）。詳細パネルのタイトル欄とテーブルの名前セルが共用
   // rename a task (undoable); shared by the detail panel's title and the table's name cell
   private async renameTaskTo(from: string, oldName: string, newName: string): Promise<void> {
+    if (this.refuseReadOnly([from])) return;
     let np: string | null = null;
     await this.mutate(tr().undoRename(oldName), [], async () => {
       const res = await renameTask(this.app, from, newName);
@@ -2391,17 +2404,27 @@ export class GanttView extends ItemView {
       // markers for the kind (kanban, canvas) and for shared tasks (2+ assignees) trail the name, so names stay left-aligned
       if (t.kind === "canvas") setIcon(nameTd.createSpan({ cls: "ogantt-name-icon", attr: { "aria-label": tr().kindCanvas } }), KIND_ICON[t.kind]);
       if (t.assignees.length > 1) setIcon(nameTd.createSpan({ cls: "ogantt-name-icon", attr: { "aria-label": t.assignees.map(linkLabel).join(", ") } }), "users");
-      // 例外は 1 つだけ、印と言葉で（色だけに頼らない）/ one exception at most, as an icon and a word (never colour alone)
-      // 畳んだ親は、サブタスクの例外も引き受ける（中を開かなくても気づける）/ a collapsed parent also carries its subtasks' exceptions (noticed without expanding)
+      if (this.readOnly(t.path)) {
+        el.addClass("is-readonly");
+        setIcon(nameTd.createSpan({ cls: "ogantt-name-icon", attr: { "aria-label": tr().readOnlyHint, title: tr().readOnlyHint } }), "lock");
+      }
+      // 例外は札 1 つ：一番強いものを印と言葉で（色だけに頼らない）、ほかにもあれば「+N」。全部の理由は詳細に。畳んだ親はサブタスクの分も持つ。
+      // ステータス列が「止まっている」と言っている行は、その札を出さない（数には入る）
+      // one tag for exceptions: the strongest as an icon and a word (never colour alone), plus "+N" when there are more; every reason is in the
+      // details. A collapsed parent carries its subtasks' too. A row whose Status column already says blocked doesn't repeat it (it still counts)
       const today = this.today();
-      const excOf = (x: Task) => (this.disabled.has(x.path) ? undefined : exceptionOf(x, this.plugin.settings.statuses, today, this.conflicts, this.ints));
+      const { statuses } = this.plugin.settings;
+      const excsOf = (x: Task) => (this.disabled.has(x.path) ? [] : exceptionsOf(x, statuses, today, this.conflicts, this.ints));
       // 要約と例外は絞り込みに関係なく全部のサブタスクから（並びは画面と同じ）/ the summary and exceptions come from every subtask, filters aside (in screen order)
       const kids = row.hasChildren ? this.tasks.filter((x) => x.parent === t.path).sort(this.comparator()) : [];
-      const exc = strongest([excOf(t), ...(this.isCollapsed(row.key) ? kids.map(excOf) : [])]);
+      const all = EXCEPTIONS.filter((e) => [...excsOf(t), ...(this.isCollapsed(row.key) ? kids.flatMap(excsOf) : [])].includes(e));
+      const said = statusGroupOf(statuses, t.status) === "deferred" && this.visibleColumns().some((c) => c.id === "status");
+      const exc = all.find((e) => !(e === "blocked" && said));
       if (exc) {
-        const tag = nameTd.createSpan({ cls: `ogantt-exc is-${exc}`, attr: { title: EXC_TEXT[exc]() } });
+        const words = all.map((e) => EXC_TEXT[e]()).join(", ");
+        const tag = nameTd.createSpan({ cls: `ogantt-exc is-${exc}`, attr: { title: words, "aria-label": words } });
         setIcon(tag.createSpan({ cls: "ogantt-exc-icon", attr: { "aria-hidden": "true" } }), EXC_ICON[exc]);
-        tag.createSpan({ cls: "ogantt-exc-text", text: EXC_TEXT[exc]() });
+        tag.createSpan({ cls: "ogantt-exc-text", text: EXC_TEXT[exc]() + (all.length > 1 ? ` +${all.length - 1}` : "") });
       }
       // ガントの階層（シェブロンと字下げ）：親は終わったサブタスクの数だけ。行は開けば見える
       // the Gantt hierarchy (chevron and indent): a parent shows only how many subtasks are done; the rows are there on expanding
@@ -2559,8 +2582,8 @@ export class GanttView extends ItemView {
     // 急ぎ（割り込み）の印はノートの優先度に書く（取り消し可）/ urgent (interrupting) goes in the note's priority (undoable)
     const hot = isUrgent(t);
     m.addItem((it) => it.setTitle(hot ? tr().menuClearUrgent : tr().menuMarkUrgent).setIcon("zap").onClick(() => void this.setUrgent(t, !hot)));
-    for (const [target, from] of this.resumable(t)) {
-      m.addItem((it) => it.setTitle(tr().resumeTask(this.nameOf(target))).setIcon("play").onClick(() => void this.resume(from, target)));
+    for (const target of this.resumable(t)) {
+      m.addItem((it) => it.setTitle(tr().resumeTask(this.nameOf(target))).setIcon("play").onClick(() => void this.resume(target)));
     }
     m.addSeparator();
     m.addItem((i) => i.setTitle(tr().menuDelete).setIcon("trash-2").onClick(() => this.confirmDelete(t.path)));
@@ -2741,7 +2764,7 @@ export class GanttView extends ItemView {
     }
     this.drawLabel(g, t, rx + LABEL_GAP, cyMid, group, row.group);
     g.addEventListener("pointerenter", (e) => {
-      handles?.show(t, g, lx, rx, cyMid);
+      if (!this.readOnly(t.path)) handles?.show(t, g, lx, rx, cyMid);
       this.showCard(t, e);
     });
     g.addEventListener("pointerleave", (e) => { if (e.pointerType !== "touch") handles?.hide(); });
@@ -3176,66 +3199,172 @@ export class GanttView extends ItemView {
   // the execution board cue (one per row): the current or next card, else "Board". It opens the board in a new tab (separate from the row's click = details)
   private boardCue(host: HTMLElement, t: Task): void {
     const step = this.cardSteps.get(t.path)?.step;
-    const text = step?.card ? (step.now ? tr().nowStep : tr().nextStep)(isolate(step.card)) : tr().boardCue;
-    const hint = [tr().openBoardHint, t.cards ? tr().execComplete(t.cards.done, t.cards.total) : "", step?.stage ? isolate(step.stage) : ""].filter(Boolean).join(" · ");
+    const say = step?.card ? (step.now ? tr().nowStep : tr().nextStep) : null;
+    const text = say ? say(isolate(step!.card!)) : tr().boardCue;
+    const hint = [tr().openBoardHint, t.cards ? tr().cardsChecked(t.cards.done, t.cards.total) : "", step?.stage ? isolate(step.stage) : ""].filter(Boolean).join(" · ");
     const cue = host.createEl("button", { cls: "ogantt-board-cue", attr: { "aria-label": hint, title: `${hint}\n${text}`, tabindex: "-1" } });
     setIcon(cue.createSpan({ cls: "ogantt-board-cue-icon", attr: { "aria-hidden": "true" } }), KIND_ICON.kanban);
-    cue.createSpan({ cls: "ogantt-board-cue-text", text });
+    // カードの文字は自分の向きで、自分の端で省略する（ヘブライ語なら頭が残る）。言葉の部分は訳のまま前後に
+    // the card text keeps its own direction and is cut at its own end (a Hebrew card keeps its beginning); the translated words go around it
+    if (!say) cue.createSpan({ cls: "ogantt-board-cue-text", text });
+    else {
+      const [pre, post] = say(" ").split(" ");
+      if (pre) cue.createSpan({ cls: "ogantt-board-cue-label", text: pre });
+      cue.createSpan({ cls: "ogantt-board-cue-text", text: step!.card!, attr: { dir: "auto" } });
+      if (post) cue.createSpan({ cls: "ogantt-board-cue-label", text: post });
+    }
     cue.addEventListener("click", (e) => {
       e.stopPropagation(); // 行のクリック（詳細を開く）にしない / not the row's click (which opens the details)
       this.openTask(t.path, Keymap.isModEvent(e) || "tab");
     });
   }
 
-  // 詳細パネルの「気にかけること」1 行：割り込み・再開・急ぎ・期限切れ・依存。再開には戻るボタン / the panel's one attention line: interrupted, resume, urgent, overdue, dependency; resuming gets its button
+  // 詳細パネルの「気にかけること」：理由を全部、分かる詳しさで（記録の無い理由は無いと言う）。割り込んだ先、サブタスクの理由、再開のボタンも
+  // the panel's attention box: every reason, in as much detail as is known (a reason not recorded is said to be unknown), what this urgent work
+  // interrupts, the subtasks' reasons, and the resume buttons
   private buildAttention(d: HTMLElement, t: Task): void {
-    const exc = this.disabled.has(t.path) ? undefined : exceptionOf(t, this.plugin.settings.statuses, this.today(), this.conflicts, this.ints);
+    const { statuses } = this.plugin.settings;
+    const today = this.today();
+    const list = this.disabled.has(t.path) ? [] : exceptionsOf(t, statuses, today, this.conflicts, this.ints);
+    const lines: [Exception | null, string][] = list.map((e) => [e, this.reasonOf(t, e)]);
+    const links = isUrgent(t) && isOpen(t, statuses) ? (t.interrupts ?? []).filter((p) => this.ints.interrupted.get(p)?.some((u) => u.path === t.path)) : [];
+    if (links.length) lines.push([null, tr().interruptsWhat(links.map((p) => isolate(this.nameOf(p))).join(", "))]);
+    for (const c of this.tasks.filter((x) => x.parent === t.path && !this.disabled.has(x.path))) {
+      const r = exceptionsOf(c, statuses, today, this.conflicts, this.ints);
+      if (r.length) lines.push([null, tr().attSubtask(isolate(c.name), r.map((e) => EXC_TEXT[e]()).join(", "))]);
+    }
     const resumable = this.resumable(t);
-    const links = isUrgent(t) && isOpen(t, this.plugin.settings.statuses) ? (t.interrupts ?? []).filter((p) => this.ints.interrupted.get(p)?.path === t.path) : [];
-    if (!exc && !resumable.length && !links.length) return;
-    const box = d.createDiv({ cls: "ogantt-attention" + (exc ? ` is-${exc}` : "") });
-    if (exc) {
+    if (!lines.length && !resumable.length) return;
+    const box = d.createDiv({ cls: "ogantt-attention" + (list[0] ? ` is-${list[0]}` : ""), attr: { role: "note" } });
+    for (const [e, text] of lines) {
       const line = box.createDiv({ cls: "ogantt-attention-line" });
-      setIcon(line.createSpan({ cls: "ogantt-exc-icon", attr: { "aria-hidden": "true" } }), EXC_ICON[exc]);
-      const by = this.ints.interrupted.get(t.path);
-      line.createSpan({ text: exc === "interrupted" && by ? tr().interruptedBy(isolate(by.name)) : EXC_TEXT[exc]() });
+      if (e) setIcon(line.createSpan({ cls: "ogantt-exc-icon", attr: { "aria-hidden": "true" } }), EXC_ICON[e]);
+      line.createSpan({ text });
     }
-    if (links.length) box.createDiv({ cls: "ogantt-attention-line", text: tr().interruptsWhat(links.map((p) => isolate(this.nameOf(p))).join(", ")) });
-    for (const [target, from] of resumable) {
-      const b = box.createEl("button", { cls: "mod-cta ogantt-attention-btn", text: tr().resumeTask(isolate(this.nameOf(target))) });
-      b.onclick = () => void this.resume(from, target);
+    for (const target of resumable) {
+      box.createEl("button", { cls: "mod-cta ogantt-attention-btn", text: tr().resumeTask(isolate(this.nameOf(target))) }).onclick = () => void this.resume(target);
     }
+  }
+
+  // 例外の理由を言葉で：期限、止まっているステータス（理由はノートに無いので「記録なし」）、待っている先行、割り込んだ急ぎ仕事とその人
+  // an exception's reason in words: the due date, the blocking status (the note holds no reason, so "none recorded"), the predecessors waited on,
+  // the urgent work that interrupted and whose it is
+  private reasonOf(t: Task, e: Exception): string {
+    const { statuses, dateFormat } = this.plugin.settings;
+    const names = (us: Task[] | undefined) => (us ?? []).map((u) => isolate(u.name) + (u.assignees.length ? ` (${u.assignees.map(linkLabel).join(", ")})` : "")).join(", ");
+    switch (e) {
+      case "urgent": return tr().excUrgent;
+      case "overdue": return tr().attOverdue(formatDate(anchorEnd(t)!, dateFormat));
+      case "blocked": return tr().blockedWhy(statuses.find((x) => x.id === t.status)?.label ?? t.status ?? "");
+      case "dependency": {
+        const cal = scheduleOptions(this.plugin.settings).cal;
+        const preds = t.deps.map((d) => [d, this.tasks.find((x) => x.path === d.path)] as const)
+          .filter(([d, p]) => p && depViolated(t, p, d.type, cal)).map(([d, p]) => `${isolate(p!.name)} (${d.type})`);
+        return tr().attDependency(preds.join(", "));
+      }
+      case "interrupted": return tr().interruptedBy(names(this.ints.interrupted.get(t.path)));
+      case "resume": return tr().attResume(names(this.ints.resume.get(t.path)));
+    }
+  }
+
+  // 読むだけの部屋のノートなら、パネルの入力を全部止める（開く・閉じる・ボードを開くは使える）/ for a note in a read-only room, every input in the panel is disabled (open, close and Open board still work)
+  private lockIfReadOnly(d: HTMLElement, path: string): void {
+    if (!this.readOnly(path)) return;
+    d.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement>(
+      ".ogantt-detail-head input, .ogantt-detail-meta input, .ogantt-detail-meta select, .ogantt-detail-meta textarea, .ogantt-detail-meta button, .ogantt-detail-body textarea, .ogantt-attention-btn",
+    ).forEach((el) => (el.disabled = true));
+  }
+
+  // Vault Rooms で読むだけの部屋のノートか。書いても戻され、手元に写しが残るだけなので書かない。プラグインが無い・部屋の外・分からないときは書ける
+  // whether a note sits in a room Vault Rooms only lets you read: a write there is put back and leaves a local copy, so none is made. Without the
+  // plugin, outside rooms, or while unknown, writing is allowed
+  private readOnly(path: string): boolean {
+    return this.roomsApi()?.canWrite?.(path) === false;
+  }
+
+  private roomsApi(): { canWrite?: (path: string) => boolean | null; onChange?: (listener: () => void) => () => void } | undefined {
+    return (this.app as unknown as { plugins?: { plugins?: Record<string, { canWrite?: (path: string) => boolean | null; onChange?: (listener: () => void) => () => void }> } }).plugins?.plugins?.["vault-rooms"];
+  }
+
+  // Vault Rooms の役割が変わったら（読むだけ⇄編集できる）、開いたままのボードも合わせる。Vault Rooms はこのビューより後に読み込まれることがあるので、
+  // 描くたびに（まだなら）購読する。変わったときだけ描き直し、選択・スクロール・開いた行は保つ
+  // when a Vault Rooms role changes (read-only ⇄ can edit), an open board follows. Vault Rooms may load after this view, so each render subscribes
+  // if it hasn't yet; it redraws only when that changed, keeping selection, scroll and expanded rows
+  private watchRooms(): void {
+    if (this.roomsWatched) return;
+    const off = this.roomsApi()?.onChange?.(() => {
+      const now = this.tasks.filter((t) => this.readOnly(t.path)).map((t) => t.path).join("|");
+      if (now === this.readOnlySeen) return;
+      this.readOnlySeen = now;
+      this.rerender();
+      if (this.selectedPath && this.detailEl.hasClass("is-open")) void this.openDetail(this.selectedPath);
+    });
+    if (!off) return;
+    this.roomsWatched = true;
+    this.register(off);
+  }
+
+  private refuseReadOnly(paths: string[]): boolean {
+    if (!paths.some((p) => this.readOnly(p))) return false;
+    new Notice(tr().readOnlyNotice);
+    return true;
   }
 
   private nameOf(path: string): string {
     return this.tasks.find((x) => x.path === path)?.name ?? path.split("/").pop()!.replace(/\.md$/, "");
   }
 
-  // このタスクから再開できる先 [再開するタスク, 終わった急ぎ仕事]：自分が再開待ちか、自分が終わった急ぎ仕事で割り込んだ先
-  // what can be resumed from this task, as [task to resume, finished urgent task]: itself when waiting, or what it interrupted when it is finished urgent work
-  private resumable(t: Task): [string, Task][] {
-    const own = this.ints.resume.get(t.path);
-    if (own) return [[t.path, own]];
-    return [...this.ints.resume].filter(([, u]) => u.path === t.path).map(([p]) => [p, t]);
+  // このタスクから再開できるタスク：自分が再開待ちなら自分、自分が終わった急ぎ仕事ならその割り込み先（ほかの急ぎがまだ走っていればどちらも無し）
+  // the tasks that can be resumed from this one: itself when waiting, or what it interrupted when it is finished urgent work (neither while other urgent work still runs)
+  private resumable(t: Task): string[] {
+    if (this.ints.resume.has(t.path)) return [t.path];
+    return [...this.ints.resume].filter(([, us]) => us.some((u) => u.path === t.path)).map(([p]) => p);
   }
 
-  // 急ぎにする：優先度と、その人がいま進めている仕事へのリンクを急ぎ仕事のノートに書く（割り込まれた側のノートは触らない・取り消し可）
-  // mark as urgent: write the priority, and links to the work that person has running, into the urgent note (the interrupted notes aren't touched; undoable)
+  // 急ぎにする：優先度と、その人の「始めた」ステータスの仕事へのリンクを急ぎ仕事のノートに書く（割り込まれた側は触らない・取り消し可）。
+  // 候補が 1 つで共有でなければそれを、2 つ以上か共有の仕事なら選んでもらう（閉じれば何もしない）
+  // mark as urgent: write the priority, and a link to the person's work in the started status, into the urgent note (the interrupted note isn't
+  // touched; undoable). One unshared candidate is linked as is; with several, or a shared one, the user picks (closing does nothing)
   private async setUrgent(t: Task, on: boolean): Promise<void> {
-    const { keys, statuses } = this.plugin.settings;
-    const running = on ? runningWorkOf(t, this.tasks, statuses, this.today()) : [];
-    await this.mutate(tr().undoEdit(t.name), [t.path], async () => {
-      await writeField(this.app, t.path, keys.priority, on ? "urgent" : undefined);
-      await writeField(this.app, t.path, keys.interrupts, running.length ? running.map((x) => this.linkTo(x.path, t.path)) : undefined);
-    });
-    await this.refresh();
+    const { keys, statuses, autoStatus } = this.plugin.settings;
+    const write = async (targets: Task[]) => {
+      await this.mutate(tr().undoEdit(t.name), [t.path], async () => {
+        await writeField(this.app, t.path, keys.priority, on ? "urgent" : undefined);
+        await writeField(this.app, t.path, keys.interrupts, targets.length ? targets.map((x) => this.linkTo(x.path, t.path)) : undefined);
+      });
+      await this.refresh();
+    };
+    if (!on) return write([]);
+    if (this.refuseReadOnly([t.path])) return;
+    const cands = runningWorkOf(t, this.tasks, autoStatusTargets(statuses, autoStatus).started);
+    if (!cands.length || (cands.length === 1 && cands[0].assignees.length <= 1)) return write(cands);
+    const mine = new Set(t.assignees.map(linkLabel));
+    new ChoiceModal(this.app, {
+      title: tr().pickInterruptTitle,
+      body: tr().pickInterruptBody(t.assignees.map(linkLabel).join(", ")),
+      choices: [
+        ...cands.map((c) => {
+          const others = c.assignees.map(linkLabel).filter((a) => !mine.has(a));
+          return { text: c.name + (others.length ? tr().sharedWith(others.join(", ")) : ""), onPick: () => void write([c]) };
+        }),
+        { text: tr().pickNone, onPick: () => void write([]) },
+      ],
+      onDismiss: () => {},
+    }).open();
   }
 
-  // 再開：急ぎ仕事のリンクからそのタスクを外し（取り消し可）、そのタスクへ戻る（カンバンならボード、ほかは詳細）
-  // resume: drop that task from the urgent note's links (undoable) and go back to it (its board for a kanban, its details otherwise)
-  private async resume(from: Task, target: string): Promise<void> {
-    const rest = (from.interrupts ?? []).filter((p) => p !== target).map((p) => this.linkTo(p, from.path));
-    await this.mutate(tr().undoEdit(from.name), [from.path], () => writeField(this.app, from.path, this.plugin.settings.keys.interrupts, rest.length ? rest : undefined));
+  // 再開：終わった急ぎ仕事全部のリンクからそのタスクを外し（取り消し可）、そのタスクへ戻る（カンバンならボード、ほかは詳細）。ステータスは変えない
+  // resume: drop the task from every finished urgent note linking it (undoable) and go back to it (its board for a kanban, its details otherwise); its status isn't changed
+  private async resume(target: string): Promise<void> {
+    const from = this.ints.resume.get(target) ?? [];
+    if (!from.length) return;
+    const ok = await this.mutate(tr().resumeTask(this.nameOf(target)), from.map((u) => u.path), async () => {
+      for (const u of from) {
+        const rest = (u.interrupts ?? []).filter((p) => p !== target).map((p) => this.linkTo(p, u.path));
+        await writeField(this.app, u.path, this.plugin.settings.keys.interrupts, rest.length ? rest : undefined);
+      }
+    });
+    if (!ok) return;
     await this.refresh();
     if (this.tasks.find((x) => x.path === target)?.kind === "kanban") this.openTask(target, "tab");
     else void this.openDetail(target);
@@ -3261,6 +3390,7 @@ export class GanttView extends ItemView {
     const EDGE = RESIZE_EDGE;
     const milestone = task.milestone;
     handle.addEventListener("pointerdown", (ev: PointerEvent) => {
+      if (this.readOnly(task.path)) return; // 読むだけの部屋：動かさない（クリックで詳細は開く）/ a read-only room: no drag (a click still opens the details)
       ev.preventDefault();
       ev.stopPropagation();
       // preventDefault はフォーカスを移さないため、入力中の欄からボードへ移す（Ctrl+Z をガント側へ。ポップアウトの窓でも）
@@ -3357,6 +3487,7 @@ export class GanttView extends ItemView {
   // 今のフォルダに 1 日タスク（開始=終了=今日）を作り、詳細パネルを開いて命名を促す（キャンバスは .canvas も作る）
   // create a 1-day task (start = end = today) in the current folder, then open the panel to name it (a canvas also gets its .canvas)
   private async createNewTask(kind: TaskKind = "note"): Promise<void> {
+    if (this.refuseReadOnly([normalizePath(`${this.folder}/${tr().newTaskName}.md`)])) return; // 読むだけの部屋に作っても手元にしか残らない / a note made in a read-only room would stay on this computer only
     let created: string[] = [];
     await this.mutate(tr().undoCreate(tr().newTaskName), [], async () => {
       created = await createTask(this.app, this.plugin.settings, this.folder, tr().newTaskName, kind);
@@ -3432,6 +3563,7 @@ export class GanttView extends ItemView {
   // parentTaskPath != null → サブタスク化（その親フォルダへ）／null → 解除（destFolder のトップレベルへ）
   private async reparentTo(srcPath: string, destFolder: string, parentTaskPath: string | null): Promise<void> {
     if (srcPath === parentTaskPath) return; // 自分自身へは不可 / not onto itself
+    if (this.refuseReadOnly([srcPath, normalizePath(`${destFolder}/${srcPath.split("/").pop()}`)])) return;
     // 循環防止：親が src の子孫であってはならない / cycle guard: parent must not be a descendant of src
     if (parentTaskPath && subtreePaths(this.tasks, srcPath).includes(parentTaskPath)) {
       new Notice(tr().cycleBlocked);
@@ -3581,6 +3713,7 @@ export class GanttView extends ItemView {
     setIcon(closeBtn, "x");
     closeBtn.onclick = () => this.closeDetail(true);
 
+    if (this.readOnly(t.path)) d.createDiv({ cls: "ogantt-readonly", text: tr().readOnlyPanel, attr: { role: "note" } });
     this.buildAttention(d, t);
     const meta = d.createDiv({ cls: "ogantt-detail-meta" });
     const fieldRow = (label: string): HTMLElement => {
@@ -3679,6 +3812,12 @@ export class GanttView extends ItemView {
       })());
     }
 
+    // 急ぎ（割り込み）は右クリックだけに頼らず、ここでも切り替えられる。急ぎ以外の値（high など）はそのまま見せる
+    // urgent (interrupting) work can be switched here too, not only from the right-click menu; other values (high, …) are shown as they are
+    const pf = fieldRow(tr().fieldPriority);
+    if (t.priority && !isUrgent(t)) pf.createSpan({ cls: "ogantt-muted", text: t.priority, attr: { dir: "auto" } });
+    pf.createEl("button", { text: isUrgent(t) ? tr().menuClearUrgent : tr().menuMarkUrgent }).onclick = () => void this.setUrgent(t, !isUrgent(t));
+
     // Google カレンダー同期（接続済みのときのみ表示）/ Google Calendar sync (shown only while connected)
     const g = this.plugin.settings.gcal;
     if (g.calendarId && isConnected(this.plugin)) {
@@ -3718,13 +3857,14 @@ export class GanttView extends ItemView {
       if (!(file instanceof TFile)) return;
       d.createDiv({ cls: "ogantt-detail-label", text: tr().execution });
       const ex = d.createDiv({ cls: "ogantt-exec" });
-      if (t.cards) ex.createDiv({ text: tr().execComplete(t.cards.done, t.cards.total) });
+      if (t.cards) ex.createDiv({ text: tr().cardsChecked(t.cards.done, t.cards.total) });
       const { statuses, autoStatus } = this.plugin.settings;
       const step = kanbanStep(kanbanLanes(this.app.metadataCache.getFileCache(file), text), statuses, autoStatusTargets(statuses, autoStatus).started);
       if (step.card) ex.createDiv({ cls: "ogantt-exec-card", text: (step.now ? tr().nowStep : tr().nextStep)(isolate(step.card)) });
       if (step.stage) ex.createDiv({ cls: "ogantt-exec-stage", text: step.stage, attr: { dir: "auto" } });
       const open = ex.createEl("button", { cls: "mod-cta ogantt-exec-open", text: tr().openBoard, attr: { "aria-label": tr().openBoardHint } });
       open.onclick = (e) => this.openTask(here(), Keymap.isModEvent(e) || "tab");
+      this.lockIfReadOnly(d, t.path);
       d.scrollTop = keepScroll;
       return;
     }
@@ -3754,6 +3894,7 @@ export class GanttView extends ItemView {
       // リンク・チェックボックスのクリックは編集モードに入らない / clicks on links or checkboxes don't enter edit mode
       if (handleLinkClick(this.app, e, t.path)) return;
       if ((e.target as HTMLElement).closest("input")) return;
+      if (this.readOnly(t.path)) return; // 読むだけ：編集に入らない / read-only: no editing
       bodyArea.value = bodyText;
       bodyWrap.addClass("is-editing");
       autosize();
@@ -3772,6 +3913,7 @@ export class GanttView extends ItemView {
       bodyWrap.removeClass("is-editing");
       await renderPreview();
     })());
+    this.lockIfReadOnly(d, t.path);
     if (seq === this.detailSeq) d.scrollTop = keepScroll;
   }
 
@@ -3779,7 +3921,13 @@ export class GanttView extends ItemView {
   // open a task's note by its file, so a "#" in the name isn't read as a link to a heading
   private openTask(path: string, newLeaf: PaneType | boolean): void {
     const f = this.app.vault.getAbstractFileByPath(path);
-    if (f instanceof TFile) void this.app.workspace.getLeaf(newLeaf).openFile(f);
+    if (!(f instanceof TFile)) return;
+    const leaf = this.app.workspace.getLeaf(newLeaf);
+    void leaf.openFile(f).then(() => {
+      // ボードを描くのは Kanban プラグイン。無ければ Markdown のまま開くので、並べ替えの代わりのやり方を伝える
+      // the Kanban plugin draws boards; without it the note opens as Markdown, so say how to reorder cards there
+      if (this.tasks.find((x) => x.path === path)?.kind === "kanban" && leaf.view.getViewType() === "markdown") new Notice(tr().boardAsMarkdown, 8000);
+    });
   }
 
   // 確認ダイアログを挟んでタスクを削除（ゴミ箱へ）/ confirm, then delete the task (to trash)

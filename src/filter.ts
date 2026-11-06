@@ -94,60 +94,64 @@ const started = (t: Task, today: number): boolean => {
   return !s || dayIndex(s) <= today;
 };
 
-// 割り込みと再開。急ぎ仕事のノートの interrupts（「急ぎにする」で書く明示のリンク）が先：急ぎが始まって残っている間はリンク先が
-// 割り込み中、急ぎが終わったら（完了・中止）再開待ち。「再開」でリンクを消すまで残る。リンクの無い急ぎ仕事は、同じ人の始まっている
-// 進行中の仕事を割り込み中とみなすだけ（どれに戻るかは分からないので再開待ちは出さない）。どちらもリンク先のノートには何も書かない
-// interruptions and resumption. An urgent note's `interrupts` (an explicit link written by "Mark as urgent") comes first: while the
-// urgent work has started and is outstanding its targets are interrupted, and once it is finished (completed or cancelled) they wait to
-// be resumed, until "Resume" clears the link. Urgent work without a link only marks the same person's started, running work as
-// interrupted (which one to return to isn't known, so no resume cue). Neither writes anything to the interrupted notes
+// 割り込みと再開は、急ぎ仕事のノートの interrupts（「急ぎにする」で書く明示のリンク）だけから読む。推測はしない：リンクの無い急ぎ仕事は誰も止めない。
+// 急ぎが始まって残っている間はリンク先が割り込み中。リンクしている急ぎが全部終わったら（完了・中止）再開待ちで、「再開」でリンクを消すまで残る。
+// 一つでもまだ走っていれば割り込み中のまま（重なった割り込み）。リンク先のノートには何も書かず、ステータスも変えない
+// interruptions and resumption are read only from urgent notes' `interrupts` (explicit links written by "Mark as urgent"); nothing is inferred, so
+// urgent work without links stops nobody. While the urgent work has started and is outstanding, its targets are interrupted; once every urgent
+// task linking a target is finished (completed or cancelled), the target waits to be resumed until "Resume" clears the links. If any is still
+// running the target stays interrupted (overlapping interruptions). Nothing is written to the targets and their status doesn't change
 export interface Interruptions {
-  interrupted: Map<string, Task>; // 割り込まれたタスクのパス → 急ぎ仕事 / interrupted task path → the urgent task
-  resume: Map<string, Task>; // 再開を待つタスクのパス → 終わった急ぎ仕事 / task path waiting to be resumed → the finished urgent task
+  interrupted: Map<string, Task[]>; // 割り込まれたタスクのパス → まだ走っている急ぎ仕事 / interrupted task path → the urgent work still running
+  resume: Map<string, Task[]>; // 再開を待つタスクのパス → 終わった急ぎ仕事（走っているものが無いときだけ）/ task path to resume → the finished urgent work (only when none still runs)
 }
 export function interruptions(tasks: Task[], statuses: StatusDef[], today: number): Interruptions {
-  const interrupted = new Map<string, Task>();
-  const resume = new Map<string, Task>();
+  const interrupted = new Map<string, Task[]>();
+  const resume = new Map<string, Task[]>();
+  const add = (m: Map<string, Task[]>, p: string, u: Task) => m.set(p, [...(m.get(p) ?? []), u]);
   const byPath = new Map(tasks.map((t) => [t.path, t]));
-  const live = (u: Task) => isUrgent(u) && isOpen(u, statuses) && started(u, today);
   for (const u of tasks) {
     for (const p of u.interrupts ?? []) {
       const t = byPath.get(p);
       if (!t || t === u || !isOpen(t, statuses)) continue;
-      if (live(u)) interrupted.set(p, u);
-      else if (!isOpen(u, statuses)) resume.set(p, u);
+      if (!isOpen(u, statuses)) add(resume, p, u);
+      else if (isUrgent(u) && started(u, today)) add(interrupted, p, u);
     }
   }
-  for (const u of tasks.filter((x) => live(x) && !x.interrupts?.length)) {
-    for (const t of runningWorkOf(u, tasks, statuses, today)) if (!interrupted.has(t.path)) interrupted.set(t.path, u);
-  }
+  for (const p of interrupted.keys()) resume.delete(p);
   return { interrupted, resume };
 }
 
-// 「急ぎにする」ときにリンクする先：同じ人の、始まっている進行中の（急ぎでない）仕事 / what "Mark as urgent" links: the same person's started, running, non-urgent work
-export function runningWorkOf(u: Task, tasks: Task[], statuses: StatusDef[], today: number): Task[] {
+// 「急ぎにする」ときの候補：同じ人の、ステータスが「始めた」ステータス（既定は In progress）の仕事だけ。To do や日付だけでは数えない
+// candidates for "Mark as urgent": the same person's work whose status is the started status (In progress by default); To do or dates alone don't count
+export function runningWorkOf(u: Task, tasks: Task[], startedId: string | undefined): Task[] {
+  if (!startedId) return [];
   const people = new Set(u.assignees.map(linkLabel));
-  return tasks.filter((t) => t.path !== u.path && !isUrgent(t) && statusGroupOf(statuses, t.status) === "active" && started(t, today)
-    && t.assignees.some((a) => people.has(linkLabel(a))));
+  return tasks.filter((t) => t.path !== u.path && !isUrgent(t) && t.status === startedId && t.assignees.some((a) => people.has(linkLabel(a))));
 }
 
-// 行に出す例外は 1 つだけ（多い順に強い）。止まっている（延期）はステータス列が言うので出さない
-// a row shows one exception at most, strongest first; blocked (deferred) is left to the Status column
-export type Exception = "urgent" | "overdue" | "dependency" | "interrupted" | "resume";
-// 強い順 / strongest first
-export const EXCEPTIONS: Exception[] = ["urgent", "overdue", "dependency", "interrupted", "resume"];
+// 行の例外（強い順）。行には一番強いものと「ほかに何件」、詳細には全部を出す
+// a row's exceptions, strongest first; the row shows the strongest plus how many more, the details show them all
+export type Exception = "urgent" | "overdue" | "blocked" | "dependency" | "interrupted" | "resume";
+export const EXCEPTIONS: Exception[] = ["urgent", "overdue", "blocked", "dependency", "interrupted", "resume"];
 // いちばん強い例外 / the strongest exception of several
 export function strongest(list: (Exception | undefined)[]): Exception | undefined {
   return EXCEPTIONS.find((e) => list.includes(e));
 }
+export function exceptionsOf(t: Task, statuses: StatusDef[], today: number, conflicts: Set<string>, ints: Interruptions): Exception[] {
+  if (!isOpen(t, statuses)) return [];
+  const has: Record<Exception, () => boolean> = {
+    urgent: () => isUrgent(t),
+    overdue: () => isOverdue(t, statuses, today),
+    blocked: () => statusGroupOf(statuses, t.status) === "deferred",
+    dependency: () => conflicts.has(t.path),
+    interrupted: () => ints.interrupted.has(t.path),
+    resume: () => ints.resume.has(t.path),
+  };
+  return EXCEPTIONS.filter((e) => has[e]());
+}
 export function exceptionOf(t: Task, statuses: StatusDef[], today: number, conflicts: Set<string>, ints: Interruptions): Exception | undefined {
-  if (!isOpen(t, statuses)) return undefined;
-  if (isUrgent(t)) return "urgent";
-  if (isOverdue(t, statuses, today)) return "overdue";
-  if (conflicts.has(t.path)) return "dependency";
-  if (ints.interrupted.has(t.path)) return "interrupted";
-  if (ints.resume.has(t.path)) return "resume";
-  return undefined;
+  return exceptionsOf(t, statuses, today, conflicts, ints)[0];
 }
 
 // 親タスクの要約：完了したサブタスクの数／（キャンセルを除く）全体、と次にやる（並び順で最初の残っている）サブタスク
@@ -163,7 +167,7 @@ export function subtaskSummary(children: Task[], statuses: StatusDef[]): { done:
 
 // 残っている急ぎ仕事を兄弟の先頭へ、その次に再開を待つ仕事（それ以外の並びは cmp のまま）
 // outstanding urgent work goes first among its siblings, then work waiting to be resumed (cmp orders the rest)
-export function urgentFirst(statuses: StatusDef[], cmp: (a: Task, b: Task) => number, resume: ReadonlyMap<string, Task> = new Map()): (a: Task, b: Task) => number {
+export function urgentFirst(statuses: StatusDef[], cmp: (a: Task, b: Task) => number, resume: ReadonlyMap<string, unknown> = new Map()): (a: Task, b: Task) => number {
   const hot = (t: Task) => (isUrgent(t) && isOpen(t, statuses) ? 0 : resume.has(t.path) ? 1 : 2);
   return (a, b) => hot(a) - hot(b) || cmp(a, b);
 }
