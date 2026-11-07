@@ -73,6 +73,8 @@ export interface GanttSettings {
   nonWorkingDays: number[];
   // 先行が遅れて FS の後続と重なったら後続を押し出す / push FS successors when a slipping predecessor overlaps them
   autoScheduleFS: boolean;
+  // 新規タスクの開始・期限の初期値：today＝作成日、backlog＝日付なし / the initial dates of a new task: today = the creation date, backlog = none
+  newTaskDates: "today" | "backlog";
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
   visibleColumns: string[]; // 表示する任意列（name は常時表示）/ optional columns shown (name is always shown)
   columnWidths: Record<string, number>; // 列幅の上書き(px)。未設定列は既定幅 / per-column width overrides (px); unset = default
@@ -160,6 +162,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   tz: "system",
   nonWorkingDays: [0, 6],
   autoScheduleFS: true,
+  newTaskDates: "today",
   detailWidth: 380,
   visibleColumns: ["start", "end"],
   columnWidths: {},
@@ -274,6 +277,17 @@ export class GanttSettingTab extends PluginSettingTab {
   private ctlRecurse(setting: Setting): void {
     const s = this.plugin.settings;
     setting.addToggle((t) => t.setValue(s.recurse).onChange((v) => { s.recurse = v; this.save(); }));
+  }
+
+  // 新規タスクの日付（今日 / バックログ＝日付なし）/ the dates of a new task (today / backlog = none)
+  private ctlNewTaskDates(setting: Setting): void {
+    const s = this.plugin.settings;
+    setting.addDropdown((d) =>
+      d
+        .addOptions({ today: tr().setNewTaskToday, backlog: tr().setNewTaskBacklog })
+        .setValue(s.newTaskDates === "backlog" ? "backlog" : "today")
+        .onChange((v) => { s.newTaskDates = v === "backlog" ? "backlog" : "today"; this.save(); })
+    );
   }
 
   private ctlZoom(setting: Setting): void {
@@ -820,6 +834,12 @@ export class GanttSettingTab extends PluginSettingTab {
         desc: tr().setProgressLineColorDesc,
         render: (x) => this.ctlProgressLineColor(x),
       },
+      // タスクとサブタスク作成時の設定 / task and subtask creation
+      {
+        type: "group",
+        heading: tr().setNewTaskHeading,
+        items: [{ name: tr().setNewTaskDatesName, desc: tr().setNewTaskDatesDesc, render: (x) => this.ctlNewTaskDates(x) }],
+      },
       // ステータス（追加はフレームワークの list、削除は行内のゴミ箱）/ statuses (the list owns add; rows own delete)
       {
         type: "list",
@@ -1034,6 +1054,10 @@ export class GanttSettingTab extends PluginSettingTab {
     this.ctlProgressLineColor(
       new Setting(containerEl).setName(tr().setProgressLineColorName).setDesc(tr().setProgressLineColorDesc)
     );
+
+    // タスクとサブタスク作成時の設定 / task and subtask creation
+    new Setting(containerEl).setName(tr().setNewTaskHeading).setHeading();
+    this.ctlNewTaskDates(new Setting(containerEl).setName(tr().setNewTaskDatesName).setDesc(tr().setNewTaskDatesDesc));
 
     // ステータス一覧（列見出し＋ id/ラベル/グループ/色＋削除、末尾に追加ボタン）
     // status list: column header, then id/label/group/color + delete, with an add button at the end

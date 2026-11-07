@@ -556,6 +556,12 @@ export async function createTask(app: App, folderPath: string, baseName: string)
   return file instanceof TFile ? file : null;
 }
 
+// 新規タスクの開始・期限の初期値。today＝どちらも作成日、backlog（または不明な値）＝日付なし（null）
+// the initial start and due dates of a new task: "today" = both the creation date; "backlog" (or an unknown value) = no dates (null)
+export function newTaskDates(mode: string, today: string): { start: string; end: string } | null {
+  return mode === "today" ? { start: today, end: today } : null;
+}
+
 // タスク（ファイル）をリネーム。リンクも更新される / rename the task file (updates links)
 export async function renameTask(app: App, path: string, newName: string): Promise<string | null> {
   const file = app.vault.getAbstractFileByPath(path);

@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, isOverdue, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
+import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, isOverdue, newTaskDates, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -124,6 +124,11 @@ const statusDefs = [
   { id: "todo", label: "To do", color: "#000", group: "active" },
   { id: "done", label: "Done", color: "#000", group: "completed" },
 ];
+// 新規タスクの日付 / the dates of a new task
+check("newTaskDates: today は開始・期限とも作成日", JSON.stringify(newTaskDates("today", "2026-11-08")) === '{"start":"2026-11-08","end":"2026-11-08"}');
+check("newTaskDates: backlog は日付なし", newTaskDates("backlog", "2026-11-08") === null);
+check("newTaskDates: 不明な値は日付なし（壊れた設定で日付を勝手に付けない）", newTaskDates("", "2026-11-08") === null && newTaskDates("weekly", "2026-11-08") === null);
+
 // 期限切れ / overdue
 {
   const sts = [

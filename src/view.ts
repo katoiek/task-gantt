@@ -24,6 +24,7 @@ import {
   anchorStart,
   anchorEnd,
   isOverdue,
+  newTaskDates,
 } from "./model";
 import { addsNoDueDate, cascadeDates, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
 import {
@@ -2115,17 +2116,20 @@ export class GanttView extends ItemView {
   }
 
   // ----- 新規タスク作成 / create a new task -----
-  // 今のフォルダに 1 日タスク（開始=終了=今日）を作り、詳細パネルを開いて命名を促す
-  // create a 1-day task (start = end = today) in the current folder, then open the panel to name it
+  // 今のフォルダにタスクを作り（既定は 1 日タスク＝開始・終了とも今日。設定でバックログ＝日付なしにできる）、詳細パネルを開いて命名を促す
+  // create a task in the current folder (by default a 1-day task, start = end = today; a setting makes it a backlog task with no dates), then open the panel to name it
   private async createNewTask(): Promise<void> {
     let created: string | null = null;
     await this.mutate(tr().undoCreate(tr().newTaskName), [], async () => {
       const file = await createTask(this.app, this.folder, tr().newTaskName);
       if (!file) return false;
       const k = this.plugin.settings.keys;
-      const today = dayToStr(todayIndex());
-      await writeField(this.app, file.path, k.start, today);
-      await writeField(this.app, file.path, k.end, today);
+      // 設定が today なら開始・期限とも今日、backlog なら日付を入れない / "today" fills start and due with today; "backlog" leaves the dates empty
+      const dates = newTaskDates(this.plugin.settings.newTaskDates, dayToStr(todayIndex()));
+      if (dates) {
+        await writeField(this.app, file.path, k.start, dates.start);
+        await writeField(this.app, file.path, k.end, dates.end);
+      }
       created = file.path;
       return { created: [file.path] };
     });
