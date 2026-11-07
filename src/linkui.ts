@@ -59,7 +59,7 @@ export function attachLinkSuggest(app: App, el: HTMLInputElement | HTMLTextAreaE
   const place = (): void => {
     if (!pop) return;
     const r = el.getBoundingClientRect();
-    const caret = el instanceof HTMLTextAreaElement ? caretOffset(el) : null;
+    const caret = el.instanceOf(HTMLTextAreaElement) ? caretOffset(el) : null; // instanceof はポップアウトの窓では成り立たない / instanceof fails in a pop-out window
     const top = caret ? r.top + caret.top : r.bottom;
     const left = caret ? r.left + caret.left : r.left;
     const win = activeWindow;
@@ -169,7 +169,7 @@ export function handleLinkClick(app: App, e: MouseEvent, sourcePath: string): bo
 export function wireLinkHover(app: App, container: HTMLElement, hoverParent: Component, sourcePath: string): void {
   container.addEventListener("mouseover", (e) => {
     const a = (e.target as HTMLElement).closest("a.internal-link");
-    if (!(a instanceof HTMLElement)) return;
+    if (!a?.instanceOf(HTMLElement)) return; // ポップアウトの窓でも / in a pop-out window too
     app.workspace.trigger("hover-link", {
       event: e,
       source: VIEW_TYPE_GANTT,
