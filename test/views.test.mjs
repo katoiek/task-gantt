@@ -43,6 +43,8 @@ const cfg = (over = {}) => ({
   sortDir: "asc",
   zoom: "Week",
   collapsed: [],
+  cardFields: ["assignee", "start", "end"],
+  columnOrder: [],
   ...over,
 });
 
@@ -164,6 +166,11 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
   check("repair: 正しいものはそのまま", fixed["folder:ok"].views[0].config.zoom === "Month" && fixed["folder:ok"].active === "v1");
   check("repair: 足りない設定は base で補う", fixed["folder:partial"].views[0].config.zoom === "Day" && fixed["folder:partial"].views[0].config.sortBy === "start" && Array.isArray(fixed["folder:partial"].views[0].config.visibleColumns));
   check("repair: 壊れたビュー（ID が数など）は捨てる", fixed["folder:partial"].views.length === 1);
+  check("repair: カンバンの種類は保たれ、足りないカンバン用の設定は base で補う", (() => {
+    const r = repairBoardViews({ "folder:k": { active: "k", views: [{ id: "k", name: "K", type: "kanban", config: { cardFields: ["tags"] } }, { id: "x", name: "X", type: "weird", config: {} }] } }, base);
+    const v = r["folder:k"].views;
+    return v[0].type === "kanban" && v[0].config.cardFields.join() === "tags" && v[0].config.columnOrder.length === 0 && v[1].type === "gantt";
+  })());
   check("repair: 開いているビューが無ければ先頭", fixed["folder:partial"].active === "a");
   fixed["folder:ok"].views[0].config.visibleColumns.push("x");
   check("repair: base や元のデータと配列を共有しない", base.visibleColumns.length === 2 && raw["folder:ok"].views[0].config.visibleColumns.length === 2);

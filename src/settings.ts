@@ -239,6 +239,8 @@ export function defaultViewConfig(s: GanttSettings): ViewConfig {
     sortDir: DEFAULT_SETTINGS.sortDir,
     zoom: s.defaultZoom,
     collapsed: [],
+    cardFields: ["assignee", "start", "end"],
+    columnOrder: [],
   };
 }
 
