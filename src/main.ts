@@ -1,5 +1,6 @@
 import { Plugin, WorkspaceLeaf, TFolder, TFile, Menu, TAbstractFile } from "obsidian";
-import { GanttSettings, DEFAULT_SETTINGS, GanttSettingTab } from "./settings";
+import { GanttSettings, DEFAULT_SETTINGS, defaultViewConfig, GanttSettingTab } from "./settings";
+import { moveBoardKeys, repairBoardViews } from "./views";
 import { GanttView } from "./view";
 import { VIEW_TYPE_GANTT, GanttViewState } from "./types";
 import { t } from "./i18n";
@@ -90,6 +91,8 @@ export default class GanttPlugin extends Plugin {
     this.registerEvent(
       this.app.vault.on("rename", (file, oldPath) => {
         if (file instanceof TFile) migrateRenamedPath(this, oldPath, file.path);
+        // フォルダの名前変更・移動に、そのボードのビューを追従させる / the folder's views follow its rename or move
+        else if (file instanceof TFolder && moveBoardKeys(this.settings.boardViews, oldPath, file.path)) void this.saveData(this.settings);
       })
     );
     // 削除はイベントの孤児掃除を予約 / deletions schedule the orphan cleanup
@@ -169,6 +172,8 @@ export default class GanttPlugin extends Plugin {
     this.settings.tagColors = (this.settings.tagColors ?? []).map((c) => ({ ...c }));
     this.settings.folderColors = (this.settings.folderColors ?? []).map((c) => ({ ...c }));
     this.settings.columnWidths = { ...(this.settings.columnWidths ?? {}) };
+    // ビュー：壊れたデータを手当てし、既定の設定で足りない分を補う（配列は複製）/ views: repair broken data and fill gaps from the defaults (arrays cloned)
+    this.settings.boardViews = repairBoardViews(this.settings.boardViews, defaultViewConfig(this.settings));
     this.settings.customFields = (this.settings.customFields ?? []).map((f) => ({ ...f }));
     this.settings.nonWorkingDays = [...(this.settings.nonWorkingDays ?? DEFAULT_SETTINGS.nonWorkingDays)];
     // 通知設定も既定とマージ＆複製 / merge notify settings with defaults and clone containers

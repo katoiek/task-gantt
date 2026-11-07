@@ -3,6 +3,7 @@ import { App, Notice, Platform, PluginSettingTab, Setting, TextComponent } from 
 // minAppVersion 1.11.4 のままでも no-unsupported-api には触れない。
 // declarative-settings types (@since 1.13.0); type-only references call no runtime API,
 // so they don't trip no-unsupported-api while minAppVersion stays at 1.11.4.
+import { BoardViews, ViewConfig, eachConfig } from "./views";
 import type { SettingDefinitionItem, SettingGroupItem } from "obsidian";
 import type GanttPlugin from "./main";
 import { StatusDef, StatusGroup, STATUS_GROUPS, ZoomMode, DateFormat, Filter, FilterMatch, FilterPreset, CustomField, CustomFieldType } from "./types";
@@ -73,6 +74,8 @@ export interface GanttSettings {
   nonWorkingDays: number[];
   // 先行が遅れて FS の後続と重なったら後続を押し出す / push FS successors when a slipping predecessor overlaps them
   autoScheduleFS: boolean;
+  // ボード（フォルダ）ごとのビュー一覧。鍵は "folder:<パス>"。開いたことのあるボードだけ入る / each board's views, keyed "folder:<path>"; only boards that have been opened are here
+  boardViews: Record<string, BoardViews>;
   // 新規タスクの開始・期限の初期値：today＝作成日、backlog＝日付なし / the initial dates of a new task: today = the creation date, backlog = none
   newTaskDates: "today" | "backlog";
   detailWidth: number; // 詳細パネルの幅(px) / detail panel width (px)
@@ -162,6 +165,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   tz: "system",
   nonWorkingDays: [0, 6],
   autoScheduleFS: true,
+  boardViews: {},
   newTaskDates: "today",
   detailWidth: 380,
   visibleColumns: ["start", "end"],
@@ -214,6 +218,43 @@ export const DEFAULT_SETTINGS: GanttSettings = {
     gcal: "gcal",
   },
 };
+
+// 新しいビューの初期の設定（グループはフォルダ・色分けはステータス・表示切替はすべて既定・フィルタなし）。ズームは設定の既定
+// the initial config of a new view: group by folder, color by status, every display toggle at its default, no filters; the zoom is the settings' default
+export function defaultViewConfig(s: GanttSettings): ViewConfig {
+  return {
+    groupBy: "folder",
+    colorBy: "status",
+    flat: false,
+    rollup: false,
+    showEmptyFolders: true,
+    progressLine: false,
+    hideLabels: false,
+    markOverdue: false,
+    filters: [],
+    filterMatch: "all",
+    visibleColumns: [...DEFAULT_SETTINGS.visibleColumns],
+    columnWidths: {},
+    sortBy: DEFAULT_SETTINGS.sortBy,
+    sortDir: DEFAULT_SETTINGS.sortDir,
+    zoom: s.defaultZoom,
+    collapsed: [],
+  };
+}
+
+// 初めてボードを開くときの最初のビュー：これまでの全体設定（フィルタ・列・並べ替え）をそのまま引き継ぐ。利用者の見た目を変えないため
+// the first view of a board opened for the first time: it takes over the old global settings (filters, columns, sort), so nobody's look changes
+export function legacyViewConfig(s: GanttSettings): ViewConfig {
+  return {
+    ...defaultViewConfig(s),
+    filters: JSON.parse(JSON.stringify(s.filters ?? [])) as ViewConfig["filters"],
+    filterMatch: s.filterMatch ?? "all",
+    visibleColumns: [...(s.visibleColumns ?? DEFAULT_SETTINGS.visibleColumns)],
+    columnWidths: { ...(s.columnWidths ?? {}) },
+    sortBy: s.sortBy ?? DEFAULT_SETTINGS.sortBy,
+    sortDir: s.sortDir ?? DEFAULT_SETTINGS.sortDir,
+  };
+}
 
 // 設定タブは従来の display() で描画する。後継の getSettingDefinitions() は Obsidian 1.13.0
 // （現在 Early Access）専用で、採用すると安定版 1.12.x では設定タブが表示されなくなるため、
@@ -484,12 +525,17 @@ export class GanttSettingTab extends PluginSettingTab {
           const at = s.customFields.indexOf(f);
           if (at >= 0) s.customFields.splice(at, 1);
           const col = `cf:${f.id}`;
-          s.visibleColumns = s.visibleColumns.filter((c) => c !== col);
-          delete s.columnWidths[col];
-          if (s.sortBy === col) {
-            s.sortBy = "start";
-            s.sortDir = "asc";
-          }
+          // 列の設定は全部のビューにある。どのビューからも片付ける / every view holds column settings; tidy them all
+          const tidy = (c: { visibleColumns: string[]; columnWidths: Record<string, number>; sortBy: string; sortDir: "asc" | "desc" }): void => {
+            c.visibleColumns = c.visibleColumns.filter((x) => x !== col);
+            delete c.columnWidths[col];
+            if (c.sortBy === col) {
+              c.sortBy = "start";
+              c.sortDir = "asc";
+            }
+          };
+          tidy(s);
+          eachConfig(s.boardViews, tidy);
           this.save();
           this.redraw();
         })
@@ -550,6 +596,7 @@ export class GanttSettingTab extends PluginSettingTab {
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     s.customFields.push({ id, key: "", label: "", type: "text" });
     s.visibleColumns = [...s.visibleColumns, `cf:${id}`];
+    eachConfig(s.boardViews, (c) => { c.visibleColumns = [...c.visibleColumns, `cf:${id}`]; }); // どのビューにも最初から出す / start visible in every view
     this.save();
     this.redraw();
   }

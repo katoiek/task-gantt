@@ -11,6 +11,7 @@ test/columns.mjs
 test/schedule.mjs
 test/links.mjs
 test/pdf.mjs
+test/views.mjs
 
 # テスト用 Vault（リポジトリ直下・コミットしない）/ local dev vault, never committed
 Obsidian-Dev/
