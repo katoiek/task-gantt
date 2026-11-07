@@ -553,10 +553,16 @@ export class GanttView extends ItemView {
     }
     const { filters, filterMatch, statuses } = this.vs;
     const list = [...applyFilters(this.tasks, filters, filterMatch, statuses, todayIndex())].sort(taskComparator(this.columns(), this.vs));
+    // 列の順序は、最初に描くときに設定のステータスの順序を取り込み、このビューに保存する。以後は設定の順序を変えても、このビューは変わらない。
+    // 設定で足したステータスは末尾に増え、消したステータスの列は消える
+    // the column order takes the settings' status order once, on the first draw, and keeps it in this view; changing the settings afterwards leaves the view alone.
+    // A status added in the settings joins at the end, a deleted one drops out
+    const order = orderStatusIds(statuses, this.cfg.columnOrder);
+    if (order.join("\n") !== this.cfg.columnOrder.join("\n")) this.cfg.columnOrder = order;
     const board = host.createDiv({ cls: "ogantt-kanban" });
     // ステータスの列は、カードが 0 件でも残す（空の列にもカードを落とせるように）。未割当だけは、カードがあるときだけ出す
     // a status column stays even with no cards (so a card can still be dropped there); only Unassigned shows just when it has cards
-    for (const col of buildKanbanColumns(list, statuses, this.cfg.columnOrder)) {
+    for (const col of buildKanbanColumns(list, statuses, order)) {
       if (col.status === null && col.cards.length === 0) continue;
       this.renderKanbanColumn(board, col);
     }

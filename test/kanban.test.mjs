@@ -23,6 +23,12 @@ const ids = (cols) => cols.map((c) => c.status);
 const paths = (col) => col.cards.map((t) => t.path).join();
 
 // ── orderStatusIds ──
+{
+  // 設定の順序を取り込んだあとは、設定の順序が変わっても、ビューの並びは変わらない
+  const saved = orderStatusIds(ST, []); // 取り込み（初期値）/ the snapshot (the starting order)
+  const settingsReordered = [ST[2], ST[1], ST[0]];
+  check("orderStatusIds: 取り込んだ後は、設定の順序を変えても、ビューの並びは変わらない", orderStatusIds(settingsReordered, saved).join() === "todo,doing,done");
+}
 check("orderStatusIds: 保存が無ければ設定の順（初期値）", orderStatusIds(ST, []).join() === "todo,doing,done");
 check("orderStatusIds: 保存した並びを使う", orderStatusIds(ST, ["done", "todo", "doing"]).join() === "done,todo,doing");
 check("orderStatusIds: 知らない ID は捨てる", orderStatusIds(ST, ["ghost", "done"]).join() === "done,todo,doing");

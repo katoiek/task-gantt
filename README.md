@@ -76,10 +76,10 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 
 ## Kanban view
 
-**＋ → Kanban** adds a Kanban view next to your Gantt views. It shows the board's tasks as **cards in one column per status**, the way Wrike's Board view does. The columns take their name and colour from your statuses (add a status in **Settings** and a column appears), starting in the order of the statuses in **Settings**. Tasks without a status go into an **Unassigned** column, which stays first and shows only while it has cards.
+**＋ → Kanban** adds a Kanban view next to your Gantt views. It shows the board's tasks as **cards in one column per status**, the way Wrike's Board view does. The columns take their name and colour from your statuses (add a status in **Settings** and a column appears), starting in the order of the statuses in **Settings** (a new Kanban view takes that order once, and keeps its own from then on). Tasks without a status go into an **Unassigned** column, which stays first and shows only while it has cards.
 
 - **Move a card to another column** by dragging it: the task's status becomes the column's status (undoable with **Ctrl/Cmd+Z**). Dropping on **Unassigned** clears the status.
-- **Reorder the columns** by dragging a column header. The order is saved in that view (each Kanban view can have its own), and a view you haven't reordered follows the statuses' order in **Settings**, where the status rows have ▲ ▼ buttons to set that default order (it's also the legend's order).
+- **Reorder the columns** by dragging a column header. The order is saved in that view (each Kanban view has its own). **Settings** only supplies the starting order, taken once when the view is first drawn; changing the statuses' order there later (its ▲ ▼ buttons, which also set the legend's order) doesn't change existing views. A status you add in **Settings** appears at the end of each view's columns, and a deleted one disappears.
 - **Click a card** to open its detail panel.
 - **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **Card fields** button lists every other column, including custom fields, as checkboxes (the same fields as the table's column menu).
 - **Subtasks**: a card with subtasks shows a count icon; click it to open the first-level subtasks inside the card. A subtask is not a card of its own while its parent is shown.
@@ -399,10 +399,10 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ## カンバンビュー
 
-**＋ → カンバン**で、ガントのビューの隣に、カンバンのビューを追加できます。Wrike のボードビューのように、ボードのタスクを、**ステータスごとの列にカード**として並べます。列の名前と色は、ステータスのものです（**設定**でステータスを足すと、列が増えます）。列の順序は、最初は**設定**のステータスの順序です。ステータスのないタスクは、**未割当**の列に入ります。未割当は、いつも先頭で、カードがあるあいだだけ表示されます。
+**＋ → カンバン**で、ガントのビューの隣に、カンバンのビューを追加できます。Wrike のボードビューのように、ボードのタスクを、**ステータスごとの列にカード**として並べます。列の名前と色は、ステータスのものです（**設定**でステータスを足すと、列が増えます）。列の順序は、最初は**設定**のステータスの順序です（新しいカンバンのビューが、その順序を一度だけ取り込み、以後は自分の順序を持ちます）。ステータスのないタスクは、**未割当**の列に入ります。未割当は、いつも先頭で、カードがあるあいだだけ表示されます。
 
 - **カードを別の列へドラッグ**すると、タスクのステータスが、その列のステータスに変わります（**Ctrl/Cmd+Z** で取り消せます）。**未割当**にドロップすると、ステータスが外れます。
-- **列の見出しをドラッグ**すると、列の順序を入れ替えられます。順序は、そのビューに保存されます（カンバンのビューごとに別の順序にできます）。並べ替えていないビューは、**設定**のステータスの順序に従います。**設定**のステータスの行の ▲ ▼ ボタンで、その初期値の順序（凡例の順序でもあります）を変えられます。
+- **列の見出しをドラッグ**すると、列の順序を入れ替えられます。順序は、そのビューに保存されます（カンバンのビューごとに別の順序です）。**設定**が渡すのは、最初の順序だけです（ビューを最初に描くときに、一度だけ取り込みます）。あとから**設定**でステータスの順序を変えても（▲ ▼ ボタン。凡例の順序も変わります）、既存のビューは変わりません。**設定**でステータスを足すと、各ビューの列の末尾に増え、消すと、その列も消えます。
 - **カードをクリック**すると、詳細パネルが開きます。
 - **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カードの項目**ボタンから、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます（表の「列の表示」と同じ項目です）。
 - **サブタスク**: サブタスクのあるカードには、件数のアイコンが出ます。クリックすると、1 階層目のサブタスクが、カードの中に開きます。親が表示されているあいだ、サブタスクは独立したカードにはなりません。
