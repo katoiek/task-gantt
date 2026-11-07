@@ -68,6 +68,8 @@ Turn on **Flat** in the **Display** menu to list every task in one sorted list, 
 
 A board (a folder) can hold several **views**, shown as tabs above the toolbar, like Wrike's views. Each view keeps its own grouping and color-by, the Display menu toggles, filters and match mode, visible columns and their widths, sort, zoom and collapsed groups — so switching tabs switches the whole look at once.
 
+![View tabs above the toolbar; the + menu copies the open view or adds a new Gantt view](docs/images/view-menu-en.png)
+
 - **＋** adds a view: **Copy this view** copies every setting and opens the copy next to the original, or **Gantt** adds a new view with the default settings and no filters.
 - Double-click a tab, or use the **▾** on the open tab (or right-click any tab), to **rename**, **duplicate** or **delete** a view. The last view can't be deleted, and deleting a view never deletes tasks.
 - Changes are saved to the open view automatically. Saved filter **presets** stay shared by all views. The first time a board is opened, its first view takes over your current settings, so nothing changes at first.
@@ -375,6 +377,8 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 ## ビュー
 
 ボード（フォルダ）は、複数の**ビュー**を持てます。ツールバーの上に、Wrike のビューのようなタブとして並びます。ビューごとに、グループ化と色分け、「表示」メニューの切り替え、フィルタと一致条件、表示する列とその幅、並べ替え、ズーム、折りたたんだグループが保存されます。タブを切り替えると、見た目の設定がまとめて切り替わります。
+
+![ツールバーの上のビューのタブ。＋のメニューで、今のビューをコピーするか、新しいガントを追加する](docs/images/view-menu-ja.png)
 
 - **＋** でビューを追加します。**今のビューをコピー**は、すべての設定を複製して、元の隣に開きます。**ガント**は、既定の設定でフィルタのない新しいビューを追加します。
 - タブをダブルクリックするか、開いているタブの **▾**（または任意のタブの右クリック）から、ビューの**名前の変更**・**複製**・**削除**ができます。最後の 1 つは削除できません。ビューを削除しても、タスクは消えません。
