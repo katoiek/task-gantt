@@ -1122,6 +1122,18 @@ input.ogantt-cell-input[type="number"] {
 .ogantt-assignee-field.is-editing .ogantt-assignee-view {
   display: none;
 }
+/* 期限切れの強調：赤い枠。見出しの件数は赤字 / the overdue highlight: a red outline, and a red count on headings */
+.ogantt-bar.is-overdue,
+.ogantt-milestone.is-overdue {
+  stroke: var(--color-red);
+  stroke-width: 2;
+}
+.ogantt-group-count {
+  margin-left: 8px;
+  font-size: 0.85em;
+  font-weight: normal;
+  color: var(--color-red);
+}
 /* カーソル位置を測るための見えないミラー要素 / the invisible mirror element that measures the caret position */
 .ogantt-caret-mirror {
   position: absolute;

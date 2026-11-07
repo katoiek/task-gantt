@@ -51,6 +51,9 @@ interface Strings {
   optFlat: string;
   optRollup: string;
   optProgressLine: string;
+  optHideLabels: string; // バーの名前・担当を隠す / hide the names and assignees on the bars
+  optOverdue: string; // 期限切れを強調 / highlight overdue tasks
+  overdueTitle: (n: number) => string;
   filterAll: string;
   noneLabel: string;
   // 日付フィルタ（開始日/期限日）/ date filter (start/due). 対象名は fieldStart/fieldDue、today は today を流用
@@ -321,6 +324,9 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "フラット表示",
     optRollup: "ロールアップ",
     optProgressLine: "稲妻線",
+    optHideLabels: "バーの名前・担当を隠す",
+    optOverdue: "期限切れを強調",
+    overdueTitle: (n) => `期限切れ ${n} 件`,
     filterAll: "すべて",
     noneLabel: "（なし）",
     nothingToUndo: "取り消す操作がありません",
@@ -572,6 +578,9 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "Flat",
     optRollup: "Roll up",
     optProgressLine: "Progress line",
+    optHideLabels: "Hide bar labels",
+    optOverdue: "Highlight overdue",
+    overdueTitle: (n) => `${n} overdue`,
     filterAll: "All",
     noneLabel: "(none)",
     nothingToUndo: "Nothing to undo",
@@ -823,6 +832,9 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "平铺",
     optRollup: "汇总",
     optProgressLine: "进度线",
+    optHideLabels: "隐藏条上的标签",
+    optOverdue: "突出显示逾期",
+    overdueTitle: (n) => `${n} 个已逾期`,
     filterAll: "全部",
     noneLabel: "（无）",
     nothingToUndo: "没有可撤销的操作",
@@ -1074,6 +1086,9 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "平面",
     optRollup: "彙總",
     optProgressLine: "進度線",
+    optHideLabels: "隱藏長條標籤",
+    optOverdue: "標示逾期",
+    overdueTitle: (n) => `${n} 個已逾期`,
     filterAll: "全部",
     noneLabel: "（無）",
     nothingToUndo: "沒有可復原的操作",
@@ -1325,6 +1340,9 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "평면",
     optRollup: "롤업",
     optProgressLine: "진척선",
+    optHideLabels: "막대 라벨 숨기기",
+    optOverdue: "기한 초과 강조",
+    overdueTitle: (n) => `기한 초과 ${n}건`,
     filterAll: "전체",
     noneLabel: "(없음)",
     nothingToUndo: "취소할 작업이 없습니다",
@@ -1576,6 +1594,9 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "À plat",
     optRollup: "Synthèse",
     optProgressLine: "Ligne d'avancement",
+    optHideLabels: "Masquer les libellés des barres",
+    optOverdue: "Mettre en évidence les retards",
+    overdueTitle: (n) => `${n} en retard`,
     filterAll: "Tous",
     noneLabel: "(aucun)",
     nothingToUndo: "Rien à annuler",
@@ -1827,6 +1848,9 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "Plano",
     optRollup: "Resumen",
     optProgressLine: "Línea de avance",
+    optHideLabels: "Ocultar etiquetas de las barras",
+    optOverdue: "Resaltar vencidas",
+    overdueTitle: (n) => `${n} vencidas`,
     filterAll: "Todos",
     noneLabel: "(ninguno)",
     nothingToUndo: "Nada que deshacer",
@@ -2078,6 +2102,9 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "Плоский список",
     optRollup: "Сводка",
     optProgressLine: "Линия прогресса",
+    optHideLabels: "Скрыть подписи на полосах",
+    optOverdue: "Выделять просроченные",
+    overdueTitle: (n) => `просрочено: ${n}`,
     filterAll: "Все",
     noneLabel: "(нет)",
     nothingToUndo: "Нечего отменять",

@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
+import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, isOverdue, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -124,6 +124,25 @@ const statusDefs = [
   { id: "todo", label: "To do", color: "#000", group: "active" },
   { id: "done", label: "Done", color: "#000", group: "completed" },
 ];
+// 期限切れ / overdue
+{
+  const sts = [
+    { id: "todo", label: "To do", color: "#000", group: "active" },
+    { id: "done", label: "Done", color: "#000", group: "completed" },
+    { id: "drop", label: "Dropped", color: "#000", group: "cancelled" },
+    { id: "wait", label: "Waiting", color: "#000", group: "deferred" },
+  ];
+  const today = parseInt("100", 10);
+  const dayStr = (n) => new Date(Date.UTC(1970, 0, 1 + n)).toISOString().slice(0, 10);
+  const t = (end, status) => ({ end, status });
+  check("期限切れ: 期限が過去で未完了", isOverdue(t(dayStr(99), "todo"), sts, today));
+  check("期限切れ: 期限が今日なら、まだ", !isOverdue(t(dayStr(100), "todo"), sts, today));
+  check("期限切れ: 期限が未来はまだ", !isOverdue(t(dayStr(101), "todo"), sts, today));
+  check("期限切れ: 完了・キャンセルは対象外", !isOverdue(t(dayStr(50), "done"), sts, today) && !isOverdue(t(dayStr(50), "drop"), sts, today));
+  check("期限切れ: 保留（延期）は対象", isOverdue(t(dayStr(50), "wait"), sts, today));
+  check("期限切れ: ステータス未設定・未知も対象", isOverdue(t(dayStr(50), undefined), sts, today) && isOverdue(t(dayStr(50), "ghost"), sts, today));
+  check("期限切れ: 期限日が無ければ対象外", !isOverdue(t(undefined, "todo"), sts, today));
+}
 check("statusGroupOf: 定義済み id", statusGroupOf(statusDefs, "done") === "completed");
 check("statusGroupOf: ステータス未設定は undefined", statusGroupOf(statusDefs, undefined) === undefined);
 check("statusGroupOf: 空文字は undefined", statusGroupOf(statusDefs, "") === undefined);

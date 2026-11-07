@@ -1,6 +1,7 @@
 import { App, TFile, TFolder, getAllTags, normalizePath } from "obsidian";
 import { GanttSettings } from "./settings";
 import { fmText, plainText } from "./links";
+import { dayIndex } from "./timeline";
 import { Task, Row, Dep, DepType, StatusDef, StatusGroup, CustomField, CustomFieldType, CustomValue } from "./types";
 
 // ── ステータスグループ / status groups ──
@@ -30,6 +31,15 @@ export function inferStatusGroup(id: string, label: string): StatusGroup {
 export function statusGroupOf(statuses: StatusDef[], status?: string): StatusGroup | undefined {
   if (!status) return undefined;
   return statuses.find((s) => s.id === status)?.group;
+}
+
+// 期限切れ：ノートに書かれた期限日が today（日番号）より前で、ステータスが完了・キャンセルでない。期限日が無いタスクは対象外
+// overdue: the due date written in the note is before `today` (a day number) and the status isn't completed or cancelled; a task without a due date never is
+export function isOverdue(t: Pick<Task, "end" | "status">, statuses: StatusDef[], today: number): boolean {
+  if (!t.end) return false;
+  const group = statusGroupOf(statuses, t.status);
+  if (group === "completed" || group === "cancelled") return false;
+  return dayIndex(t.end) < today;
 }
 
 // Custom field の不備（列にしない理由）/ why a custom field can't become a column

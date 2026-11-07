@@ -23,6 +23,7 @@ import {
   readBody,
   anchorStart,
   anchorEnd,
+  isOverdue,
 } from "./model";
 import { cascadeDates, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
 import {
@@ -96,6 +97,8 @@ export class GanttView extends ItemView {
   private flat = false; // フラット表示（フォルダ/親子を無視し全タスク一覧）/ flat list ignoring folders & nesting
   private rollup = false; // 親タスクのバーを子孫の集約で描く（既定OFF）/ draw parent bars as a rollup of descendants (default off)
   private progressLine = false; // 稲妻線（今日基準の進捗折れ線・既定OFF）/ progress line against today (default off)
+  private hideLabels = false; // バーの名前・担当を隠す（既定OFF＝従来どおり表示）/ hide the names and assignees on the bars (default off = shown as before)
+  private markOverdue = false; // 期限切れの強調（赤枠・⚠・見出しの件数。既定OFF）/ highlight overdue tasks (red outline, ⚠, heading counts; default off)
   private allFolders: string[][] = []; // スコープ配下の全フォルダ（相対セグメント）/ all folders under scope
   private optionsHost!: HTMLElement; // グループ/色分け/表示切替/凡例の差し替え先 / layout options + legend container
   private filterHost!: HTMLElement; // 統合フィルタ行の差し替え先 / unified filter bar container
@@ -994,6 +997,16 @@ export class GanttView extends ItemView {
       this.progressLine = v;
       this.rerender();
     });
+    // バーの名前・担当を隠す / hide the names and assignees on the bars
+    makeCheckbox("eye-off", tr().optHideLabels, this.hideLabels, (v) => {
+      this.hideLabels = v;
+      this.rerender();
+    });
+    // 期限切れの強調 / highlight overdue tasks
+    makeCheckbox("alarm-clock", tr().optOverdue, this.markOverdue, (v) => {
+      this.markOverdue = v;
+      this.rerender();
+    });
 
     // 凡例（色分けの基準を説明）/ legend explaining the current color basis
     const legend = host.createDiv({ cls: "ogantt-legend" });
@@ -1369,6 +1382,7 @@ export class GanttView extends ItemView {
     // 行ループ内ではローカル変数 tr（行要素）が i18n の tr() を隠すため、先に文言を退避
     // the row var `tr` shadows the i18n tr() inside the loop, so grab strings up front
     const strings = tr();
+    const overdue = this.markOverdue ? this.overdueCounts() : null;
 
     // (1) 左上の角＝表ヘッダー（表示中の列を並べる・クリックでソート）/ top-left corner = header (click to sort)
     const corner = grid.createDiv({ cls: "ogantt-corner" });
@@ -1460,6 +1474,9 @@ export class GanttView extends ItemView {
         if (this.groupBy === "folder" && row.key != null) ic.style.color = this.folderColor(row.group);
         else if (this.groupBy === "tag" && row.group !== strings.noneLabel) ic.style.color = this.tagColor(row.group);
         g.createSpan({ text: row.group });
+        // 期限切れの件数（強調がオンのとき）/ the overdue count (with the highlight on)
+        const late = overdue?.get(row);
+        if (late) g.createSpan({ cls: "ogantt-group-count", text: `⚠ ${late}`, attr: { title: strings.overdueTitle(late) } });
         // 見出しを右クリック＝色を変更（フォルダ／タグ。(なし) は除く）/ right-click a heading to change its color
         if (this.groupBy === "folder" && row.key != null) {
           g.addEventListener("contextmenu", (e) => { e.preventDefault(); this.openColorMenu(e, "folder", row.group); });
@@ -1588,6 +1605,24 @@ export class GanttView extends ItemView {
     }
   }
 
+  // グループ見出しごとの期限切れの件数（入れ子の配下も含む）/ overdue tasks per group heading (nested ones included)
+  private overdueCounts(): Map<Row, number> {
+    const out = new Map<Row, number>();
+    const statuses = this.plugin.settings.statuses;
+    const today = todayIndex();
+    this.rows.forEach((row, i) => {
+      if (row.kind !== "group") return;
+      let n = 0;
+      for (let j = i + 1; j < this.rows.length; j++) {
+        const r = this.rows[j];
+        if (r.kind === "group" && r.depth <= row.depth) break;
+        if (r.kind === "task" && r.task && isOverdue(r.task, statuses, today)) n++;
+      }
+      if (n) out.set(row, n);
+    });
+    return out;
+  }
+
   // 稲妻線：今日を基準に、各行の「実績到達点」を結ぶ折れ線。左へ折れる＝遅れ / 右＝進み
   // progress line: joins each row's achieved-progress point against today; left = behind, right = ahead
   private drawProgressLine(svg: SVGElement, width: number, height: number): void {
@@ -1651,9 +1686,11 @@ export class GanttView extends ItemView {
             : (t.status && statusColor.get(t.status)) || FALLBACK_BAR;
         const rg = this.svgEl("g", { class: "ogantt-bar-g ogantt-rollup-g", "data-path": t.path });
         rg.appendChild(this.svgEl("rect", { x: sx, y: yy, width: sw, height: hh, rx: 4, class: "ogantt-bar ogantt-rollup-bar", fill: c }));
-        const lbl = this.svgEl("text", { x: sx + sw + 6, y: i * ROW_H + ROW_H / 2 + 4, class: "ogantt-bar-label" });
-        lbl.textContent = t.name;
-        rg.appendChild(lbl);
+        if (!this.hideLabels) {
+          const lbl = this.svgEl("text", { x: sx + sw + 6, y: i * ROW_H + ROW_H / 2 + 4, class: "ogantt-bar-label" });
+          lbl.textContent = t.name;
+          rg.appendChild(lbl);
+        }
         rg.addEventListener("dblclick", (ev) => { ev.stopPropagation(); void this.openDetail(t.path); });
         svg.appendChild(rg);
         return;
@@ -1669,6 +1706,7 @@ export class GanttView extends ItemView {
           : (t.status && statusColor.get(t.status)) || FALLBACK_BAR;
 
       const g = this.svgEl("g", { class: "ogantt-bar-g", "data-path": t.path });
+      const overdue = this.markOverdue && isOverdue(t, this.plugin.settings.statuses, todayIndex()); // 期限切れの強調 / the overdue highlight
       const cyMid = i * ROW_H + ROW_H / 2;
       let lx = x; // 左端ハンドル位置 / left handle x
       let rx = x; // 右端ハンドル位置 / right handle x
@@ -1679,7 +1717,7 @@ export class GanttView extends ItemView {
         const r = h / 2;
         const dia = this.svgEl("path", {
           d: `M ${cx} ${cy - r} L ${cx + r} ${cy} L ${cx} ${cy + r} L ${cx - r} ${cy} Z`,
-          class: "ogantt-milestone",
+          class: "ogantt-milestone" + (overdue ? " is-overdue" : ""),
           fill: color,
         });
         g.appendChild(dia);
@@ -1689,16 +1727,20 @@ export class GanttView extends ItemView {
       } else {
         const endStr = anchorEnd(t) ?? aStart;
         const w = Math.max((dayIndex(endStr) - dayIndex(aStart) + 1) * this.ppd, 6);
-        const rect = this.svgEl("rect", { x, y, width: w, height: h, rx: 4, class: "ogantt-bar", fill: color });
+        const rect = this.svgEl("rect", { x, y, width: w, height: h, rx: 4, class: "ogantt-bar" + (overdue ? " is-overdue" : ""), fill: color });
         g.appendChild(rect);
         if (t.progress != null && t.progress > 0) {
           const pw = (w * Math.min(100, t.progress)) / 100;
           g.appendChild(this.svgEl("rect", { x, y, width: pw, height: h, rx: 4, class: "ogantt-bar-progress" }));
         }
         // ラベル（タスク名＋担当）/ label
-        const label = this.svgEl("text", { x: x + w + 6, y: cyText(i), class: "ogantt-bar-label" });
-        label.textContent = t.assignee ? `${t.name} · @${linkLabel(t.assignee)}` : t.name;
-        g.appendChild(label);
+        // 名前を隠していても、期限切れの ⚠ だけは出す / with the names hidden, the overdue ⚠ still shows
+        const text = (overdue ? "⚠ " : "") + (this.hideLabels ? "" : t.assignee ? `${t.name} · @${linkLabel(t.assignee)}` : t.name);
+        if (text.trim()) {
+          const label = this.svgEl("text", { x: x + w + 6, y: cyText(i), class: "ogantt-bar-label" });
+          label.textContent = text.trimEnd();
+          g.appendChild(label);
+        }
         this.attachDrag(g, rect, t);
         // 端ホバーで ↔ カーソル、中央は掴むカーソル / ew-resize near edges, grab in the middle
         rect.addEventListener("mousemove", (e: MouseEvent) => {

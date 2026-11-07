@@ -56,6 +56,8 @@ An options row above the table shapes how the board is displayed.
 
 ![The Progress column and the progress line, both enabled from the view options](docs/images/progressline_en.png)
 
+**Hide bar labels** removes the task name and assignee after each bar, for a cleaner chart (off by default: names are shown). **Highlight overdue** (off by default) outlines in red every bar whose due date has passed and whose status isn't completed or cancelled, adds a ⚠ after the bar, and shows a red ⚠ count on each group heading. Both sit next to the progress line in the options row.
+
 ## Custom fields
 
 Show any frontmatter key as a table column. In **Settings → Task Gantt → Custom fields**, click **Add field** and give it a **key** (the frontmatter property, e.g. `client`), an optional **label** for the column header, and a **type**:
@@ -341,6 +343,8 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 **稲妻線**は、今日を基準にした垂線を各タスクの実績到達点まで折り曲げた折れ線です。**今日より左に折れれば遅れ、右なら進み**を意味します。各行の点は、タスクの `progress` に対応するバー上の位置に置かれます（先週が期限なのに 40% のタスクは、線をその 40% 地点まで引き戻します）。100% のタスク、まだ開始日が来ていない未着手タスク、フォルダ行、ロールアップ中の親バーは今日線上を素通りします。開始日を過ぎているのに進捗 0% のタスクは、線を開始日まで引き戻します。線の色は**設定 → Task Gantt → 稲妻線の色**で変更できます。
 
 ![進捗列と稲妻線（どちらも表示オプションから有効化）](docs/images/progressline_ja.png)
+
+**バーのラベルを隠す**と、各バーの後ろのタスク名と担当者を消して、すっきり見せられます（既定はオフ＝名前を表示）。**期限切れを強調**（既定はオフ）は、期限日が過ぎていて、ステータスが完了・キャンセルでないタスクのバーを赤い枠で囲み、バーの後ろに ⚠ を付け、グループ見出しに赤い ⚠ の件数を出します。どちらも、表示オプションの行の稲妻線の右にあります。
 
 ## カスタムフィールド
 
