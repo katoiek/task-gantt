@@ -4,6 +4,7 @@
 import { Notice, Platform, TFile, TFolder } from "obsidian";
 import type GanttPlugin from "../main";
 import { collectTasks, combineDateTime, parseStored, readBody } from "../model";
+import { plainText } from "../links";
 import { Task } from "../types";
 import { t as tr } from "../i18n";
 import { GcalApiError, GEvent, deleteEvent, insertEvent, listEvents, patchEvent } from "./api";
@@ -167,7 +168,7 @@ async function pushPass(plugin: GanttPlugin, skip: Set<string>): Promise<void> {
   for (const t of tasks) {
     if (skip.has(t.path)) continue;
     const fmId = fmOf(plugin, t.path)?.[k.gcalId];
-    const knownId = fmId != null && fmId !== "" ? String(fmId) : "";
+    const knownId = plainText(fmId);
     let st = g.state[t.path];
     // 他端末が作った紐付け（frontmatter の gcalId）を取り込む / adopt a link created on another device
     if (!st && knownId) st = g.state[t.path] = { id: knownId, hash: "", etag: "", at: 0 };

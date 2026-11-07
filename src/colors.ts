@@ -27,7 +27,7 @@ export function hashColor(name: string): string {
 // Obsidian's own tag color, following the theme; falls back to its default purple if a theme omits it
 const OBSIDIAN_TAG_FALLBACK = "#8b6cef";
 export function obsidianTagColor(): string {
-  const v = getComputedStyle(document.body).getPropertyValue("--tag-color").trim();
+  const v = getComputedStyle(activeDocument.body).getPropertyValue("--tag-color").trim();
   return v || OBSIDIAN_TAG_FALLBACK;
 }
 

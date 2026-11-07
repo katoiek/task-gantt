@@ -131,7 +131,7 @@ function stop(e: KeyboardEvent): void {
 // measure the caret position inside a textarea (px from its top-left; `top` is the line's bottom) with a mirror div
 function caretOffset(ta: HTMLTextAreaElement): { top: number; left: number; line: number } {
   const cs = activeWindow.getComputedStyle(ta);
-  const m = activeDocument.body.createDiv();
+  const m = activeDocument.body.createDiv({ cls: "ogantt-caret-mirror" });
   const props = [
     "boxSizing", "width", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
     "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
@@ -139,7 +139,6 @@ function caretOffset(ta: HTMLTextAreaElement): { top: number; left: number; line
     "textTransform", "wordSpacing", "textIndent", "tabSize",
   ] as const;
   for (const p of props) m.style[p] = cs[p];
-  m.setCssStyles({ position: "absolute", visibility: "hidden", whiteSpace: "pre-wrap", overflowWrap: "break-word", top: "0", left: "-9999px" });
   m.setText(ta.value.slice(0, ta.selectionStart ?? 0));
   const mark = m.createSpan({ text: "​" });
   const line = mark.offsetHeight;

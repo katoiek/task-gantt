@@ -1,6 +1,6 @@
 // wikilink 解析（parseWikilink / linkLabel / wikilinkQuery / fmText）の検証
 // Tests for wikilink parsing (parseWikilink / linkLabel / wikilinkQuery / fmText)
-import { parseWikilink, linkLabel, linkTarget, wikilinkQuery, fmText } from "./links.mjs";
+import { parseWikilink, linkLabel, linkTarget, wikilinkQuery, fmText, plainText } from "./links.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -45,6 +45,14 @@ check("undefined stays undefined", fmText(undefined) === undefined);
 check("string passes through", fmText("[[a]]") === "[[a]]");
 check("unquoted YAML wikilink is restored", fmText([["田中"]]) === "[[田中]]");
 check("numbers become text", fmText(3) === "3");
+
+// plainText: 以前の String(x) と同じ読み方（オブジェクトだけ "[object Object]" ではなく空）/ reads like the old String(x), except an object gives "" instead of "[object Object]"
+check("plainText: a string stays", plainText("a b") === "a b");
+check("plainText: numbers and booleans", plainText(5) === "5" && plainText(false) === "false");
+check("plainText: a list is comma-joined", plainText(["a", 2, true]) === "a,2,true");
+check("plainText: a nested list reads like Array.toString (a bare wikilink)", plainText([["Task"]]) === "Task");
+check("plainText: nothing is empty", plainText(undefined) === "" && plainText(null) === "");
+check("plainText: an object is empty, not [object Object]", plainText({ a: 1 }) === "");
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

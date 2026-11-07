@@ -1,6 +1,6 @@
 import { App, TFile, TFolder, getAllTags, normalizePath } from "obsidian";
 import { GanttSettings } from "./settings";
-import { fmText } from "./links";
+import { fmText, plainText } from "./links";
 import { Task, Row, Dep, DepType, StatusDef, StatusGroup, CustomField, CustomFieldType, CustomValue } from "./types";
 
 // ── ステータスグループ / status groups ──
@@ -64,15 +64,16 @@ export function validCustomFields(settings: GanttSettings): CustomField[] {
 export function readCustomValue(raw: unknown, type: CustomFieldType, tz: string): CustomValue | undefined {
   if (raw == null || raw === "") return undefined;
   if (type === "number") {
-    const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+    if (typeof raw === "object" && !Array.isArray(raw)) return undefined; // オブジェクトは数ではない / an object isn't a number
+    const n = typeof raw === "number" ? raw : Number(plainText(raw).trim());
     return Number.isFinite(n) ? n : undefined;
   }
   if (type === "date") return parseStored(raw, tz)?.date; // 日付部分のみ / the date part only
   if (Array.isArray(raw)) {
-    const list = (raw as unknown[]).filter((x) => x != null && x !== "").map((x) => String(x));
+    const list = (raw as unknown[]).filter((x) => x != null && x !== "").map((x) => plainText(x));
     return list.length ? list : undefined;
   }
-  return String(raw);
+  return plainText(raw) || undefined; // オブジェクトは読めない値 / an object is an unreadable value
 }
 
 // 表示用の文字列（リストはカンマ区切り）/ display text (a list is comma-joined)
@@ -214,15 +215,15 @@ export function combineDateTime(date: string | undefined, time: string | undefin
 // after を文字列配列へ正規化 / normalize `after` into a string array
 function toArray(v: unknown): string[] {
   if (v == null || v === "") return [];
-  if (Array.isArray(v)) return v.map((x) => String(x));
-  return [String(v)];
+  if (Array.isArray(v)) return v.map((x) => plainText(x));
+  return [plainText(v)];
 }
 
 // フロントマターの tags 値を文字列配列へ正規化（配列/カンマ/空白区切り・# 抜き）
 // normalize a frontmatter `tags` value into a string array (array / comma / space separated, # stripped)
 function normalizeTags(v: unknown): string[] {
   if (v == null) return [];
-  const raw = Array.isArray(v) ? v.map((x) => String(x)) : String(v).split(/[,\s]+/);
+  const raw = Array.isArray(v) ? v.map((x) => plainText(x)) : plainText(v).split(/[,\s]+/);
   return raw.map((x) => x.replace(/^#/, "").trim()).filter(Boolean);
 }
 

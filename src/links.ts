@@ -53,3 +53,12 @@ export function fmText(v: unknown): string | undefined {
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   return JSON.stringify(v); // 想定外の型（配列・オブジェクト）はそのまま見える形に / show unexpected shapes verbatim
 }
+
+// 値を、Array.prototype.toString と同じ形のテキストに（文字列・数値・真偽値はそのまま、配列はカンマ区切り）。オブジェクトは "[object Object]" にせず空文字
+// a value as text the way Array.prototype.toString shows it (strings, numbers and booleans as they are, arrays comma-joined); an object gives "" rather than "[object Object]"
+export function plainText(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
+  if (Array.isArray(v)) return v.map(plainText).join(",");
+  return "";
+}

@@ -2373,8 +2373,10 @@ export class GanttView extends ItemView {
 
     const autosize = () => {
       // 高さを一旦リセットしてから内容に合わせる / reset, then fit to content
-      bodyArea.setCssStyles({ height: "auto" });
-      bodyArea.setCssStyles({ height: `${bodyArea.scrollHeight + 2}px` });
+      bodyArea.addClass("ogantt-measure-auto");
+      const fit = bodyArea.scrollHeight + 2;
+      bodyArea.removeClass("ogantt-measure-auto");
+      bodyArea.setCssProps({ height: `${fit}px` });
     };
     wireLinkHover(this.app, preview, this, t.path);
     preview.addEventListener("click", (e) => {

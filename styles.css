@@ -1122,6 +1122,19 @@ input.ogantt-cell-input[type="number"] {
 .ogantt-assignee-field.is-editing .ogantt-assignee-view {
   display: none;
 }
+/* 内容の高さを測るあいだだけ、高さを自動にする / lets an element take its content's height while that height is measured */
+.ogantt-measure-auto {
+  height: auto !important;
+}
+/* カーソル位置を測るための見えないミラー要素 / the invisible mirror element that measures the caret position */
+.ogantt-caret-mirror {
+  position: absolute;
+  visibility: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  top: 0;
+  left: -9999px;
+}
 /* "[[" のノート候補（body 直下・入力欄のカーソル位置に出す）/ "[[" note suggestions (on body, at the caret) */
 .ogantt-link-suggest {
   position: fixed;

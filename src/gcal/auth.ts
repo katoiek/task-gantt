@@ -185,7 +185,7 @@ export async function connectGoogle(plugin: GanttPlugin): Promise<boolean> {
     return false;
   }
   setRefreshToken(plugin, json.refresh_token);
-  accessToken = String(json.access_token ?? "");
+  accessToken = typeof json.access_token === "string" ? json.access_token : "";
   accessTokenExp = Date.now() + (Number(json.expires_in ?? 0) - 60) * 1000;
   await plugin.saveData(plugin.settings);
   new Notice(tr().gcalConnectedNotice);
