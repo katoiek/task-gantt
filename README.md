@@ -116,7 +116,7 @@ Every tag starts from a single **Default tag color** — Obsidian's own tag colo
 
 Press **＋ New task** to create a dated note in the current folder and rename it immediately. You don't have to start there, though: every note inside the target folder already appears as a row — **including notes with no dates yet** — so you can also click an existing note and set **Start** / **Due** in the detail panel to turn it into a scheduled task. Empty cells are double-click editable too, so you can fill a blank value straight from the table.
 
-A new task gets today as both its start and due date by default. Under **Settings → Task Gantt → Task and subtask creation**, **Dates of a new task** can be switched to **Backlog (no dates)**, which creates the note with no dates so you can schedule it later.
+A new task gets today as both its start and due date by default. Under **Settings → Task Gantt → Task creation**, **Dates of a new task** can be switched to **Backlog (no dates)**, which creates the note with no dates so you can schedule it later.
 
 ## Task frontmatter
 
@@ -406,7 +406,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 **＋ 新規タスク**で現在のフォルダに日付付きノートを作り、すぐ名前を付けられます。もちろんそこから始める必要はありません。対象フォルダ内のノートは、**まだ日付が無いものも含めて**そのまま行として表示されるので、既存ノートをクリックして詳細パネルで **開始 / 期限** を入力すれば、そのままスケジュール付きタスクになります。各セルは**値が空のままでもダブルクリックで編集できる**ので、表から直接入力しても構いません。
 
-新規タスクは、既定で開始・期限とも作成日（今日）になります。**設定 → Task Gantt → タスクとサブタスク作成時の設定**の**新規タスクの日付**を**バックログ（日付なし）**に切り替えると、日付を入れずにノートを作り、あとからスケジュールできます。
+新規タスクは、既定で開始・期限とも作成日（今日）になります。**設定 → Task Gantt → タスク作成時の設定**の**新規タスクの日付**を**バックログ（日付なし）**に切り替えると、日付を入れずにノートを作り、あとからスケジュールできます。
 
 ## タスクの書き方
 

@@ -834,7 +834,7 @@ export class GanttSettingTab extends PluginSettingTab {
         desc: tr().setProgressLineColorDesc,
         render: (x) => this.ctlProgressLineColor(x),
       },
-      // タスクとサブタスク作成時の設定 / task and subtask creation
+      // タスク作成時の設定 / task creation
       {
         type: "group",
         heading: tr().setNewTaskHeading,
@@ -1055,7 +1055,7 @@ export class GanttSettingTab extends PluginSettingTab {
       new Setting(containerEl).setName(tr().setProgressLineColorName).setDesc(tr().setProgressLineColorDesc)
     );
 
-    // タスクとサブタスク作成時の設定 / task and subtask creation
+    // タスク作成時の設定 / task creation
     new Setting(containerEl).setName(tr().setNewTaskHeading).setHeading();
     this.ctlNewTaskDates(new Setting(containerEl).setName(tr().setNewTaskDatesName).setDesc(tr().setNewTaskDatesDesc));
 

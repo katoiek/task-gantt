@@ -200,7 +200,7 @@ interface Strings {
   setTimezoneDesc: string;
   setProgressLineColorName: string;
   setProgressLineColorDesc: string;
-  setNewTaskHeading: string; // タスクとサブタスク作成時の設定 / task and subtask creation
+  setNewTaskHeading: string; // タスク作成時の設定 / task creation
   setNewTaskDatesName: string;
   setNewTaskDatesDesc: string;
   setNewTaskToday: string;
@@ -411,7 +411,7 @@ const STRINGS: Record<Lang, Strings> = {
     setTimezoneDesc: "時刻の表示と保存に使うタイムゾーン（GMTオフセット）。変更すると保存済みの時刻も換算して表示されます。",
     setProgressLineColorName: "稲妻線の色",
     setProgressLineColorDesc: "表示オプションの「稲妻線」で描く折れ線の色。",
-    setNewTaskHeading: "タスクとサブタスク作成時の設定",
+    setNewTaskHeading: "タスク作成時の設定",
     setNewTaskDatesName: "新規タスクの日付",
     setNewTaskDatesDesc: "新しく作るタスクの開始・期限の初期値です。作ったあとで、詳細パネルから変えられます。",
     setNewTaskToday: "今日（開始・期限とも作成日）",
@@ -670,7 +670,7 @@ const STRINGS: Record<Lang, Strings> = {
     setTimezoneDesc: "Timezone (GMT offset) used to display and save times. Changing it converts the display of stored times.",
     setProgressLineColorName: "Progress line color",
     setProgressLineColorDesc: "Color of the line drawn by the Progress line view option.",
-    setNewTaskHeading: "Task and subtask creation",
+    setNewTaskHeading: "Task creation",
     setNewTaskDatesName: "Dates of a new task",
     setNewTaskDatesDesc: "The initial start and due dates of a new task. You can change them afterwards in the detail panel.",
     setNewTaskToday: "Today (start and due are the creation date)",
@@ -929,7 +929,7 @@ const STRINGS: Record<Lang, Strings> = {
     setTimezoneDesc: "用于显示和保存时间的时区（GMT 偏移）。更改后已保存的时间将按新时区换算显示。",
     setProgressLineColorName: "进度线颜色",
     setProgressLineColorDesc: "显示选项中「进度线」所绘制折线的颜色。",
-    setNewTaskHeading: "任务和子任务的创建",
+    setNewTaskHeading: "任务的创建",
     setNewTaskDatesName: "新任务的日期",
     setNewTaskDatesDesc: "新任务的初始开始日期和截止日期。创建后可在详情面板中修改。",
     setNewTaskToday: "今天（开始和截止均为创建日）",
@@ -1188,7 +1188,7 @@ const STRINGS: Record<Lang, Strings> = {
     setTimezoneDesc: "用於顯示與儲存時間的時區（GMT 偏移）。變更後已儲存的時間會依新時區換算顯示。",
     setProgressLineColorName: "進度線顏色",
     setProgressLineColorDesc: "顯示選項中「進度線」所繪製折線的顏色。",
-    setNewTaskHeading: "任務與子任務的建立",
+    setNewTaskHeading: "任務的建立",
     setNewTaskDatesName: "新任務的日期",
     setNewTaskDatesDesc: "新任務的初始開始日與截止日。建立後可在詳細面板中修改。",
     setNewTaskToday: "今天（開始與截止皆為建立日）",
@@ -1447,7 +1447,7 @@ const STRINGS: Record<Lang, Strings> = {
     setTimezoneDesc: "시간 표시와 저장에 사용할 시간대(GMT 오프셋)입니다. 변경하면 저장된 시간이 새 시간대로 환산되어 표시됩니다.",
     setProgressLineColorName: "진척선 색상",
     setProgressLineColorDesc: "보기 옵션의 「진척선」이 그리는 선의 색상입니다.",
-    setNewTaskHeading: "작업 및 하위 작업 만들기",
+    setNewTaskHeading: "작업 만들기",
     setNewTaskDatesName: "새 작업의 날짜",
     setNewTaskDatesDesc: "새 작업의 처음 시작일과 마감일입니다. 만든 뒤 상세 패널에서 바꿀 수 있습니다.",
     setNewTaskToday: "오늘(시작과 마감 모두 생성일)",
@@ -1706,7 +1706,7 @@ const STRINGS: Record<Lang, Strings> = {
     setTimezoneDesc: "Fuseau horaire (décalage GMT) utilisé pour afficher et enregistrer les heures. Le modifier convertit l'affichage des heures enregistrées.",
     setProgressLineColorName: "Couleur de la ligne d'avancement",
     setProgressLineColorDesc: "Couleur de la ligne tracée par l'option d'affichage « Ligne d'avancement ».",
-    setNewTaskHeading: "Création des tâches et sous-tâches",
+    setNewTaskHeading: "Création des tâches",
     setNewTaskDatesName: "Dates d'une nouvelle tâche",
     setNewTaskDatesDesc: "Dates de début et d'échéance initiales d'une nouvelle tâche. Vous pouvez les modifier ensuite dans le panneau de détails.",
     setNewTaskToday: "Aujourd'hui (début et échéance = date de création)",
@@ -1965,7 +1965,7 @@ const STRINGS: Record<Lang, Strings> = {
     setTimezoneDesc: "Zona horaria (desfase GMT) usada para mostrar y guardar las horas. Al cambiarla, las horas guardadas se muestran convertidas.",
     setProgressLineColorName: "Color de la línea de avance",
     setProgressLineColorDesc: "Color de la línea que dibuja la opción de vista «Línea de avance».",
-    setNewTaskHeading: "Creación de tareas y subtareas",
+    setNewTaskHeading: "Creación de tareas",
     setNewTaskDatesName: "Fechas de una tarea nueva",
     setNewTaskDatesDesc: "Las fechas iniciales de inicio y vencimiento de una tarea nueva. Puedes cambiarlas después en el panel de detalles.",
     setNewTaskToday: "Hoy (inicio y vencimiento = fecha de creación)",
@@ -2224,7 +2224,7 @@ const STRINGS: Record<Lang, Strings> = {
     setTimezoneDesc: "Часовой пояс (смещение GMT) для отображения и сохранения времени. При изменении сохранённое время отображается в новом поясе.",
     setProgressLineColorName: "Цвет линии прогресса",
     setProgressLineColorDesc: "Цвет линии, которую рисует параметр отображения «Линия прогресса».",
-    setNewTaskHeading: "Создание задач и подзадач",
+    setNewTaskHeading: "Создание задач",
     setNewTaskDatesName: "Даты новой задачи",
     setNewTaskDatesDesc: "Начальные даты начала и срока новой задачи. Потом их можно изменить в панели сведений.",
     setNewTaskToday: "Сегодня (начало и срок — дата создания)",
