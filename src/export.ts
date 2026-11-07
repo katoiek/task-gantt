@@ -104,7 +104,7 @@ async function renderBoardCanvas(inp: BoardExportInput): Promise<{ canvas: HTMLC
     ].join("\n")
   );
 
-  const wrap = doc.createElementNS(XHTML, "div") as HTMLElement;
+  const wrap = doc.createElementNS(XHTML, "div");
   wrap.setAttribute(
     "style",
     `width:${W}px;height:${H}px;overflow:hidden;background:var(--background-primary);color:var(--text-normal);` +
@@ -115,14 +115,14 @@ async function renderBoardCanvas(inp: BoardExportInput): Promise<{ canvas: HTMLC
   wrap.appendChild(style);
   wrap.appendChild(prepareClone(inp));
 
-  // XML として不正な制御文字（ファイル名などに紛れ込みうる）は画像の読み込みを壊すので除く
-  // XML-invalid control characters (possible in file names) would break the image, so drop them
-  const inner = new XMLSerializer().serializeToString(wrap).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, "");
+  // XML として不正な制御文字（ファイル名などに紛れ込みうる。タブ・改行は有効）は画像の読み込みを壊すので除く
+  // XML-invalid control characters (possible in file names; tab and newlines are valid) would break the image, so drop them
+  const inner = new XMLSerializer().serializeToString(wrap).replace(/[\p{Cc}\uFFFE\uFFFF]/gu, (c) => ("\t\n\r".includes(c) ? c : ""));
   const xml = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject x="0" y="0" width="${W}" height="${H}">${inner}</foreignObject></svg>`;
   // blob: の URL だと、読み込んだ画像でキャンバスが「汚染」され（読み出し禁止）PNG にできない。data: の URL なら汚染されない
   // a blob: URL makes the loaded image taint the canvas (no read-back, so no PNG); a data: URL doesn't
-  const url = await readDataUrl(new Blob([xml], { type: "image/svg+xml;charset=utf-8" }), win);
-  const canvas = doc.createElement("canvas");
+  const url = await readDataUrl(new Blob([xml], { type: "image/svg+xml;charset=utf-8" }));
+  const canvas = createEl("canvas");
   try {
     const img = new win.Image();
     img.src = url;
@@ -146,11 +146,11 @@ async function renderBoardCanvas(inp: BoardExportInput): Promise<{ canvas: HTMLC
   }
 }
 
-function readDataUrl(blob: Blob, win: Window & typeof globalThis): Promise<string> {
+function readDataUrl(blob: Blob): Promise<string> {
   return new Promise((ok, fail) => {
-    const reader = new win.FileReader();
-    reader.onload = () => ok(String(reader.result));
-    reader.onerror = () => fail(reader.error);
+    const reader = new FileReader();
+    reader.onload = () => (typeof reader.result === "string" ? ok(reader.result) : fail(new Error("could not read the image")));
+    reader.onerror = () => fail(new Error(reader.error?.message ?? "could not read the image"));
     reader.readAsDataURL(blob);
   });
 }
@@ -170,8 +170,7 @@ export async function boardToPng(inp: BoardExportInput): Promise<Uint8Array> {
 // fit the width to an A4 landscape page and split a tall board between rows; the date axis (and table header) repeats on every page
 export async function boardToPdf(inp: BoardExportInput): Promise<Uint8Array> {
   const { canvas: src, scale } = await renderBoardCanvas(inp);
-  const doc = inp.grid.ownerDocument;
-  const page = doc.createElement("canvas");
+  const page = createEl("canvas");
   try {
     const srcW = src.width;
     // 1 canvas px あたりの pt。小さな板は 100%（1 CSS px = 0.75pt）より大きくしない / points per canvas px; a small board isn't enlarged past 100% (1 CSS px = 0.75pt)
