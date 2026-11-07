@@ -1,9 +1,9 @@
 // 双方向同期エンジン：Push（タスク→GCal）と Pull（GCal→タスク）、衝突解決、ループ防止
 // the two-way sync engine: push (task → GCal), pull (GCal → task), conflict resolution, loop prevention
 
-import { Notice, Platform, TFile } from "obsidian";
+import { Notice, Platform, TFile, TFolder } from "obsidian";
 import type GanttPlugin from "../main";
-import { collectTasks, combineDateTime, readBody } from "../model";
+import { collectTasks, combineDateTime, parseStored, readBody } from "../model";
 import { Task } from "../types";
 import { t as tr } from "../i18n";
 import { GcalApiError, GEvent, deleteEvent, insertEvent, listEvents, patchEvent } from "./api";
@@ -127,13 +127,30 @@ async function pushPass(plugin: GanttPlugin, skip: Set<string>): Promise<void> {
   const vault = app.vault.getName();
   const tasks = scopeTasks(plugin);
   const active = new Set(tasks.map((t) => t.path));
+  // 範囲のフォルダが無い（打ちかけ・移動中）ときは掃除しない：一覧が空なのはそのせいで、タスクが範囲を出たからではない
+  // no cleanup while the scope folder doesn't exist (half-typed, being moved): the list is empty because of that, not because tasks left
+  const folder = (g.scopeFolder || plugin.settings.rootFolder).replace(/^\/+|\/+$/g, "");
+  const scopeOk = !folder || app.vault.getAbstractFileByPath(folder) instanceof TFolder;
 
   // 1) 孤児掃除：スコープから消えた state エントリのイベントを削除
   // 1) orphan cleanup: delete events whose task left the scope
   for (const [path, st] of Object.entries(g.state)) {
-    if (active.has(path) || skip.has(path)) continue;
+    if (!scopeOk || active.has(path) || skip.has(path)) continue;
     const file = app.vault.getAbstractFileByPath(path);
     const exists = file instanceof TFile;
+    // 残っているノートは、そのノート自身のキャッシュが「範囲外・日付なし・オプトアウト」と言うときだけ外す（キャッシュがまだ無い・一覧から一時的に漏れただけなら触らない）
+    // a note that still exists is dropped only when its own cache says it's out of scope, dateless or opted out (no cache yet, or a momentary gap in the list, leaves it alone)
+    if (file instanceof TFile) {
+      const cache = app.metadataCache.getFileCache(file);
+      if (!cache) continue; // まだ解析されていない / not parsed yet
+      const fm = cache.frontmatter ?? {}; // frontmatter を全部消したノートは「日付なし」 / a note whose frontmatter was removed is "dateless"
+      // サブフォルダを辿らない設定のときは、範囲のフォルダ直下だけが範囲内 / with recursion off, only notes directly in the scope folder are in scope
+      const inScope = plugin.settings.recurse
+        ? !folder || path.startsWith(folder + "/")
+        : path.slice(0, Math.max(path.lastIndexOf("/"), 0)) === folder;
+      const dated = !!(parseStored(fm[k.start], tz) || parseStored(fm[k.end], tz));
+      if (inScope && dated && optedIn(plugin, path)) continue;
+    }
     // ファイル削除時はポリシーに従う。スコープ外れ・オプトアウト・日付削除は常にイベントを外す
     // deleted files follow the policy; out-of-scope / opted-out / dateless always drop the event
     if (!exists && !g.deleteEventOnTaskDelete) {
