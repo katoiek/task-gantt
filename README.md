@@ -18,7 +18,7 @@ The folder opens as a table + timeline, with groups, bars, milestones, and depen
 
 Click a task to open the detail panel and edit its dates, status, assignee, progress, and body:
 
-![Task detail panel for editing dates, status, assignee, progress and body](docs/images/detail-panel.png)
+![Task detail panel for editing dates, status, assignee, progress and body](docs/images/detail-panel_en.png)
 
 ## Usage
 
@@ -50,13 +50,17 @@ An options row above the table shapes how the board is displayed. The on/off dis
 
 ![Show or hide table columns from the gear menu](docs/images/column_en.png)
 
-**Flat view** lists every task in one sorted list, ignoring folders and nesting:
+Turn on **Flat** in the **Display** menu to list every task in one sorted list, ignoring folders and nesting:
 
 ![Flat view: all tasks in a single sorted list](docs/images/flatview-en.png)
 
-**Progress line** draws a jagged line down the board from today, bending to each task's achieved progress: **left of today means behind schedule, right means ahead**. Per row, the line sits at the point on the bar matching the task's `progress` — so a task due last week but only 40% done pulls the line back to its 40% mark. Tasks at 100% and tasks that haven't started yet (and aren't due to) stay on the today line, as do folder rows and rolled-up parent bars. A task past its start date with no progress pulls the line back to its start date. Its color is configurable in **Settings → Task Gantt → Progress line color**.
+**Progress column**: tick **Progress** in the gear menu to show each task's progress (the `progress` value, 0–100) as a small bar and a percentage. Double-click a cell to edit it, or use the slider in the detail panel:
 
-![The Progress column and the progress line, both enabled from the view options](docs/images/progressline_en.png)
+![Step 1: show the Progress column from the gear menu](docs/images/progresscolumn_en.png)
+
+**Progress line** (step 2: turn on **Progress line** in the **Display** menu, with the Progress column shown so each number can be read against the line) draws a jagged line down the board from today, bending to each task's achieved progress: **left of today means behind schedule, right means ahead**. Per row, the line sits at the point on the bar matching the task's `progress` — so a task due last week but only 40% done pulls the line back to its 40% mark. Tasks at 100% and tasks that haven't started yet (and aren't due to) stay on the today line, as do folder rows and rolled-up parent bars. A task past its start date with no progress pulls the line back to its start date. Its color is configurable in **Settings → Task Gantt → Progress line color**.
+
+![Step 2: turn on Progress line in the Display menu; the line follows each task's progress](docs/images/progressline_en.png)
 
 **Hide bar labels** removes the task name and assignee after each bar, for a cleaner chart (off by default: names are shown). **Highlight overdue** (off by default) outlines in red every bar whose due date has passed and whose status isn't completed or cancelled, adds a ⚠ after the bar, and shows a red ⚠ count on each group heading. Both sit next to the progress line in the options row.
 
@@ -346,11 +350,13 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![歯車メニューから列を表示／非表示](docs/images/column_ja.png)
 
-**フラット表示**は、フォルダや入れ子を無視して全タスクを1本のソート済みリストで表示します：
+**表示**メニューで**フラット表示**をオンにすると、フォルダや入れ子を無視して全タスクを1本のソート済みリストで表示します：
 
 ![フラット表示：全タスクを1本のソート済みリストで](docs/images/flatview-ja.png)
 
-**稲妻線**は、今日を基準にした垂線を各タスクの実績到達点まで折り曲げた折れ線です。**今日より左に折れれば遅れ、右なら進み**を意味します。各行の点は、タスクの `progress` に対応するバー上の位置に置かれます（先週が期限なのに 40% のタスクは、線をその 40% 地点まで引き戻します）。100% のタスク、まだ開始日が来ていない未着手タスク、フォルダ行、ロールアップ中の親バーは今日線上を素通りします。開始日を過ぎているのに進捗 0% のタスクは、線を開始日まで引き戻します。線の色は**設定 → Task Gantt → 稲妻線の色**で変更できます。
+**進捗列**は、歯車メニューで**進捗**にチェックを入れると表示され、各タスクの進捗（`progress` の値、0〜100）を小さなバーとパーセントで示します。セルをダブルクリックするか、詳細パネルのスライダーで編集できます。
+
+**稲妻線**（手順 2：**表示**メニューで**稲妻線**をオン。進捗列を表示しておくと、数値を線と見比べられます）は、今日を基準にした垂線を各タスクの実績到達点まで折り曲げた折れ線です。**今日より左に折れれば遅れ、右なら進み**を意味します。各行の点は、タスクの `progress` に対応するバー上の位置に置かれます（先週が期限なのに 40% のタスクは、線をその 40% 地点まで引き戻します）。100% のタスク、まだ開始日が来ていない未着手タスク、フォルダ行、ロールアップ中の親バーは今日線上を素通りします。開始日を過ぎているのに進捗 0% のタスクは、線を開始日まで引き戻します。線の色は**設定 → Task Gantt → 稲妻線の色**で変更できます。
 
 ![進捗列と稲妻線（どちらも表示オプションから有効化）](docs/images/progressline_ja.png)
 
