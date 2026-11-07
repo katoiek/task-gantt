@@ -144,7 +144,15 @@ const OPTS = { cal: CAL, fs: true };
   const a = mk("A", { start: "2026-08-17", end: "2026-08-18", deps: [{ path: "B", type: "FS" }] });
   const b = mk("B", { start: "2026-08-17", end: "2026-08-18", deps: [{ path: "A", type: "FS" }] });
   const ch = cascadeDates([a, b], ["A"], OPTS);
-  check("循環でも終了する", ch.size <= 2);
+  check("循環でも終了し、途中までは動かさない（null）", ch === null);
+}
+{
+  // 長い連鎖は上限に当たらない（上限はタスク数に応じる）/ a long chain doesn't hit the cap (it scales with the task count)
+  const n = 1500;
+  const chain = [mk("T0", { start: "2026-08-10", end: "2026-08-14" })];
+  for (let i = 1; i < n; i++) chain.push(mk(`T${i}`, { start: "2026-08-10", end: "2026-08-10", deps: [{ path: `T${i - 1}`, type: "FS" }] }));
+  const ch = cascadeDates(chain, ["T0"], OPTS);
+  check("長い連鎖の最後まで届く", ch !== null && ch.has(`T${n - 1}`));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

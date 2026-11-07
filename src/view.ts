@@ -1749,6 +1749,8 @@ export class GanttView extends ItemView {
   // workdays). Writes to disk and updates the in-memory tasks; call it from inside mutate
   private async cascade(roots: string[]): Promise<void> {
     const changes = cascadeDates(this.tasks, roots, scheduleOptions(this.plugin.settings));
+    // 上限を超えた（依存が輪になっている等）ときは、後続を中途半端に動かさず知らせる / past the cap (e.g. a dependency loop) successors stay put and we say so
+    if (!changes) return void new Notice(tr().depCascadeLimit);
     for (const [path, d] of changes) {
       const t = this.tasks.find((x) => x.path === path);
       if (!t) continue;

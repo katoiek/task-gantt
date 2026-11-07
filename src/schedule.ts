@@ -195,16 +195,18 @@ function align(target: Span & { milestone: boolean }, pred: Span & { milestone: 
   return { start: dayToStr(next.start), end: dayToStr(next.end) };
 }
 
-// roots を起点に依存をたどり、動かすべき後続の新しい日付を求める（循環はガードで打ち切り）。
+// roots を起点に依存をたどり、動かすべき後続の新しい日付を求める。伝わり方に上限があり（タスク数に応じる）、超えたら途中までは返さず null（何も動かさない）。
 // tasks は書き換えない。roots 自身の日付は呼び出し側で更新済みのものを使う
-// walk dependencies from the roots and work out new dates for successors that must move
-// (cycles stop at a guard). `tasks` isn't mutated; the roots' own dates are taken as already updated
-export function cascadeDates(tasks: Task[], roots: string[], opts: ScheduleOptions): Map<string, { start: string; end: string }> {
+// walk dependencies from the roots and work out new dates for successors that must move. Propagation has a cap (scaled to the task count);
+// past it this returns null (nothing moves) rather than a partial result. `tasks` isn't mutated; the roots' own dates are taken as already updated
+export function cascadeDates(tasks: Task[], roots: string[], opts: ScheduleOptions): Map<string, { start: string; end: string }> | null {
   const cur = new Map<string, Span & { milestone: boolean }>(tasks.map((t) => [t.path, { start: t.start, end: t.end, milestone: t.milestone }]));
   const changes = new Map<string, { start: string; end: string }>();
   const queue = [...roots];
-  let guard = 0;
-  while (queue.length && guard++ < 1000) {
+  // 輪が無くても上限は置く（菱形の依存は同じタスクを何度か通る）/ a cap even without a loop (diamond-shaped dependencies pass the same task a few times)
+  let guard = 20 * tasks.length + 100;
+  while (queue.length) {
+    if (guard-- <= 0) return null;
     const predPath = queue.shift()!;
     const pred = cur.get(predPath);
     if (!pred) continue;
