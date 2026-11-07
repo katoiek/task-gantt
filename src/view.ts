@@ -45,9 +45,11 @@ import { linkLabel } from "./links";
 import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } from "./linkui";
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
+import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
+import { BoardView, ViewConfig, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
-import { applyFilters, regroup, GroupBy } from "./filter";
+import { applyFilters, regroup } from "./filter";
 import { BoardContext, Move, MutateResult } from "./board";
 import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnWidth, customColumn, taskComparator, visibleColumns } from "./columns";
 
@@ -81,7 +83,6 @@ function movesUnder(a: Move, b: Move): boolean {
 
 export class GanttView extends ItemView {
   plugin: GanttPlugin;
-  private zoom: ZoomMode;
   private tasks: Task[] = [];
   private rows: Row[] = [];
   private range: DateRange = { min: 0, max: 0 };
@@ -91,15 +92,58 @@ export class GanttView extends ItemView {
   private exporting = false; // 書き出し中（同時に 1 つだけ）/ an export is running (one at a time)
   private collapsed = new Set<string>(); // 折りたたみ中フォルダのキー / collapsed folder keys
 
-  // 表示オプション（ビューを開いている間だけ保持）/ view options (kept while the view is open)
-  private colorBy: "status" | "assignee" = "status";
-  private groupBy: GroupBy = "folder";
-  private showEmptyFolders = true; // 空フォルダも行として表示（既定ON）/ show empty folders as rows (default on)
-  private flat = false; // フラット表示（フォルダ/親子を無視し全タスク一覧）/ flat list ignoring folders & nesting
-  private rollup = false; // 親タスクのバーを子孫の集約で描く（既定OFF）/ draw parent bars as a rollup of descendants (default off)
-  private progressLine = false; // 稲妻線（今日基準の進捗折れ線・既定OFF）/ progress line against today (default off)
-  private hideLabels = false; // バーの名前・担当を隠す（既定OFF＝従来どおり表示）/ hide the names and assignees on the bars (default off = shown as before)
-  private markOverdue = false; // 期限切れの強調（赤枠・⚠・見出しの件数。既定OFF）/ highlight overdue tasks (red outline, ⚠, heading counts; default off)
+  // 今開いているビューの設定。保存場所（settings.boardViews）の中のオブジェクトをそのまま読み書きするので、コピーも同期も要らない
+  // the open view's config: the object inside settings.boardViews itself is read and written, so there is no copy to keep in sync
+  private cfg: ViewConfig;
+  private boundKey = ""; // cfg が属するボードの鍵 / the board key cfg belongs to
+  private folderKnown = false; // setState でフォルダが決まったか（それまではビューを結びつけない）/ whether setState has given the folder (views aren't bound before that)
+  private vsCache: GanttSettings | null = null;
+  private viewTabsHost!: HTMLElement; // ビューのタブの行 / the row of view tabs
+  private renamingId: string | null = null; // 名前を直しているビュー / the view being renamed
+  private persistTimer: number | null = null;
+  private zoomBtns = new Map<ZoomMode, HTMLButtonElement>();
+
+  // 全体の設定の上に、ビューごとに違う 6 項目（フィルタ・一致条件・列・列幅・並べ替え）だけを重ねたもの。それ以外は全体の設定をそのまま読む。保存には使わない（保存は plugin.settings）
+  // the global settings with just the six per-view items (filters, match, columns, widths, sort) laid over them; everything else reads through. Never saved itself (save plugin.settings)
+  private get vs(): GanttSettings {
+    if (!this.vsCache) {
+      const prop = <K extends keyof ViewConfig>(key: K): PropertyDescriptor => ({
+        enumerable: true,
+        configurable: true,
+        get: () => this.cfg[key],
+        set: (v: ViewConfig[K]) => { this.cfg[key] = v; },
+      });
+      this.vsCache = Object.create(this.plugin.settings, {
+        filters: prop("filters"),
+        filterMatch: prop("filterMatch"),
+        visibleColumns: prop("visibleColumns"),
+        columnWidths: prop("columnWidths"),
+        sortBy: prop("sortBy"),
+        sortDir: prop("sortDir"),
+      }) as GanttSettings;
+    }
+    return this.vsCache;
+  }
+
+  // 表示オプション（ビューごとに保存）/ view options (saved per view)
+  private get zoom(): ZoomMode { return this.cfg.zoom; }
+  private set zoom(v: ZoomMode) { this.cfg.zoom = v; }
+  private get colorBy(): ViewConfig["colorBy"] { return this.cfg.colorBy; }
+  private set colorBy(v: ViewConfig["colorBy"]) { this.cfg.colorBy = v; }
+  private get groupBy(): ViewConfig["groupBy"] { return this.cfg.groupBy; }
+  private set groupBy(v: ViewConfig["groupBy"]) { this.cfg.groupBy = v; }
+  private get showEmptyFolders(): boolean { return this.cfg.showEmptyFolders; } // 空フォルダも行として表示（既定ON）/ show empty folders as rows (default on)
+  private set showEmptyFolders(v: boolean) { this.cfg.showEmptyFolders = v; }
+  private get flat(): boolean { return this.cfg.flat; } // フラット表示（フォルダ/親子を無視し全タスク一覧）/ flat list ignoring folders & nesting
+  private set flat(v: boolean) { this.cfg.flat = v; }
+  private get rollup(): boolean { return this.cfg.rollup; } // 親タスクのバーを子孫の集約で描く（既定OFF）/ draw parent bars as a rollup of descendants (default off)
+  private set rollup(v: boolean) { this.cfg.rollup = v; }
+  private get progressLine(): boolean { return this.cfg.progressLine; } // 稲妻線（既定OFF）/ progress line against today (default off)
+  private set progressLine(v: boolean) { this.cfg.progressLine = v; }
+  private get hideLabels(): boolean { return this.cfg.hideLabels; } // バーの名前・担当を隠す（既定OFF）/ hide the names and assignees on the bars (default off)
+  private set hideLabels(v: boolean) { this.cfg.hideLabels = v; }
+  private get markOverdue(): boolean { return this.cfg.markOverdue; } // 期限切れの強調（既定OFF）/ highlight overdue tasks (default off)
+  private set markOverdue(v: boolean) { this.cfg.markOverdue = v; }
   private allFolders: string[][] = []; // スコープ配下の全フォルダ（相対セグメント）/ all folders under scope
   private optionsHost!: HTMLElement; // グループ/色分け/表示切替/凡例の差し替え先 / layout options + legend container
   private filterHost!: HTMLElement; // 統合フィルタ行の差し替え先 / unified filter bar container
@@ -133,7 +177,7 @@ export class GanttView extends ItemView {
   constructor(leaf: WorkspaceLeaf, plugin: GanttPlugin) {
     super(leaf);
     this.plugin = plugin;
-    this.zoom = plugin.settings.defaultZoom;
+    this.cfg = defaultViewConfig(plugin.settings); // ボードが決まるまでの仮の設定 / a placeholder until the board is known
   }
 
   getViewType(): string {
@@ -152,7 +196,10 @@ export class GanttView extends ItemView {
     return { folder: this.folder };
   }
   async setState(state: GanttViewState, result: ViewStateResult): Promise<void> {
-    if (state && typeof state.folder === "string") this.folder = state.folder;
+    if (state && typeof state.folder === "string") {
+      this.folder = state.folder;
+      this.folderKnown = true;
+    }
     await super.setState(state, result);
     if (this.gridHost) await this.refresh();
   }
@@ -207,6 +254,7 @@ export class GanttView extends ItemView {
     root.addClass("ogantt-board");
     // ボード本体は pane に入れ、詳細パネルはその右に並べる（ボードに重ねない）/ the board goes in a pane and the detail panel docks beside it (it doesn't cover the board)
     const pane = root.createDiv({ cls: "ogantt-pane" });
+    this.viewTabsHost = pane.createDiv({ cls: "ogantt-viewtabs" }); // ビューのタブ / the view tabs
     this.renderToolbar(pane);
     this.optionsHost = pane.createDiv({ cls: "ogantt-options" }); // 中身は rerender で差し替え / repopulated on rerender
     this.filterHost = pane.createDiv({ cls: "ogantt-filterbar" }); // 統合フィルタ行（オプション行の下）/ filter row below options
@@ -238,6 +286,7 @@ export class GanttView extends ItemView {
 
   // ビューを閉じたら保留中のタイマーを止める（破棄後の再描画を防ぐ）/ stop the pending timer on close
   async onClose(): Promise<void> {
+    this.flushPersist();
     if (this.refreshTimer != null) {
       window.clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
@@ -261,10 +310,12 @@ export class GanttView extends ItemView {
   // ドラッグや整列の直後、metadataCache 更新前に正しい位置を即表示するため / shows correct positions before metadataCache updates
   rerender(): void {
     if (!this.gridHost) this.buildSkeleton();
+    this.bindBoardViews(); // このボードのビューを使う / use this board's views
+    this.schedulePersist(); // 変えた設定を保存する / save what changed
     this.renderOptions(); // グループ/色分け/凡例を最新データで更新 / refresh layout options + legend
     this.renderFilterBar(); // 統合フィルタ行を最新データで更新 / refresh the unified filter row
     const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
-    const compare = taskComparator(this.columns(), this.plugin.settings);
+    const compare = taskComparator(this.columns(), this.vs);
     if (this.flat) {
       // フラット：フォルダも親子も無視して全タスクを1本のソート済みリストに / flat: one sorted list, no grouping/nesting
       this.rows = view.slice().sort(compare).map((task) => ({ kind: "task", group: "", depth: 0, task }));
@@ -301,10 +352,182 @@ export class GanttView extends ItemView {
     return Math.max(MIN_PPD, Math.floor(avail / totalDays));
   }
 
+  // ----- ビュー（ボードごとの複数の設定）/ views (several saved looks per board) -----
+
+  // このボードのビュー一覧を使う。ボードが決まった（または変わった）ときだけ切り替える。初めて開くボードは、これまでの全体設定を最初のビューとして引き継ぐ
+  // use this board's views; switch only when the board is known or changes. A board opened for the first time takes the old global settings as its first view
+  private bindBoardViews(): void {
+    if (!this.folderKnown) return; // フォルダが決まる前に、ルート用のビューを作らない / don't create a vault-root entry before the folder is known
+    const key = boardKey(this.folder);
+    if (key === this.boundKey) return;
+    this.flushPersist();
+    this.boundKey = key;
+    const map = this.plugin.settings.boardViews;
+    let bv = map[key];
+    if (!bv) {
+      bv = createBoardViews(tr().viewGantt, legacyViewConfig(this.plugin.settings));
+      map[key] = bv;
+      void this.plugin.saveData(this.plugin.settings);
+    }
+    this.useView(activeView(bv));
+    this.renderViewTabs();
+  }
+
+  private currentViews(): ReturnType<typeof createBoardViews> | undefined {
+    return this.plugin.settings.boardViews[this.boundKey];
+  }
+
+  private useView(v: BoardView): void {
+    this.cfg = v.config;
+    this.collapsed = new Set(this.cfg.collapsed);
+    this.syncZoomButtons();
+  }
+
+  private syncZoomButtons(): void {
+    for (const [z, btn] of this.zoomBtns) btn.toggleClass("is-active", z === this.zoom);
+  }
+
+  // 設定の変更を、少し待ってまとめて書き出す（rerender のたびに呼ぶ）/ write changes out after a short wait (called on every rerender)
+  private schedulePersist(): void {
+    if (this.persistTimer != null) window.clearTimeout(this.persistTimer);
+    this.persistTimer = window.setTimeout(() => this.flushPersist(), 600);
+  }
+
+  private flushPersist(): void {
+    if (this.persistTimer != null) {
+      window.clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    if (!this.boundKey) return;
+    this.cfg.collapsed = [...this.collapsed];
+    void this.plugin.saveData(this.plugin.settings);
+  }
+
+  // ビューを切り替える：今のビューを保存して、選んだビューの設定ですべてを描き直す / switch views: save the current one, then redraw everything with the chosen view's settings
+  private switchView(id: string): void {
+    const bv = this.currentViews();
+    const v = bv?.views.find((x) => x.id === id);
+    if (!bv || !v || bv.active === id) return;
+    this.flushPersist();
+    bv.active = id;
+    this.useView(v);
+    this.renamingId = null;
+    this.renderViewTabs();
+    void this.plugin.saveData(this.plugin.settings);
+    void this.refresh();
+  }
+
+  private openAddViewMenu(e: MouseEvent): void {
+    const menu = new Menu();
+    menu.addItem((it) => it.setTitle(tr().viewCopyThis).setIcon("copy").onClick(() => this.duplicateActiveView()));
+    menu.addSeparator();
+    menu.addItem((it) => it.setTitle(tr().viewGantt).setIcon("gantt-chart").onClick(() => this.addNewView()));
+    menu.showAtMouseEvent(e);
+  }
+
+  // 新しいガントのビュー（フィルタなし・既定の列とグループ）/ a new Gantt view (no filters, default columns and grouping)
+  private addNewView(): void {
+    const bv = this.currentViews();
+    if (!bv) return;
+    this.flushPersist();
+    const v = addView(bv, tr().viewGantt, defaultViewConfig(this.plugin.settings));
+    this.switchView(v.id);
+  }
+
+  // 今のビューの設定をそっくり複製して、その右隣に足し、開く / copy the open view's whole config next to it and open the copy
+  private duplicateActiveView(id?: string): void {
+    const bv = this.currentViews();
+    if (!bv) return;
+    this.flushPersist();
+    const v = duplicateView(bv, id ?? bv.active, tr().viewCopyName);
+    if (v) this.switchView(v.id);
+  }
+
+  private openViewMenu(e: MouseEvent, v: BoardView): void {
+    const bv = this.currentViews();
+    if (!bv) return;
+    const menu = new Menu();
+    menu.addItem((it) => it.setTitle(tr().viewRename).setIcon("pencil").onClick(() => { this.renamingId = v.id; this.renderViewTabs(); }));
+    menu.addItem((it) => it.setTitle(tr().viewDuplicate).setIcon("copy").onClick(() => this.duplicateActiveView(v.id)));
+    menu.addSeparator();
+    menu.addItem((it) =>
+      it
+        .setTitle(tr().viewDelete)
+        .setIcon("trash-2")
+        .setDisabled(bv.views.length <= 1) // 最後の 1 つは消せない / the last view stays
+        .onClick(() => this.confirmDeleteView(v))
+    );
+    menu.showAtMouseEvent(e);
+  }
+
+  private confirmDeleteView(v: BoardView): void {
+    new ConfirmModal(this.app, {
+      title: tr().viewDelete,
+      body: tr().viewDeleteBody(v.name),
+      confirmText: tr().viewDelete,
+      cancelText: tr().cancel,
+      onConfirm: () => {
+        const bv = this.currentViews();
+        if (!bv) return;
+        const wasActive = bv.active === v.id;
+        if (!deleteView(bv, v.id)) return;
+        if (wasActive) this.useView(activeView(bv));
+        this.renderViewTabs();
+        void this.plugin.saveData(this.plugin.settings);
+        if (wasActive) void this.refresh();
+      },
+    }).open();
+  }
+
+  // タブの行：[ビュー] [ビュー] [＋]。開いているタブには ▾（メニュー）。ダブルクリックまたはメニューで名前を直す。右クリックでもメニュー
+  // the tab row: [view] [view] [+]. The open tab has a ▾ menu; double-click or the menu renames; right-click opens the menu too
+  private renderViewTabs(): void {
+    const host = this.viewTabsHost;
+    const bv = this.currentViews();
+    if (!host || !bv) return;
+    host.empty();
+    for (const v of bv.views) {
+      const tab = host.createDiv({ cls: "ogantt-viewtab" + (v.id === bv.active ? " is-active" : "") });
+      setIcon(tab.createSpan({ cls: "ogantt-opt-ico" }), "gantt-chart");
+      if (this.renamingId === v.id) {
+        const input = tab.createEl("input", { type: "text", cls: "ogantt-viewtab-rename", value: v.name });
+        let done = false;
+        const finish = (commit: boolean): void => {
+          if (done) return;
+          done = true;
+          this.renamingId = null;
+          if (commit && renameView(bv, v.id, input.value)) void this.plugin.saveData(this.plugin.settings);
+          this.renderViewTabs();
+        };
+        input.addEventListener("keydown", (ev: KeyboardEvent) => {
+          if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+          else if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
+        });
+        input.addEventListener("blur", () => finish(true));
+        window.setTimeout(() => { input.focus(); input.select(); }, 0);
+        continue;
+      }
+      tab.createSpan({ cls: "ogantt-viewtab-name", text: v.name });
+      tab.onclick = () => this.switchView(v.id);
+      tab.ondblclick = () => { this.renamingId = v.id; this.renderViewTabs(); };
+      tab.addEventListener("contextmenu", (ev: MouseEvent) => { ev.preventDefault(); this.openViewMenu(ev, v); });
+      if (v.id === bv.active) {
+        const more = tab.createSpan({ cls: "ogantt-viewtab-more" });
+        setIcon(more, "chevron-down");
+        more.setAttr("aria-label", tr().viewDelete + " / " + tr().viewRename);
+        more.onclick = (ev) => { ev.stopPropagation(); this.openViewMenu(ev, v); };
+      }
+    }
+    const add = host.createEl("button", { cls: "ogantt-viewtab-add clickable-icon" });
+    setIcon(add, "plus");
+    add.setAttr("aria-label", tr().viewAddAria);
+    add.onclick = (ev) => this.openAddViewMenu(ev);
+  }
+
   // ----- テーブル列 / table columns -----
   // 表示中の列（name は常時、その他は設定の visibleColumns に従う）/ visible columns (name always; rest per settings)
   private visibleColumns(): ColumnDef[] {
-    return visibleColumns(this.columns(), this.plugin.settings.visibleColumns ?? []);
+    return visibleColumns(this.columns(), this.vs.visibleColumns ?? []);
   }
   // 全列の定義（組み込み→Custom field の順）。Custom field の構成が変わったときだけ作り直す
   // every column definition (built-ins, then custom fields); rebuilt only when the custom fields change
@@ -325,7 +548,7 @@ export class GanttView extends ItemView {
   // 列の実効幅（ユーザー上書き > 既定）/ effective column width (user override > default)
   private colW(id: string): number {
     const def = this.columns().find((c) => c.id === id);
-    return def ? columnWidth(def, this.plugin.settings.columnWidths) : 0;
+    return def ? columnWidth(def, this.vs.columnWidths) : 0;
   }
 
   // 列幅を内容に合わせて自動フィット（グリップのWクリック）。一時的に max-content にして実測する
@@ -347,27 +570,27 @@ export class GanttView extends ItemView {
       el.removeClass("ogantt-measure");
       el.style.width = saved[i];
     });
-    this.plugin.settings.columnWidths[id] = w;
+    this.vs.columnWidths[id] = w;
     void this.plugin.saveSettings(); // 保存（ビューも再描画される）/ persist (views refresh)
   }
   // 列ヘッダクリックでソート列/方向を切替えて永続化 / clicking a header toggles sort column/direction (persisted)
   private toggleSort(id: string): void {
-    const s = this.plugin.settings;
+    const s = this.vs;
     if (s.sortBy === id) s.sortDir = s.sortDir === "asc" ? "desc" : "asc";
     else {
       s.sortBy = id;
       s.sortDir = "asc";
     }
-    void this.plugin.saveData(s);
+    void this.plugin.saveData(this.plugin.settings);
     this.rerender();
   }
 
   // 列の表示/非表示を切替えて永続化 / toggle a column's visibility and persist
   private setColumnVisible(id: string, on: boolean): void {
-    const set = new Set(this.plugin.settings.visibleColumns ?? []);
+    const set = new Set(this.vs.visibleColumns ?? []);
     if (on) set.add(id);
     else set.delete(id);
-    this.plugin.settings.visibleColumns = this.columns().filter((c) => c.optional && set.has(c.id)).map((c) => c.id); // 定義順を維持 / keep definition order
+    this.vs.visibleColumns = this.columns().filter((c) => c.optional && set.has(c.id)).map((c) => c.id); // 定義順を維持 / keep definition order
     void this.plugin.saveData(this.plugin.settings);
     this.rerender();
   }
@@ -442,7 +665,7 @@ export class GanttView extends ItemView {
       for (const col of this.columns().filter((c) => c.optional)) {
         const item = menu.createEl("label", { cls: "ogantt-colmenu-item" });
         const cb = item.createEl("input", { type: "checkbox" });
-        cb.checked = (this.plugin.settings.visibleColumns ?? []).includes(col.id);
+        cb.checked = (this.vs.visibleColumns ?? []).includes(col.id);
         item.createSpan({ text: col.label() });
         cb.addEventListener("change", () => this.setColumnVisible(col.id, cb.checked));
       }
@@ -566,7 +789,7 @@ export class GanttView extends ItemView {
   private renderFilterBar(): void {
     const host = this.filterHost;
     host.empty();
-    const s = this.plugin.settings;
+    const s = this.vs;
     const filters = s.filters;
     // 行頭のラベル（フィルタ行だと分かる見出し）/ a leading label so the row reads as "Filters"
     setIcon(host.createSpan({ cls: "ogantt-filterbar-ico" }), "filter");
@@ -613,13 +836,13 @@ export class GanttView extends ItemView {
     const m = new Menu();
     // 名前（テキスト）/ name (text)
     m.addItem((i) => i.setTitle(tr().fieldName).setIcon("type").onClick(() => {
-      this.plugin.settings.filters.push({ kind: "text", field: "name", op: "contains", value: "" });
+      this.vs.filters.push({ kind: "text", field: "name", op: "contains", value: "" });
       this.commitFilters();
       this.openLastFilterEditor();
     }));
     const addCat = (field: CategoryField, label: string, icon: string) => {
       m.addItem((i) => i.setTitle(label).setIcon(icon).onClick(() => {
-        this.plugin.settings.filters.push({ kind: "category", field, op: "is", values: [] });
+        this.vs.filters.push({ kind: "category", field, op: "is", values: [] });
         this.commitFilters();
         this.openLastFilterEditor();
       }));
@@ -630,7 +853,7 @@ export class GanttView extends ItemView {
     if (this.tasks.some((t) => t.tags.length > 0)) addCat("tag", tr().fieldTags, "tag");
     const addDate = (field: DateField, label: string) => {
       m.addItem((i) => i.setTitle(label).setIcon("calendar").onClick(() => {
-        this.plugin.settings.filters.push({ kind: "date", field, op: "onOrAfter", value: { kind: "preset", preset: "today" } });
+        this.vs.filters.push({ kind: "date", field, op: "onOrAfter", value: { kind: "preset", preset: "today" } });
         this.commitFilters();
         this.openLastFilterEditor();
       }));
@@ -645,7 +868,7 @@ export class GanttView extends ItemView {
   private openLastFilterEditor(): void {
     const chips = this.filterHost.querySelectorAll(".ogantt-filter-chip");
     const last = chips[chips.length - 1] as HTMLElement | undefined;
-    if (last) this.openFilterEditor(last, this.plugin.settings.filters.length - 1);
+    if (last) this.openFilterEditor(last, this.vs.filters.length - 1);
   }
 
   // 組み込みプリセット（コード内蔵・削除不可・名前は表示言語で都度生成）/ built-in presets (not deletable)
@@ -687,21 +910,21 @@ export class GanttView extends ItemView {
   // プリセットを適用（現在の filters/一致条件を丸ごと差し替え）/ apply a preset (replaces filters + match)
   private applyPreset(p: FilterPreset): void {
     const clone = JSON.parse(JSON.stringify(p)) as FilterPreset; // 参照共有を避ける / avoid sharing references
-    this.plugin.settings.filters = clone.filters;
-    this.plugin.settings.filterMatch = clone.filterMatch;
+    this.vs.filters = clone.filters;
+    this.vs.filterMatch = clone.filterMatch;
     this.commitFilters();
   }
 
   // 現在のフィルタ構成をプリセットとして保存 / save the current filter config as a preset
   private savePreset(name: string): void {
-    const s = this.plugin.settings;
+    const s = this.vs;
     s.filterPresets.push({ name, filterMatch: s.filterMatch, filters: JSON.parse(JSON.stringify(s.filters)) as Filter[] });
     this.commitFilters();
   }
 
   // プリセットのポップオーバー（組み込み＋マイプリセット＋保存/クリア）/ presets popover
   private openPresetMenu(anchor: HTMLElement): void {
-    const s = this.plugin.settings;
+    const s = this.vs;
     this.openPopover(anchor, "ogantt-datemenu", (menu, close) => {
       menu.addClass("ogantt-presetmenu");
       const renderBody = () => {
@@ -748,7 +971,7 @@ export class GanttView extends ItemView {
 
   // フィルタ 1 件の編集ポップオーバー / editor popover for one filter
   private openFilterEditor(anchor: HTMLElement, index: number): void {
-    const f = this.plugin.settings.filters[index];
+    const f = this.vs.filters[index];
     if (!f) return;
     this.openPopover(anchor, "ogantt-datemenu", (menu, close) => {
       const commit = () => this.commitFilters();
@@ -761,7 +984,7 @@ export class GanttView extends ItemView {
         const del = head.createEl("button", { cls: "ogantt-datemenu-del clickable-icon" });
         setIcon(del, "trash-2");
         del.setAttr("aria-label", tr().dfRemove);
-        del.onclick = () => { this.plugin.settings.filters.splice(index, 1); commit(); close(); };
+        del.onclick = () => { this.vs.filters.splice(index, 1); commit(); close(); };
 
         if (f.kind === "category") this.renderCategoryEditor(menu, f, commit, renderBody);
         else if (f.kind === "text") this.renderTextEditor(menu, f, commit);
@@ -908,11 +1131,11 @@ export class GanttView extends ItemView {
     todayBtn.onclick = () => this.scrollToToday();
     (["Day", "Week", "Month", "Fit"] as ZoomMode[]).forEach((z) => {
       const btn = bar.createEl("button", { text: z });
+      this.zoomBtns.set(z, btn);
       if (z === this.zoom) btn.addClass("is-active");
       btn.onclick = () => {
         this.zoom = z; // ppd は rerender 内の computePpd() が決める / ppd is set by computePpd() in rerender
-        bar.querySelectorAll("button.is-active").forEach((b) => b.removeClass("is-active"));
-        btn.addClass("is-active");
+        this.syncZoomButtons();
         void this.refresh();
       };
     });
@@ -1078,7 +1301,7 @@ export class GanttView extends ItemView {
 
   // フィルタ→グループ再マッピングを適用したタスク列を返す（判定本体は filter.ts）/ tasks after filter + group remap (logic lives in filter.ts)
   private processTasks(): Task[] {
-    const { filters, filterMatch, statuses } = this.plugin.settings;
+    const { filters, filterMatch, statuses } = this.vs;
     // today は 1 回だけ評価して共有 / evaluate `today` once and share it
     const list = applyFilters(this.tasks, filters, filterMatch, statuses, todayIndex());
     return regroup(list, this.groupBy, this.flat, statuses, tr().noneLabel);
@@ -1387,8 +1610,8 @@ export class GanttView extends ItemView {
       if (id !== "name") th.style.width = `${this.colW(id)}px`;
       th.createSpan({ text: col.label() });
       // アクティブなソート列に ↑/↓ を表示 / show ↑/↓ on the active sort column
-      if (this.plugin.settings.sortBy === id) {
-        th.createSpan({ cls: "ogantt-sort-arrow", text: this.plugin.settings.sortDir === "asc" ? "↑" : "↓" });
+      if (this.vs.sortBy === id) {
+        th.createSpan({ cls: "ogantt-sort-arrow", text: this.vs.sortDir === "asc" ? "↑" : "↓" });
       }
       th.onclick = () => this.toggleSort(id);
       // 右端グリップ：ドラッグ＝列幅変更（永続化）、素早い2回押し＝内容に合わせて自動フィット
@@ -1415,7 +1638,7 @@ export class GanttView extends ItemView {
         const onMove = (ev: PointerEvent) => {
           moved = true;
           const w = Math.max(40, Math.round(startW + ev.clientX - startX));
-          this.plugin.settings.columnWidths[id] = w;
+          this.vs.columnWidths[id] = w;
           // ドラッグ中は再描画せず幅だけ反映 / live-apply widths without a full re-render
           grid.style.gridTemplateColumns = `${this.tableWidth()}px ${width}px`;
           if (id !== "name") {

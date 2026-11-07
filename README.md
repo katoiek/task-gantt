@@ -64,6 +64,14 @@ Turn on **Flat** in the **Display** menu to list every task in one sorted list, 
 
 **Hide bar labels** removes the task name and assignee after each bar, for a cleaner chart (off by default: names are shown). **Highlight overdue** (off by default) outlines in red every bar whose due date has passed and whose status isn't completed or cancelled, adds a ⚠ after the bar, and shows a red ⚠ count on each group heading. Both sit next to the progress line in the options row.
 
+## Views
+
+A board (a folder) can hold several **views**, shown as tabs above the toolbar, like Wrike's views. Each view keeps its own grouping and color-by, the Display menu toggles, filters and match mode, visible columns and their widths, sort, zoom and collapsed groups — so switching tabs switches the whole look at once.
+
+- **＋** adds a view: **Copy this view** copies every setting and opens the copy next to the original, or **Gantt** adds a new view with the default settings and no filters.
+- Double-click a tab, or use the **▾** on the open tab (or right-click any tab), to **rename**, **duplicate** or **delete** a view. The last view can't be deleted, and deleting a view never deletes tasks.
+- Changes are saved to the open view automatically. Saved filter **presets** stay shared by all views. The first time a board is opened, its first view takes over your current settings, so nothing changes at first.
+
 ## Custom fields
 
 Show any frontmatter key as a table column. In **Settings → Task Gantt → Custom fields**, click **Add field** and give it a **key** (the frontmatter property, e.g. `client`), an optional **label** for the column header, and a **type**:
@@ -363,6 +371,14 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 ![手順 2：表示メニューで稲妻線をオンにする。線が各タスクの進捗に沿って折れる](docs/images/progressline_ja.png)
 
 **バーのラベルを隠す**と、各バーの後ろのタスク名と担当者を消して、すっきり見せられます（既定はオフ＝名前を表示）。**期限切れを強調**（既定はオフ）は、期限日が過ぎていて、ステータスが完了・キャンセルでないタスクのバーを赤い枠で囲み、バーの後ろに ⚠ を付け、グループ見出しに赤い ⚠ の件数を出します。どちらも、表示オプションの行の稲妻線の右にあります。
+
+## ビュー
+
+ボード（フォルダ）は、複数の**ビュー**を持てます。ツールバーの上に、Wrike のビューのようなタブとして並びます。ビューごとに、グループ化と色分け、「表示」メニューの切り替え、フィルタと一致条件、表示する列とその幅、並べ替え、ズーム、折りたたんだグループが保存されます。タブを切り替えると、見た目の設定がまとめて切り替わります。
+
+- **＋** でビューを追加します。**今のビューをコピー**は、すべての設定を複製して、元の隣に開きます。**ガント**は、既定の設定でフィルタのない新しいビューを追加します。
+- タブをダブルクリックするか、開いているタブの **▾**（または任意のタブの右クリック）から、ビューの**名前の変更**・**複製**・**削除**ができます。最後の 1 つは削除できません。ビューを削除しても、タスクは消えません。
+- 変更は、開いているビューに自動で保存されます。保存済みのフィルタの**プリセット**は、全ビューで共有のままです。ボードを初めて開くときは、最初のビューが今の設定を引き継ぐので、最初は何も変わりません。
 
 ## カスタムフィールド
 

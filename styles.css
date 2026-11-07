@@ -88,6 +88,59 @@
   width: 16px;
   height: 16px;
 }
+/* ビューのタブの行（Wrike のビューのタブのように）/ the row of view tabs, like Wrike's view tabs */
+.ogantt-viewtabs {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 10px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.ogantt-viewtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ogantt-viewtab:hover {
+  background: var(--background-modifier-hover);
+}
+.ogantt-viewtab.is-active {
+  margin-bottom: -1px;
+  background: var(--background-primary);
+  border-color: var(--background-modifier-border);
+  color: var(--text-normal);
+  font-weight: 600;
+}
+.ogantt-viewtab .ogantt-opt-ico svg {
+  width: 14px;
+  height: 14px;
+}
+.ogantt-viewtab-more {
+  display: inline-flex;
+  opacity: 0.6;
+}
+.ogantt-viewtab-more:hover {
+  opacity: 1;
+}
+.ogantt-viewtab-more svg {
+  width: 14px;
+  height: 14px;
+}
+.ogantt-viewtab-rename {
+  width: 10em;
+  font: inherit;
+}
+.ogantt-viewtab-add {
+  align-self: center;
+  margin-left: 2px;
+}
 /* 「表示」ボタン（空フォルダ・ロールアップ・フラット・稲妻線・ラベル・期限切れのメニュー）/ the Display button (menu of empty folders, roll up, flat, progress line, labels, overdue) */
 .ogantt-opt-display {
   display: inline-flex;
