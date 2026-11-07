@@ -107,7 +107,8 @@ async function sendWebhooks(
 ): Promise<boolean> {
   let ok = true;
   const targets: { url: string; body: string; label: string }[] = [
-    { url: n.discordWebhook, body: JSON.stringify({ content: msg }), label: "Discord" },
+    // タスク名の @everyone・@here・<@id> で通知が飛ばないように / so @everyone, @here or <@id> in a task name can't ping anyone
+    { url: n.discordWebhook, body: JSON.stringify({ content: msg, allowed_mentions: { parse: [] } }), label: "Discord" },
     { url: n.slackWebhook, body: JSON.stringify({ text: msg }), label: "Slack" },
     { url: n.teamsWebhook, body: teamsCard(msg), label: "Teams" },
   ];
