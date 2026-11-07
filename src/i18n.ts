@@ -114,6 +114,7 @@ interface Strings {
   nothingToUndo: string;
   undone: (label: string) => string;
   undoReschedule: (name: string) => string;
+  depLoop: string; // 輪になる依存を作ろうとしたとき / when a dependency that would form a loop is refused
   depCascadeLimit: string; // 連動が上限を超えたとき / when a date cascade hits its limit
   undoMove: (name: string) => string;
   undoSubtask: (name: string) => string;
@@ -316,6 +317,7 @@ const STRINGS: Record<Lang, Strings> = {
     nothingToUndo: "取り消す操作がありません",
     undone: (label) => `取り消しました: ${label}`,
     undoReschedule: (name) => `「${name}」の日程変更`,
+    depLoop: "この依存を足すと輪になる（互いを待ち合う）ため、作りませんでした。",
     depCascadeLimit: "依存の連動が多すぎる（または輪になっている）ため、後続の日付は動かしませんでした。",
     undoMove: (name) => `「${name}」の移動`,
     undoSubtask: (name) => `「${name}」をサブタスク化`,
@@ -557,6 +559,7 @@ const STRINGS: Record<Lang, Strings> = {
     nothingToUndo: "Nothing to undo",
     undone: (label) => `Undone: ${label}`,
     undoReschedule: (name) => `Reschedule "${name}"`,
+    depLoop: "That dependency would create a loop (tasks waiting on each other), so it wasn't added.",
     depCascadeLimit: "Too many dependent tasks (or a dependency loop), so the following tasks' dates were not moved.",
     undoMove: (name) => `Move "${name}"`,
     undoSubtask: (name) => `Make "${name}" a subtask`,
@@ -798,6 +801,7 @@ const STRINGS: Record<Lang, Strings> = {
     nothingToUndo: "没有可撤销的操作",
     undone: (label) => `已撤销：${label}`,
     undoReschedule: (name) => `重新安排“${name}”`,
+    depLoop: "添加这个依赖会形成循环（互相等待），所以没有添加。",
     depCascadeLimit: "依赖连锁过多（或形成了循环），因此没有移动后续任务的日期。",
     undoMove: (name) => `移动“${name}”`,
     undoSubtask: (name) => `将“${name}”设为子任务`,
@@ -1039,6 +1043,7 @@ const STRINGS: Record<Lang, Strings> = {
     nothingToUndo: "沒有可復原的操作",
     undone: (label) => `已復原：${label}`,
     undoReschedule: (name) => `重新排程「${name}」`,
+    depLoop: "加入這個相依會形成迴圈（互相等待），所以沒有加入。",
     depCascadeLimit: "相依連動過多（或形成了迴圈），因此沒有移動後續任務的日期。",
     undoMove: (name) => `移動「${name}」`,
     undoSubtask: (name) => `將「${name}」設為子任務`,
@@ -1280,6 +1285,7 @@ const STRINGS: Record<Lang, Strings> = {
     nothingToUndo: "취소할 작업이 없습니다",
     undone: (label) => `취소됨: ${label}`,
     undoReschedule: (name) => `"${name}" 일정 변경`,
+    depLoop: "이 의존을 추가하면 순환(서로를 기다림)이 되므로 추가하지 않았습니다.",
     depCascadeLimit: "의존 연쇄가 너무 많거나 순환하고 있어서, 뒤따르는 작업의 날짜는 옮기지 않았습니다.",
     undoMove: (name) => `"${name}" 이동`,
     undoSubtask: (name) => `"${name}"을(를) 하위 작업으로`,
@@ -1521,6 +1527,7 @@ const STRINGS: Record<Lang, Strings> = {
     nothingToUndo: "Rien à annuler",
     undone: (label) => `Annulé : ${label}`,
     undoReschedule: (name) => `Replanifier « ${name} »`,
+    depLoop: "Cette dépendance créerait une boucle (des tâches qui s'attendent mutuellement) : elle n'a pas été ajoutée.",
     depCascadeLimit: "Trop de tâches dépendantes (ou une boucle de dépendances) : les dates des tâches suivantes n'ont pas été déplacées.",
     undoMove: (name) => `Déplacer « ${name} »`,
     undoSubtask: (name) => `Faire de « ${name} » une sous-tâche`,
@@ -1762,6 +1769,7 @@ const STRINGS: Record<Lang, Strings> = {
     nothingToUndo: "Nada que deshacer",
     undone: (label) => `Deshecho: ${label}`,
     undoReschedule: (name) => `Reprogramar «${name}»`,
+    depLoop: "Esa dependencia crearía un bucle (tareas que se esperan entre sí), así que no se añadió.",
     depCascadeLimit: "Demasiadas tareas dependientes (o un bucle de dependencias), así que no se movieron las fechas de las siguientes.",
     undoMove: (name) => `Mover «${name}»`,
     undoSubtask: (name) => `Convertir «${name}» en subtarea`,
@@ -2003,6 +2011,7 @@ const STRINGS: Record<Lang, Strings> = {
     nothingToUndo: "Нечего отменять",
     undone: (label) => `Отменено: ${label}`,
     undoReschedule: (name) => `Перенести «${name}»`,
+    depLoop: "Эта зависимость создала бы цикл (задачи ждут друг друга), поэтому она не добавлена.",
     depCascadeLimit: "Слишком много зависимых задач (или зависимости образуют цикл), поэтому даты следующих задач не изменены.",
     undoMove: (name) => `Переместить «${name}»`,
     undoSubtask: (name) => `Сделать «${name}» подзадачей`,

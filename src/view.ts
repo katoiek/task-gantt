@@ -24,7 +24,7 @@ import {
   anchorStart,
   anchorEnd,
 } from "./model";
-import { cascadeDates, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration } from "./schedule";
+import { cascadeDates, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
 import {
   DateRange,
   computeRange,
@@ -1724,6 +1724,9 @@ export class GanttView extends ItemView {
         else type = null; // start→finish = SF は未対応 / SF unsupported
         if (type == null) {
           new Notice(tr().sfUnsupported);
+        } else if (wouldLoop(this.tasks, source.path, target.path)) {
+          // 輪になる依存は作らない（日付が決まらなくなる）/ never create a loop (no dates could satisfy it)
+          new Notice(tr().depLoop);
         } else {
           // 連動しうるのは target（新しい辺）と、source・target それぞれの SS/FF 後続
           // the cascade can reach target (via the new edge) plus the SS/FF successors of source and target

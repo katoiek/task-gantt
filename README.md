@@ -152,7 +152,7 @@ Sample data for a quick try lives in `examples/Cleaning Project お掃除プロ�
 
 ## Dependencies
 
-Drag from a bar's round handle to another bar to create a dependency. The connected ends decide the type: **FS** (finish→start), **SS** (start→start), **FF** (finish→finish). SS/FF successors snap to their predecessor when you reschedule. An FS successor is **pushed later when its predecessor slips into it** — it moves to the next workday after the predecessor's due date and keeps its duration — and the push carries on down the chain. Moving a predecessor earlier never pulls its successors back, so gaps you left on purpose stay. Turn this off with **Push FS successors automatically** in settings. Milestones never move through dependencies. Click a dependency line to remove it (undo with **Ctrl/Cmd+Z** or the undo button).
+Drag from a bar's round handle to another bar to create a dependency. The connected ends decide the type: **FS** (finish→start), **SS** (start→start), **FF** (finish→finish). SS/FF successors snap to their predecessor when you reschedule. An FS successor is **pushed later when its predecessor slips into it** — it moves to the next workday after the predecessor's due date and keeps its duration — and the push carries on down the chain. Moving a predecessor earlier never pulls its successors back, so gaps you left on purpose stay. Turn this off with **Push FS successors automatically** in settings. Milestones never move through dependencies. Click a dependency line to remove it (undo with **Ctrl/Cmd+Z** or the undo button). A dependency that would close a loop (tasks waiting on each other) is refused with a notice.
 
 ## Duration
 
@@ -421,7 +421,7 @@ after:
 
 ## 依存関係
 
-バーの丸ハンドルから別のバーへドラッグすると依存を作成します。つないだ端で種類が決まります：**FS**（終了→開始）・**SS**（開始→開始）・**FF**（終了→終了）。SS/FF の後続は、先行の日程変更に追従します。FS の後続は、**先行が遅れて重なったときに後ろへ押し出されます**。先行の期限日の次の稼働日へ移り、期間はそのまま保たれます。押し出しはその先の後続へも連鎖します。先行を前倒ししても後続は引き戻されないので、わざと空けた間隔は残ります。この動作は設定の **FS の後続を自動で押し出す** でオフにできます。マイルストーンは依存では動きません。依存線をクリックで切断（**Ctrl/Cmd+Z** または取り消しボタンで戻せます）。
+バーの丸ハンドルから別のバーへドラッグすると依存を作成します。つないだ端で種類が決まります：**FS**（終了→開始）・**SS**（開始→開始）・**FF**（終了→終了）。SS/FF の後続は、先行の日程変更に追従します。FS の後続は、**先行が遅れて重なったときに後ろへ押し出されます**。先行の期限日の次の稼働日へ移り、期間はそのまま保たれます。押し出しはその先の後続へも連鎖します。先行を前倒ししても後続は引き戻されないので、わざと空けた間隔は残ります。この動作は設定の **FS の後続を自動で押し出す** でオフにできます。マイルストーンは依存では動きません。依存線をクリックで切断（**Ctrl/Cmd+Z** または取り消しボタンで戻せます）。輪になる依存（互いを待ち合うタスク）は、通知を出して作成しません。
 
 ## 期間（Duration）
 

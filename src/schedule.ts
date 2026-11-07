@@ -160,6 +160,12 @@ export function successorClosure(tasks: Task[], rootPath: string, fs = false): s
   return out;
 }
 
+// 先行 predPath → 後続 succPath の依存を足すと輪になるか（自分自身への依存、または後続の先に先行がいる）。依存の種類は問わない
+// whether adding the dependency predPath → succPath would close a loop (a task on itself, or the predecessor already downstream of the successor); the type doesn't matter
+export function wouldLoop(tasks: Task[], predPath: string, succPath: string): boolean {
+  return predPath === succPath || successorClosure(tasks, succPath, true).includes(predPath);
+}
+
 // 先行 pred に対する後続 target の新しい日付（動かないなら null）
 //   FS: 押し出しのみ。先行の期限の翌稼働日より前に始まっていたら、そこへ期間を保って移す
 //   SS / FF: 先行の開始 / 期限にぴったり揃える（期間は稼働日で保つ）

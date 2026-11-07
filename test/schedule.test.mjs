@@ -11,6 +11,7 @@ import {
   shiftEnd,
   keepDurationOnStartChange,
   successorClosure,
+  wouldLoop,
   cascadeDates,
 } from "./schedule.mjs";
 import { dayIndex, dayToStr } from "./timeline.mjs";
@@ -100,6 +101,17 @@ const mk = (path, o = {}) => ({ path, name: path, groups: [], deps: [], mileston
   check("successorClosure(FS 無効): SS/FF だけ", sorted(successorClosure(g, "A")) === sorted(["B", "C", "F"]));
   check("successorClosure(FS 有効): FS の先も", sorted(successorClosure(g, "A", true)) === sorted(["B", "C", "D", "E", "F"]));
   check("successorClosure: 後続なしは空", successorClosure(g, "F", true).length === 0);
+}
+
+// ── wouldLoop ──
+{
+  // A → B → C（B は A に、C は B に依存）/ A → B → C (B depends on A, C on B)
+  const chain = [mk("A"), mk("B", { deps: [{ path: "A", type: "FS" }] }), mk("C", { deps: [{ path: "B", type: "SS" }] }), mk("D")];
+  check("wouldLoop: 自分自身への依存は輪", wouldLoop(chain, "A", "A"));
+  check("wouldLoop: 直接の逆向き（A→B があるとき B→A）は輪", wouldLoop(chain, "B", "A"));
+  check("wouldLoop: 間接の逆向き（A→B→C があるとき C→A）は輪", wouldLoop(chain, "C", "A"));
+  check("wouldLoop: 同じ向きの追加（A→C）は輪ではない", !wouldLoop(chain, "A", "C"));
+  check("wouldLoop: 無関係なタスクとの依存は輪ではない", !wouldLoop(chain, "D", "A") && !wouldLoop(chain, "A", "D"));
 }
 
 // ── cascadeDates ──
