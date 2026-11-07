@@ -259,19 +259,46 @@ export class GanttSettingTab extends PluginSettingTab {
   // update() is @since 1.13.0; to keep minAppVersion at 1.11.4 we avoid a typed direct call and
   // invoke it only when it exists at runtime (on 1.12 and older, `declarative` is never true).
   private updateDeclarative(): void {
+    this.flushPendingCommits(); // 描き直す前に、確定していない入力を保存 / save an uncommitted entry before redrawing
     (this as unknown as { update?: () => void }).update?.();
   }
 
   // ===== 各入力欄の組み立て（推奨の getSettingDefinitions と display() フォールバックで共有）=====
   // ===== control builders shared by getSettingDefinitions and the display() fallback =====
+  // 確定したときだけ保存する入力欄（欄を離れる・Enter・設定画面を閉じる）。1 文字ごとに保存すると、打ちかけのフォルダ名でボードが再描画され、存在しないフォルダが一時的に保存される
+  // a text field that saves only when committed (leaving the field, Enter, closing the settings): saving per keystroke redraws the board with a half-typed folder and stores a folder that doesn't exist yet
+  private pendingCommits = new Set<() => void>();
+
+  private saveOnCommit(t: TextComponent, get: () => string, set: (v: string) => void): void {
+    const commit = (): void => {
+      const v = t.getValue().trim();
+      if (v === get()) return;
+      set(v);
+      this.save();
+    };
+    t.inputEl.addEventListener("blur", commit);
+    t.inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter") commit();
+    });
+    this.pendingCommits.add(commit); // 閉じる・描き直しの前に、確定していない入力を保存する / save an uncommitted entry before closing or redrawing
+  }
+
+  private flushPendingCommits(): void {
+    const list = [...this.pendingCommits];
+    this.pendingCommits.clear();
+    for (const commit of list) commit();
+  }
+
+  hide(): void {
+    this.flushPendingCommits();
+  }
+
   private ctlRootFolder(setting: Setting): void {
     const s = this.plugin.settings;
-    setting.addText((t) =>
-      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(s.rootFolder).onChange((v) => {
-        s.rootFolder = v.trim();
-        this.save();
-      })
-    );
+    setting.addText((t) => {
+      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(s.rootFolder);
+      this.saveOnCommit(t, () => s.rootFolder, (v) => { s.rootFolder = v; });
+    });
   }
 
   private ctlRecurse(setting: Setting): void {
@@ -725,12 +752,10 @@ export class GanttSettingTab extends PluginSettingTab {
 
   private ctlGcalScope(setting: Setting): void {
     const g = this.plugin.settings.gcal;
-    setting.addText((t) =>
-      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(g.scopeFolder).onChange((v) => {
-        g.scopeFolder = v.trim();
-        this.save();
-      })
-    );
+    setting.addText((t) => {
+      t.setPlaceholder(tr().setDefaultFolderPlaceholder).setValue(g.scopeFolder);
+      this.saveOnCommit(t, () => g.scopeFolder, (v) => { g.scopeFolder = v; });
+    });
   }
 
   private ctlGcalInterval(setting: Setting): void {
@@ -1040,6 +1065,7 @@ export class GanttSettingTab extends PluginSettingTab {
   }
 
   private draw(): void {
+    this.flushPendingCommits(); // 描き直す前に、確定していない入力を保存 / save an uncommitted entry before redrawing
     const { containerEl } = this;
     containerEl.empty();
     const s = this.plugin.settings;
