@@ -1122,10 +1122,6 @@ input.ogantt-cell-input[type="number"] {
 .ogantt-assignee-field.is-editing .ogantt-assignee-view {
   display: none;
 }
-/* 内容の高さを測るあいだだけ、高さを自動にする / lets an element take its content's height while that height is measured */
-.ogantt-measure-auto {
-  height: auto !important;
-}
 /* カーソル位置を測るための見えないミラー要素 / the invisible mirror element that measures the caret position */
 .ogantt-caret-mirror {
   position: absolute;
@@ -1347,6 +1343,7 @@ button.ogantt-cal-title:hover {
 .ogantt-detail-body-edit {
   display: none;
   width: 100%;
+  height: var(--ogantt-body-h, auto); /* JS が内容の高さを入れる / set from JS to fit the content */
   min-height: 160px;
   margin-top: 6px;
   resize: vertical;
