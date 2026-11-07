@@ -218,6 +218,8 @@ interface Strings {
   setNewTaskDatesDesc: string;
   setNewTaskToday: string;
   setNewTaskBacklog: string;
+  setStatusUp: string;
+  setStatusDown: string;
   setTimezoneSystem: string;
   setNonWorkingDaysName: string;
   setNonWorkingDaysDesc: string;
@@ -442,6 +444,8 @@ const STRINGS: Record<Lang, Strings> = {
     setNewTaskDatesDesc: "新しく作るタスクの開始・期限の初期値です。作ったあとで、詳細パネルから変えられます。",
     setNewTaskToday: "今日（開始・期限とも作成日）",
     setNewTaskBacklog: "バックログ（日付なし）",
+    setStatusUp: "上へ移動",
+    setStatusDown: "下へ移動",
     setTimezoneSystem: "システム（端末の設定）",
     setNonWorkingDaysName: "休日の曜日",
     setNonWorkingDaysDesc: "期間（Duration）と依存による日程の連動は、この曜日を除いた稼働日で数えます。",
@@ -714,6 +718,8 @@ const STRINGS: Record<Lang, Strings> = {
     setNewTaskDatesDesc: "The initial start and due dates of a new task. You can change them afterwards in the detail panel.",
     setNewTaskToday: "Today (start and due are the creation date)",
     setNewTaskBacklog: "Backlog (no dates)",
+    setStatusUp: "Move up",
+    setStatusDown: "Move down",
     setTimezoneSystem: "System (device setting)",
     setNonWorkingDaysName: "Non-working days",
     setNonWorkingDaysDesc: "Durations and dependency-driven rescheduling count workdays only, skipping these days.",
@@ -986,6 +992,8 @@ const STRINGS: Record<Lang, Strings> = {
     setNewTaskDatesDesc: "新任务的初始开始日期和截止日期。创建后可在详情面板中修改。",
     setNewTaskToday: "今天（开始和截止均为创建日）",
     setNewTaskBacklog: "待办（无日期）",
+    setStatusUp: "上移",
+    setStatusDown: "下移",
     setTimezoneSystem: "系统（设备设置）",
     setNonWorkingDaysName: "非工作日",
     setNonWorkingDaysDesc: "工期及依赖联动只计算工作日，跳过这些日子。",
@@ -1258,6 +1266,8 @@ const STRINGS: Record<Lang, Strings> = {
     setNewTaskDatesDesc: "新任務的初始開始日與截止日。建立後可在詳細面板中修改。",
     setNewTaskToday: "今天（開始與截止皆為建立日）",
     setNewTaskBacklog: "待辦（無日期）",
+    setStatusUp: "上移",
+    setStatusDown: "下移",
     setTimezoneSystem: "系統（裝置設定）",
     setNonWorkingDaysName: "非工作日",
     setNonWorkingDaysDesc: "工期及相依連動只計算工作日，略過這些日子。",
@@ -1530,6 +1540,8 @@ const STRINGS: Record<Lang, Strings> = {
     setNewTaskDatesDesc: "새 작업의 처음 시작일과 마감일입니다. 만든 뒤 상세 패널에서 바꿀 수 있습니다.",
     setNewTaskToday: "오늘(시작과 마감 모두 생성일)",
     setNewTaskBacklog: "백로그(날짜 없음)",
+    setStatusUp: "위로 이동",
+    setStatusDown: "아래로 이동",
     setTimezoneSystem: "시스템(기기 설정)",
     setNonWorkingDaysName: "휴무 요일",
     setNonWorkingDaysDesc: "기간과 종속성에 따른 일정 조정은 이 요일을 제외한 근무일로 계산합니다.",
@@ -1802,6 +1814,8 @@ const STRINGS: Record<Lang, Strings> = {
     setNewTaskDatesDesc: "Dates de début et d'échéance initiales d'une nouvelle tâche. Vous pouvez les modifier ensuite dans le panneau de détails.",
     setNewTaskToday: "Aujourd'hui (début et échéance = date de création)",
     setNewTaskBacklog: "Backlog (sans dates)",
+    setStatusUp: "Monter",
+    setStatusDown: "Descendre",
     setTimezoneSystem: "Système (appareil)",
     setNonWorkingDaysName: "Jours non ouvrés",
     setNonWorkingDaysDesc: "Les durées et le report via les dépendances ne comptent que les jours ouvrés, en sautant ces jours.",
@@ -2074,6 +2088,8 @@ const STRINGS: Record<Lang, Strings> = {
     setNewTaskDatesDesc: "Las fechas iniciales de inicio y vencimiento de una tarea nueva. Puedes cambiarlas después en el panel de detalles.",
     setNewTaskToday: "Hoy (inicio y vencimiento = fecha de creación)",
     setNewTaskBacklog: "Backlog (sin fechas)",
+    setStatusUp: "Subir",
+    setStatusDown: "Bajar",
     setTimezoneSystem: "Sistema (dispositivo)",
     setNonWorkingDaysName: "Días no laborables",
     setNonWorkingDaysDesc: "Las duraciones y la reprogramación por dependencias cuentan solo días laborables, saltando estos días.",
@@ -2346,6 +2362,8 @@ const STRINGS: Record<Lang, Strings> = {
     setNewTaskDatesDesc: "Начальные даты начала и срока новой задачи. Потом их можно изменить в панели сведений.",
     setNewTaskToday: "Сегодня (начало и срок — дата создания)",
     setNewTaskBacklog: "Бэклог (без дат)",
+    setStatusUp: "Вверх",
+    setStatusDown: "Вниз",
     setTimezoneSystem: "Система (устройство)",
     setNonWorkingDaysName: "Нерабочие дни",
     setNonWorkingDaysDesc: "Длительность и перенос по зависимостям считаются только в рабочих днях, без этих дней.",

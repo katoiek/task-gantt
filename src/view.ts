@@ -46,7 +46,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { KanbanColumn, buildKanbanColumns, subtasksOf } from "./kanban";
+import { KanbanColumn, buildKanbanColumns, moveStatus, subtasksOf } from "./kanban";
 import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
@@ -105,6 +105,7 @@ export class GanttView extends ItemView {
   private zoomBtns = new Map<ZoomMode, HTMLButtonElement>();
   private kanbanExpanded = new Set<string>(); // サブタスクを開いているカード（パス）/ cards whose subtasks are open (paths)
   private dragPath: string | null = null; // ドラッグ中のカード / the card being dragged
+  private dragColumn: string | null = null; // ドラッグ中の列（ステータスの id）/ the column (status id) being dragged
 
   // 全体の設定の上に、ビューごとに違う 6 項目（フィルタ・一致条件・列・列幅・並べ替え）だけを重ねたもの。それ以外は全体の設定をそのまま読む。保存には使わない（保存は plugin.settings）
   // the global settings with just the six per-view items (filters, match, columns, widths, sort) laid over them; everything else reads through. Never saved itself (save plugin.settings)
@@ -553,9 +554,12 @@ export class GanttView extends ItemView {
     const { filters, filterMatch, statuses } = this.vs;
     const list = [...applyFilters(this.tasks, filters, filterMatch, statuses, todayIndex())].sort(taskComparator(this.columns(), this.vs));
     const board = host.createDiv({ cls: "ogantt-kanban" });
-    // どの列も、カードが 0 件でも残す（空の列にも、カードを落としてステータスを付け外しできるように）
-    // every column stays even with no cards (so a card can still be dropped there to set or clear its status)
-    for (const col of buildKanbanColumns(list, statuses, this.cfg.columnOrder)) this.renderKanbanColumn(board, col);
+    // ステータスの列は、カードが 0 件でも残す（空の列にもカードを落とせるように）。未割当だけは、カードがあるときだけ出す
+    // a status column stays even with no cards (so a card can still be dropped there); only Unassigned shows just when it has cards
+    for (const col of buildKanbanColumns(list, statuses)) {
+      if (col.status === null && col.cards.length === 0) continue;
+      this.renderKanbanColumn(board, col);
+    }
   }
 
   private renderKanbanColumn(board: HTMLElement, col: KanbanColumn): void {
@@ -568,22 +572,70 @@ export class GanttView extends ItemView {
     head.createSpan({ cls: "ogantt-kcol-count", text: String(col.cards.length) });
     const body = colEl.createDiv({ cls: "ogantt-kcol-body" });
     for (const t of col.cards) this.renderKanbanCard(body, t);
-    // ドロップ：この列へ動かしたカードは、この列のステータスになる / drop: a card moved here takes this column's status
+    // 見出しをドラッグして、列の順序を入れ替える。順序は設定のステータスの順序そのもの（設定メニュー・凡例と連動）。未割当は先頭に固定
+    // drag the header to reorder the columns; the order is the settings' own status order (linked to the settings menu and the legend); Unassigned stays first
+    if (col.status !== null) {
+      const id = col.status;
+      head.addClass("is-draggable");
+      head.setAttr("draggable", "true");
+      head.addEventListener("dragstart", (e) => {
+        this.dragColumn = id;
+        e.dataTransfer?.setData("text/plain", id);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+        colEl.addClass("is-col-dragging");
+      });
+      head.addEventListener("dragend", () => {
+        this.dragColumn = null;
+        board.querySelectorAll(".is-col-dragging, .is-col-before, .is-col-after").forEach((el) => el.removeClasses(["is-col-dragging", "is-col-before", "is-col-after"]));
+      });
+    }
+    const dropAfter = (e: DragEvent): boolean => {
+      const r = colEl.getBoundingClientRect();
+      return e.clientX > r.left + r.width / 2;
+    };
     colEl.addEventListener("dragover", (e) => {
+      if (this.dragColumn) {
+        // 列の入れ替え：左半分なら前、右半分なら後ろに入る / reordering columns: the left half inserts before, the right half after
+        if (col.status === null || col.status === this.dragColumn) return;
+        e.preventDefault();
+        const after = dropAfter(e);
+        colEl.toggleClass("is-col-after", after);
+        colEl.toggleClass("is-col-before", !after);
+        return;
+      }
       if (!this.dragPath) return;
       e.preventDefault();
       colEl.addClass("is-drop");
     });
     colEl.addEventListener("dragleave", (e) => {
-      if (!colEl.contains(e.relatedTarget as Node | null)) colEl.removeClass("is-drop");
+      if (colEl.contains(e.relatedTarget as Node | null)) return;
+      colEl.removeClasses(["is-drop", "is-col-before", "is-col-after"]);
     });
     colEl.addEventListener("drop", (e) => {
       e.preventDefault();
-      colEl.removeClass("is-drop");
+      colEl.removeClasses(["is-drop", "is-col-before", "is-col-after"]);
+      if (this.dragColumn) {
+        const from = this.dragColumn;
+        this.dragColumn = null;
+        if (col.status !== null) this.reorderColumn(from, col.status, dropAfter(e));
+        return;
+      }
+      // カードのドロップ：この列へ動かしたカードは、この列のステータスになる / a card dropped here takes this column's status
       const path = this.dragPath;
       this.dragPath = null;
       if (path) void this.moveTaskToStatus(path, col.status);
     });
+  }
+
+  // 列を入れ替える＝設定のステータスの順序を入れ替える。保存すると、全ビューと設定画面が描き直される
+  // reordering a column reorders the settings' statuses; saving redraws every view and the settings tab
+  private reorderColumn(fromId: string, targetId: string, after: boolean): void {
+    const statuses = this.plugin.settings.statuses;
+    const next = moveStatus(statuses, fromId, targetId, after);
+    if (!next) return;
+    statuses.splice(0, statuses.length, ...next);
+    void this.plugin.saveSettings();
+    this.plugin.settingTab?.refreshIfOpen();
   }
 
   private renderKanbanCard(body: HTMLElement, t: Task): void {

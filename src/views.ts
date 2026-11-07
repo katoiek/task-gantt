@@ -29,7 +29,7 @@ export interface ViewConfig {
   collapsed: string[]; // 折りたたんだグループのキー / keys of the collapsed groups
   // カンバン用（ガントでは使わない）/ for Kanban (unused by Gantt)
   cardFields: string[]; // カードに出す列の id（担当・開始・期限が既定）/ ids of the columns shown on a card (assignee, start, due by default)
-  columnOrder: string[]; // 列（ステータス）の並び。空なら設定の順 / the order of the columns (statuses); empty follows the settings
+  // 列（ステータス）の並びは、ビューではなく設定のステータスの順序そのもの（全ビュー共通）/ the column order is the settings' own status order, shared by every view, not a per-view setting
 }
 
 export interface BoardView {

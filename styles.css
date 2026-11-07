@@ -174,6 +174,18 @@
   background: color-mix(in srgb, var(--ogantt-col) 28%, var(--background-primary));
   font-weight: 600;
 }
+.ogantt-kcol-head.is-draggable {
+  cursor: grab;
+}
+.ogantt-kcol.is-col-dragging {
+  opacity: 0.5;
+}
+.ogantt-kcol.is-col-before {
+  box-shadow: -4px 0 0 var(--interactive-accent);
+}
+.ogantt-kcol.is-col-after {
+  box-shadow: 4px 0 0 var(--interactive-accent);
+}
 .ogantt-kcol-dot {
   flex: none;
   width: 10px;

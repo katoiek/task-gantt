@@ -240,7 +240,6 @@ export function defaultViewConfig(s: GanttSettings): ViewConfig {
     zoom: s.defaultZoom,
     collapsed: [],
     cardFields: ["assignee", "start", "end"],
-    columnOrder: [],
   };
 }
 
@@ -460,6 +459,18 @@ export class GanttSettingTab extends PluginSettingTab {
   // 一覧の先頭に列見出しの行を差し込んでも削除の対象がずれない
   // one status row, delete button included: keeping deletion on the row instead of the framework's
   // onDelete means a column-header row at the top of the list can't throw off which row gets removed
+  // ステータスを 1 つ上・下へ動かす。順序は、カンバンの列の順序・凡例・ステータスの並べ替えとつながっている
+  // move a status one place up or down; the order is the Kanban column order, the legend order and the status sort
+  private moveStatusRow(st: StatusDef, dir: -1 | 1): void {
+    const live = this.plugin.settings.statuses;
+    const at = live.indexOf(st);
+    const to = at + dir;
+    if (at < 0 || to < 0 || to >= live.length) return;
+    [live[at], live[to]] = [live[to], live[at]];
+    this.save();
+    this.redraw();
+  }
+
   private ctlStatusRow(setting: Setting, st: StatusDef): void {
     setting
       .addText((t) => t.setPlaceholder(tr().setStatusId).setValue(st.id).onChange((v) => { st.id = v.trim(); this.save(); }))
@@ -480,6 +491,18 @@ export class GanttSettingTab extends PluginSettingTab {
           .selectEl.setAttr("aria-label", tr().setStatusGroup);
       })
       .addColorPicker((c) => c.setValue(st.color).onChange((v) => { st.color = v; this.save(); }))
+      // 上へ・下へ：ステータスの順序＝カンバンの列の順序。行そのものを探して入れ替える
+      // up / down: the status order is the Kanban column order; the row is located by identity
+      .addExtraButton((b) =>
+        b.setIcon("arrow-up").setTooltip(tr().setStatusUp).setDisabled(this.plugin.settings.statuses.indexOf(st) <= 0).onClick(() => this.moveStatusRow(st, -1))
+      )
+      .addExtraButton((b) =>
+        b
+          .setIcon("arrow-down")
+          .setTooltip(tr().setStatusDown)
+          .setDisabled(this.plugin.settings.statuses.indexOf(st) >= this.plugin.settings.statuses.length - 1)
+          .onClick(() => this.moveStatusRow(st, 1))
+      )
       .addExtraButton((b) =>
         b.setIcon("trash").setTooltip(tr().setDeleteTooltip).onClick(() => {
           // 番号ではなく行そのものを探して消す（描画後に並びが変わっていても巻き込まない）
