@@ -166,12 +166,18 @@ The **Duration** column (turn it on from the gear menu) shows how many **workday
 
 Click the **download** button in the toolbar (or run an **Export** command from the command palette while a board is open) and choose a format and a range:
 
+![The export menu: PNG or PDF, chart only or table and chart](docs/images/export-menu-en.png)
+
 | | Chart only | Table and chart |
 |---|---|---|
 | **PNG** | the timeline: date axis and bars | the table's visible columns, then the timeline |
 | **PDF** | the same, on A4 landscape pages | the same, on A4 landscape pages |
 
 The export is the board as it is shown now: its filters, grouping, collapsed groups, columns, zoom and theme, and **every row, including those scrolled out of view**. A title (the folder and today's date) sits on top. A PDF fits the board's width to an A4 landscape page and, if the board is tall, continues on the next pages between rows, with the date axis (and table header) repeated on each. The file goes to the folder where your vault keeps attachments, and a notice offers to open it. A very large board is scaled down to fit the canvas limits; filter it or collapse groups for a sharper image. A PDF holds the board as an image, so its text can't be selected.
+
+![PNG export, chart only](docs/images/export-chart.png)
+
+![PNG export, table and chart](docs/images/export-table.png)
 
 ## Undo and redo
 
@@ -446,12 +452,18 @@ after:
 
 ツールバーの**ダウンロード**ボタン（または、ボードを開いているときにコマンドパレットの**書き出し**コマンド）から、形式と範囲を選びます。
 
+![書き出しメニュー：PNG か PDF、チャートのみか表とチャートか](docs/images/export-menu-ja.png)
+
 | | チャートのみ | 表とチャート |
 |---|---|---|
 | **PNG** | タイムライン（日付軸とバー） | 表の表示中の列と、タイムライン |
 | **PDF** | 同じ内容を A4 横のページに | 同じ内容を A4 横のページに |
 
 書き出されるのは、今表示しているボードそのままです。絞り込み、グループ、折りたたみ、列、ズーム、テーマが反映され、**画面外にスクロールした行も全部**含まれます。上には表題（フォルダ名と今日の日付）が付きます。PDF は、ボードの幅を A4 横の幅に合わせて並べ、縦に長ければ行の境目で次のページに続けます。各ページには日付軸（と表の見出し）が付きます。ファイルは Vault の添付ファイルの置き場所に保存され、通知から開けます。とても大きなボードは、キャンバスの上限に収まるよう縮小されます。鮮明にしたいときは、絞り込むかグループを畳んでください。PDF はボードを画像として収めるので、文字は選択できません。
+
+![PNG の書き出し例（チャートのみ）](docs/images/export-chart.png)
+
+![PNG の書き出し例（表とチャート）](docs/images/export-table.png)
 
 ## 取り消し・やり直し
 
