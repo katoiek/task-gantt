@@ -46,7 +46,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { KanbanColumn, buildKanbanColumns, moveStatus, subtasksOf } from "./kanban";
+import { KanbanColumn, buildKanbanColumns, moveId, orderStatusIds, subtasksOf } from "./kanban";
 import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
@@ -556,7 +556,7 @@ export class GanttView extends ItemView {
     const board = host.createDiv({ cls: "ogantt-kanban" });
     // ステータスの列は、カードが 0 件でも残す（空の列にもカードを落とせるように）。未割当だけは、カードがあるときだけ出す
     // a status column stays even with no cards (so a card can still be dropped there); only Unassigned shows just when it has cards
-    for (const col of buildKanbanColumns(list, statuses)) {
+    for (const col of buildKanbanColumns(list, statuses, this.cfg.columnOrder)) {
       if (col.status === null && col.cards.length === 0) continue;
       this.renderKanbanColumn(board, col);
     }
@@ -572,8 +572,8 @@ export class GanttView extends ItemView {
     head.createSpan({ cls: "ogantt-kcol-count", text: String(col.cards.length) });
     const body = colEl.createDiv({ cls: "ogantt-kcol-body" });
     for (const t of col.cards) this.renderKanbanCard(body, t);
-    // 見出しをドラッグして、列の順序を入れ替える。順序は設定のステータスの順序そのもの（設定メニュー・凡例と連動）。未割当は先頭に固定
-    // drag the header to reorder the columns; the order is the settings' own status order (linked to the settings menu and the legend); Unassigned stays first
+    // 見出しをドラッグして、列の順序を入れ替える。順序はこのビューに保存する（初期値は設定のステータスの順）。未割当は先頭に固定
+    // drag the header to reorder the columns; the order is saved in this view (it starts from the settings' status order); Unassigned stays first
     if (col.status !== null) {
       const id = col.status;
       head.addClass("is-draggable");
@@ -627,15 +627,13 @@ export class GanttView extends ItemView {
     });
   }
 
-  // 列を入れ替える＝設定のステータスの順序を入れ替える。保存すると、全ビューと設定画面が描き直される
-  // reordering a column reorders the settings' statuses; saving redraws every view and the settings tab
+  // 列を入れ替える＝このビューの列の順序を保存する。設定のステータスの順序は変えない
+  // reordering a column saves this view's column order; the settings' status order is left alone
   private reorderColumn(fromId: string, targetId: string, after: boolean): void {
-    const statuses = this.plugin.settings.statuses;
-    const next = moveStatus(statuses, fromId, targetId, after);
+    const next = moveId(orderStatusIds(this.plugin.settings.statuses, this.cfg.columnOrder), fromId, targetId, after);
     if (!next) return;
-    statuses.splice(0, statuses.length, ...next);
-    void this.plugin.saveSettings();
-    this.plugin.settingTab?.refreshIfOpen();
+    this.cfg.columnOrder = next;
+    this.rerender(); // 描き直しのときに、ビューへ保存される / saved with the view on the redraw
   }
 
   private renderKanbanCard(body: HTMLElement, t: Task): void {

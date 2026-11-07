@@ -1,5 +1,5 @@
 // カンバンの振り分け（列の並び・未割当・サブタスク）の検証 / Tests for the Kanban sorting (column order, unassigned, subtasks)
-import { buildKanbanColumns, moveStatus, subtasksOf } from "./kanban.mjs";
+import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf } from "./kanban.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -22,40 +22,47 @@ const T = (path, status, parent) => ({ path, name: path, status, parent, groups:
 const ids = (cols) => cols.map((c) => c.status);
 const paths = (col) => col.cards.map((t) => t.path).join();
 
+// ── orderStatusIds ──
+check("orderStatusIds: 保存が無ければ設定の順（初期値）", orderStatusIds(ST, []).join() === "todo,doing,done");
+check("orderStatusIds: 保存した並びを使う", orderStatusIds(ST, ["done", "todo", "doing"]).join() === "done,todo,doing");
+check("orderStatusIds: 知らない ID は捨てる", orderStatusIds(ST, ["ghost", "done"]).join() === "done,todo,doing");
+check("orderStatusIds: 足りないステータスは設定の順で後ろに", orderStatusIds(ST, ["doing"]).join() === "doing,todo,done");
+check("orderStatusIds: 重複は 1 回", orderStatusIds(ST, ["done", "done", "todo"]).join() === "done,todo,doing");
+check("orderStatusIds: 設定でステータスを足すと、保存した並びの末尾に列が増える", orderStatusIds([...ST, { id: "hold", label: "Hold", color: "#c90", group: "deferred" }], ["done", "todo", "doing"]).join() === "done,todo,doing,hold");
+check("orderStatusIds: 設定でステータスを消すと、その列も消える", orderStatusIds(ST.slice(0, 2), ["done", "doing", "todo"]).join() === "doing,todo");
+
 // ── buildKanbanColumns ──
 {
-  const cols = buildKanbanColumns([T("a", "todo"), T("b", "done"), T("c", "todo"), T("d", undefined), T("e", "ghost")], ST);
+  const cols = buildKanbanColumns([T("a", "todo"), T("b", "done"), T("c", "todo"), T("d", undefined), T("e", "ghost")], ST, []);
   check("列: 先頭が未割当、続いてステータスの順", ids(cols).map((x) => x ?? "-").join() === "-,todo,doing,done");
   check("列: ステータスごとに分け、渡された順を保つ", paths(cols[1]) === "a,c" && paths(cols[3]) === "b" && paths(cols[2]) === "");
   check("列: ステータスなし・設定にない ID は未割当", paths(cols[0]) === "d,e");
 }
 {
-  const reordered = [ST[2], ST[0], ST[1]];
-  const cols = buildKanbanColumns([T("a", "todo")], reordered);
-  check("列: 設定のステータスの並びがそのまま列の並びになる（先頭は未割当）", cols.map((c) => c.status ?? "-").join() === "-,done,todo,doing");
+  const cols = buildKanbanColumns([T("a", "todo")], ST, ["done", "doing", "todo"]);
+  check("列: ビューに保存した並びが列の並びになる（先頭は未割当）", cols.map((c) => c.status ?? "-").join() === "-,done,doing,todo");
+  check("列: 保存が無ければ設定の順", buildKanbanColumns([T("a", "todo")], ST, []).map((c) => c.status ?? "-").join() === "-,todo,doing,done");
 }
 {
-  const cols = buildKanbanColumns([T("p", "todo"), T("s1", "doing", "p"), T("s2", "done", "p")], ST);
+  const cols = buildKanbanColumns([T("p", "todo"), T("s1", "doing", "p"), T("s2", "done", "p")], ST, []);
   check("サブタスク: 親が表示中なら、独立したカードにしない", paths(cols[1]) === "p" && paths(cols[2]) === "" && paths(cols[3]) === "");
 }
 {
-  const cols = buildKanbanColumns([T("s1", "doing", "p")], ST);
+  const cols = buildKanbanColumns([T("s1", "doing", "p")], ST, []);
   check("サブタスク: 親がフィルタで外れていれば、独立したカード", paths(cols[2]) === "s1");
 }
-check("列: タスクが無くても全部の列が出る", buildKanbanColumns([], ST).length === 4);
+check("列: タスクが無くても全部の列が出る", buildKanbanColumns([], ST, []).length === 4);
 
-// ── moveStatus ──
+// ── moveId ──
 {
-  const order = (list) => list.map((x) => x.id).join();
-  check("moveStatus: 前へ動かす", order(moveStatus(ST, "done", "todo", false)) === "done,todo,doing");
-  check("moveStatus: 後ろへ動かす", order(moveStatus(ST, "todo", "doing", true)) === "doing,todo,done");
-  check("moveStatus: 末尾へ（最後の列の後ろ）", order(moveStatus(ST, "todo", "done", true)) === "doing,done,todo");
-  check("moveStatus: 先頭へ（最初の列の前）", order(moveStatus(ST, "done", "todo", false)).startsWith("done"));
-  check("moveStatus: 同じ位置になる動きは null", moveStatus(ST, "todo", "doing", false) === null && moveStatus(ST, "doing", "todo", true) === null);
-  check("moveStatus: 自分自身・知らない ID は null", moveStatus(ST, "todo", "todo", true) === null && moveStatus(ST, "ghost", "todo", false) === null && moveStatus(ST, "todo", "ghost", false) === null);
-  const before = ST.map((x) => x.id).join();
-  moveStatus(ST, "done", "todo", false);
-  check("moveStatus: 元の配列は変えない", ST.map((x) => x.id).join() === before);
+  const ids = ["todo", "doing", "done"];
+  check("moveId: 前へ動かす", moveId(ids, "done", "todo", false).join() === "done,todo,doing");
+  check("moveId: 後ろへ動かす", moveId(ids, "todo", "doing", true).join() === "doing,todo,done");
+  check("moveId: 末尾へ", moveId(ids, "todo", "done", true).join() === "doing,done,todo");
+  check("moveId: 同じ位置になる動きは null", moveId(ids, "todo", "doing", false) === null && moveId(ids, "doing", "todo", true) === null);
+  check("moveId: 自分自身・知らない ID は null", moveId(ids, "todo", "todo", true) === null && moveId(ids, "ghost", "todo", false) === null && moveId(ids, "todo", "ghost", false) === null);
+  moveId(ids, "done", "todo", false);
+  check("moveId: 元の配列は変えない", ids.join() === "todo,doing,done");
 }
 
 // ── subtasksOf ──

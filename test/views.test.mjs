@@ -44,6 +44,7 @@ const cfg = (over = {}) => ({
   zoom: "Week",
   collapsed: [],
   cardFields: ["assignee", "start", "end"],
+  columnOrder: [],
   ...over,
 });
 
@@ -168,7 +169,7 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
   check("repair: カンバンの種類は保たれ、足りないカンバン用の設定は base で補う", (() => {
     const r = repairBoardViews({ "folder:k": { active: "k", views: [{ id: "k", name: "K", type: "kanban", config: { cardFields: ["tags"] } }, { id: "x", name: "X", type: "weird", config: {} }] } }, base);
     const v = r["folder:k"].views;
-    return v[0].type === "kanban" && v[0].config.cardFields.join() === "tags" && v[1].type === "gantt" && v[1].config.cardFields.join() === "assignee,start,end";
+    return v[0].type === "kanban" && v[0].config.cardFields.join() === "tags" && v[0].config.columnOrder.length === 0 && v[1].type === "gantt";
   })());
   check("repair: 開いているビューが無ければ先頭", fixed["folder:partial"].active === "a");
   fixed["folder:ok"].views[0].config.visibleColumns.push("x");
