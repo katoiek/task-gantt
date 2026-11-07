@@ -14,7 +14,7 @@ Open a folder as a Gantt from the left-column ribbon button, or by right-clickin
 
 The folder opens as a table + timeline, with groups, bars, milestones, and dependency arrows:
 
-![The opened Gantt chart with groups, bars, milestones and dependencies](docs/images/gantt-chart.png)
+![The opened Gantt chart with groups, bars, milestones and dependencies](docs/images/overview_en.png)
 
 Click a task to open the detail panel and edit its dates, status, assignee, progress, and body:
 
@@ -35,8 +35,6 @@ The UI follows Obsidian's display language. Supported: English, Japanese, Korean
 ## View options
 
 An options row above the table shapes how the board is displayed. The on/off display toggles — **Show empty folders**, **Roll up**, **Flat view**, **Progress line**, **Hide bar labels** and **Highlight overdue** — are gathered in the **Display** menu, which lists them as checkboxes like the column menu; the button is tinted when any of them differs from its default.
-
-![The options row with the Display button](docs/images/display-board-en.png)
 
 ![The Display menu: checkboxes for the display toggles](docs/images/display-menu-en.png)
 
@@ -310,7 +308,7 @@ MIT — see [`LICENSE`](./LICENSE).
 
 「表＋タイムライン」で開き、グループ・バー・マイルストーン・依存の矢印が表示されます：
 
-![開いたガントチャート（グループ・バー・マイルストーン・依存）](docs/images/gantt-chart.png)
+![開いたガントチャート（グループ・バー・マイルストーン・依存）](docs/images/overview_ja.png)
 
 タスクをクリックすると詳細パネルが開き、日付・状態・担当・進捗・本文を編集できます：
 
@@ -333,8 +331,6 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 表の上のオプション行で、ボードの見せ方を調整できます。
 
 表示の入り切り（**空フォルダを表示**・**ロールアップ**・**フラット表示**・**稲妻線**・**バーのラベルを隠す**・**期限切れを強調**）は、**表示**メニューにチェックボックスとして並びます（列の表示メニューと同じ形）。既定から変えたものがあると、ボタンの色が変わります。
-
-![表示ボタンのあるオプション行](docs/images/display-board-ja.png)
 
 ![表示メニュー：表示の入り切りのチェックボックス](docs/images/display-menu-ja.png)
 
