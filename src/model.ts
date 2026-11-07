@@ -521,25 +521,35 @@ export async function writeField(
   });
 }
 
+// 先頭のフロントマター（--- と --- の間。中身が空の --- / --- も、閉じの --- は行末まで）/ the leading frontmatter block (between --- lines; an empty --- / --- block too, and the closing --- must end its line)
+const FRONTMATTER = /^---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
+
+// ノート全文から本文（フロントマターを除く）を取り出す / the body of a note's text, without its frontmatter
+export function stripFrontmatter(text: string): string {
+  return text.replace(FRONTMATTER, "").trim();
+}
+
+// ノート全文の本文だけを差し替える（フロントマターは保持。本文が空ならフロントマターだけ残す）/ replace only the body of a note's text, keeping the frontmatter (an empty body leaves just the frontmatter)
+export function replaceBody(text: string, body: string): string {
+  const m = text.match(FRONTMATTER);
+  const fm = m ? m[0].replace(/\n*$/, "\n") : "";
+  const trimmed = body.replace(/\s+$/, "");
+  if (!trimmed) return fm;
+  return (fm ? fm + "\n" : "") + trimmed + "\n";
+}
+
 // 本文（フロントマターを除く）を取得 / read the body (without frontmatter)
 export async function readBody(app: App, path: string): Promise<string> {
   const file = app.vault.getAbstractFileByPath(path);
   if (!(file instanceof TFile)) return "";
-  const text = await app.vault.read(file);
-  // 先頭の --- ... --- を除去 / strip leading frontmatter block
-  return text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
+  return stripFrontmatter(await app.vault.read(file));
 }
 
 // 本文を書き戻す（フロントマターは保持）/ write back the body (keeping frontmatter)
 export async function writeBody(app: App, path: string, body: string): Promise<void> {
   const file = app.vault.getAbstractFileByPath(path);
   if (!(file instanceof TFile)) return;
-  await app.vault.process(file, (text) => {
-    const m = text.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
-    const fm = m ? m[0].replace(/\n*$/, "\n") : "";
-    const trimmed = body.replace(/\s+$/, "");
-    return (fm ? fm + "\n" : "") + (trimmed ? trimmed + "\n" : "");
-  });
+  await app.vault.process(file, (text) => replaceBody(text, body));
 }
 
 // 新規タスク（空フロントマター .md）をフォルダ直下に作成。名前が衝突したら連番を付ける

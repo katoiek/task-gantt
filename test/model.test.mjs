@@ -1,6 +1,6 @@
 // buildRows / マイルストーン判定 / span 集約 の検証
 // Tests for buildRows, milestone detection, and group span rollup
-import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, isOverdue, newTaskDates, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
+import { buildRows, anchorStart, anchorEnd, subtreePaths, parseStored, combineDateTime, toInstant, inferStatusGroup, statusGroupOf, isOverdue, newTaskDates, stripFrontmatter, replaceBody, customFieldIssues, validCustomFields, readCustomValue, customValueText, parseCustomInput } from "./model.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -124,6 +124,20 @@ const statusDefs = [
   { id: "todo", label: "To do", color: "#000", group: "active" },
   { id: "done", label: "Done", color: "#000", group: "completed" },
 ];
+// 本文とフロントマター / body and frontmatter
+check("stripFrontmatter: 空の --- / --- ブロックは本文に含めない（バックログで作ったタスク）", stripFrontmatter("---\n---\n") === "");
+check("stripFrontmatter: 空のブロックのあとの本文", stripFrontmatter("---\n---\nHello\n") === "Hello");
+check("stripFrontmatter: キーのあるブロック", stripFrontmatter("---\nstart: 2026-11-08\n---\nHello\n") === "Hello");
+check("stripFrontmatter: CRLF", stripFrontmatter("---\r\nstart: 1\r\n---\r\nHello\r\n") === "Hello");
+check("stripFrontmatter: フロントマターが無ければそのまま", stripFrontmatter("Hello\nworld\n") === "Hello\nworld");
+check("stripFrontmatter: 先頭が --- でない本文中の --- は残す", stripFrontmatter("Intro\n---\nrest\n") === "Intro\n---\nrest");
+check("stripFrontmatter: 閉じの --- は行末まで（---x は閉じではない）", stripFrontmatter("---\nkey: v\n---x\nHello\n") === "---\nkey: v\n---x\nHello");
+check("replaceBody: 空のブロックを残して本文を足す", replaceBody("---\n---\n", "Hello") === "---\n---\n\nHello\n");
+check("replaceBody: キーのあるブロックを残して本文を差し替える", replaceBody("---\nstart: 1\n---\nOld\n", "New") === "---\nstart: 1\n---\n\nNew\n");
+check("replaceBody: フロントマターが無ければ本文だけ", replaceBody("Old\n", "New  \n\n") === "New\n");
+check("replaceBody: 本文を空にするとフロントマターだけ残る", replaceBody("---\nstart: 1\n---\n\nOld\n", "") === "---\nstart: 1\n---\n");
+check("replaceBody: 読み戻すと同じ本文（往復）", stripFrontmatter(replaceBody("---\n---\n", "Hello\nworld")) === "Hello\nworld");
+
 // 新規タスクの日付 / the dates of a new task
 check("newTaskDates: today は開始・期限とも作成日", JSON.stringify(newTaskDates("today", "2026-11-08")) === '{"start":"2026-11-08","end":"2026-11-08"}');
 check("newTaskDates: backlog は日付なし", newTaskDates("backlog", "2026-11-08") === null);
