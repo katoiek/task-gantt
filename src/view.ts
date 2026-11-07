@@ -25,7 +25,7 @@ import {
   anchorEnd,
   isOverdue,
 } from "./model";
-import { cascadeDates, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
+import { addsNoDueDate, cascadeDates, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
 import {
   DateRange,
   computeRange,
@@ -1868,9 +1868,10 @@ export class GanttView extends ItemView {
     for (const [path, d] of changes) {
       const t = this.tasks.find((x) => x.path === path);
       if (!t) continue;
-      await writeDates(this.app, this.plugin.settings, path, d.start, d.end, false);
+      const noDue = addsNoDueDate(t, d.end, d.start); // 期限日の無い後続に期限日を足さない / don't give a successor with no due date one
+      await writeDates(this.app, this.plugin.settings, path, d.start, d.end, false, !noDue);
       t.start = d.start;
-      t.end = d.end;
+      t.end = noDue ? undefined : d.end;
     }
   }
 
@@ -1881,12 +1882,13 @@ export class GanttView extends ItemView {
     const k = this.plugin.settings.keys;
     const tz = this.plugin.settings.tz;
     const end = keepDurationOnStartChange(t, next, scheduleOptions(this.plugin.settings).cal);
+    const noDue = addsNoDueDate(t, end, next.start); // 期限日の無いタスクに期限日を足さない / don't give a task with no due date one
     await this.mutate(tr().undoReschedule(t.name), [path, ...this.cascadePaths(path)], async () => {
       await writeField(this.app, path, k.start, combineDateTime(next.start || undefined, times.start, tz));
-      await writeField(this.app, path, k.end, combineDateTime(end || undefined, times.end, tz));
+      if (!noDue) await writeField(this.app, path, k.end, combineDateTime(end || undefined, times.end, tz));
       // メモリにも反映して連動に備える（期限のみ＝マイルストーン）/ mirror in memory for the cascade (due only = milestone)
       t.start = next.start || undefined;
-      t.end = end || undefined;
+      t.end = noDue ? undefined : end || undefined;
       if (!t.start && t.end) t.milestone = true;
       await this.cascade([path]);
     });
@@ -2082,9 +2084,10 @@ export class GanttView extends ItemView {
               }
               const nsS = dayToStr(ns);
               const neS = dayToStr(ne);
-              await writeDates(this.app, this.plugin.settings, task.path, nsS, neS, false);
+              const noDue = addsNoDueDate(task, neS, nsS); // 期限日の無いタスクを 1 日のまま動かしても期限日を足さない / moving a task with no due date as a single day adds none
+              await writeDates(this.app, this.plugin.settings, task.path, nsS, neS, false, !noDue);
               task.start = nsS; // メモリ更新 / update in-memory
-              task.end = neS;
+              task.end = noDue ? undefined : neS;
             }
             // 後続を連動（メモリ更新＋ディスク書き込み）/ cascade to successors
             await this.cascade([task.path]);

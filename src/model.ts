@@ -485,7 +485,8 @@ export async function writeDates(
   path: string,
   start: string,
   end: string,
-  milestone: boolean
+  milestone: boolean,
+  writeEnd = true // false＝期限日は書かない（期限日の無いタスクを 1 日のまま動かすとき）/ false = leave the due date unwritten (a task with no due date moved as a single day)
 ): Promise<void> {
   const file = app.vault.getAbstractFileByPath(path);
   if (!(file instanceof TFile)) return;
@@ -501,7 +502,7 @@ export async function writeDates(
       delete fm[k.start];
     } else {
       fm[k.start] = combineDateTime(start, ts, settings.tz);
-      fm[k.end] = combineDateTime(end, te, settings.tz);
+      if (writeEnd) fm[k.end] = combineDateTime(end, te, settings.tz);
     }
   });
 }
