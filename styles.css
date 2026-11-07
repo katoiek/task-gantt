@@ -1,11 +1,20 @@
 /* ===== Gantt board (表＋タイムライン レイアウト / table + timeline layout) ===== */
 .ogantt-board {
   display: flex;
-  flex-direction: column;
+  flex-direction: row; /* 左にボード（.ogantt-pane）、右に詳細パネル / the board (.ogantt-pane) on the left, the detail panel on its right */
   height: 100%;
   padding: 0;
   position: relative;
   overflow: hidden;
+}
+
+/* ツールバーからボード本体までの列。詳細パネルはこの右に並び、ボードを覆わない
+   the column from the toolbar down to the board; the detail panel docks to its right instead of covering it */
+.ogantt-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .ogantt-toolbar {
@@ -1000,25 +1009,32 @@ input.ogantt-cell-input[type="number"] {
   color: var(--text-warning);
 }
 
-/* ---- 詳細パネル（右からスライドイン）/ detail slide-over ---- */
+/* ---- 詳細パネル（ボードの右に並ぶ。スマホでは全面）/ detail panel (docked beside the board; full screen on phones) ---- */
 .ogantt-detail {
-  position: absolute;
-  top: 0;
-  right: 0;
+  display: none;
+  position: relative;
+  flex: none;
   height: 100%;
   width: 380px; /* JS から上書き / overridden from JS */
-  max-width: 92%;
+  max-width: 70%;
   background: var(--background-primary);
   border-left: 1px solid var(--background-modifier-border);
-  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
-  transform: translateX(100%);
-  transition: transform 0.18s ease;
   overflow-y: auto;
-  z-index: 5;
   padding: 12px 14px 12px 18px;
 }
 .ogantt-detail.is-open {
-  transform: translateX(0);
+  display: block;
+}
+.is-phone .ogantt-detail {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  max-width: none;
+  z-index: 5;
+}
+/* 画面いっぱいのパネルに幅のつまみは要らない（端からのスワイプで縮んでしまう）/ a full-screen panel has no width grip (an edge swipe would shrink it) */
+.is-phone .ogantt-detail-resizer {
+  display: none;
 }
 /* 左端の幅リサイズハンドル / left-edge resize handle */
 .ogantt-detail-resizer {

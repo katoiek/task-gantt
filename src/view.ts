@@ -199,10 +199,12 @@ export class GanttView extends ItemView {
     const root = this.contentEl;
     root.empty();
     root.addClass("ogantt-board");
-    this.renderToolbar(root);
-    this.optionsHost = root.createDiv({ cls: "ogantt-options" }); // 中身は rerender で差し替え / repopulated on rerender
-    this.filterHost = root.createDiv({ cls: "ogantt-filterbar" }); // 統合フィルタ行（オプション行の下）/ filter row below options
-    this.gridHost = root.createDiv({ cls: "ogantt-host" });
+    // ボード本体は pane に入れ、詳細パネルはその右に並べる（ボードに重ねない）/ the board goes in a pane and the detail panel docks beside it (it doesn't cover the board)
+    const pane = root.createDiv({ cls: "ogantt-pane" });
+    this.renderToolbar(pane);
+    this.optionsHost = pane.createDiv({ cls: "ogantt-options" }); // 中身は rerender で差し替え / repopulated on rerender
+    this.filterHost = pane.createDiv({ cls: "ogantt-filterbar" }); // 統合フィルタ行（オプション行の下）/ filter row below options
+    this.gridHost = pane.createDiv({ cls: "ogantt-host" });
     this.detailEl = root.createDiv({ cls: "ogantt-detail" });
     // 詳細パネルの外側（ビュー内のどこか）をクリックしたら閉じる。キャプチャ段階で閉じることで、
     // 行クリック等の「開く」ハンドラ（バブリング段階で実行）が後から開き直せる＝詳細の切り替えになる。
