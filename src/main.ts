@@ -86,7 +86,8 @@ export default class GanttPlugin extends Plugin {
       this.registerInterval(
         window.setInterval(() => {
           const now = Date.now();
-          const from = this.lastNotifyCheck;
+          // スリープから戻っても、2 分より前の分はまとめて送らない / after a sleep, alerts older than two minutes aren't sent in a burst
+          const from = Math.max(this.lastNotifyCheck, now - 120_000);
           this.lastNotifyCheck = now;
           void checkNotifications(this, from, now);
           // Google カレンダー：Pull は設定間隔で、Push は毎分の掃き出し（差分が無ければ何もしない）
