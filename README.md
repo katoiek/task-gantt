@@ -162,6 +162,17 @@ The **Duration** column (turn it on from the gear menu) shows how many **workday
 - **Change only the start date** and the due date moves with it, so the duration stays the same — the bar slides. Changing the due date changes the duration instead. Dragging a bar's edge on the timeline resizes it as before.
 - Together with FS dependencies you can schedule by duration: give each task a duration, chain them with FS links, and a slipping task pushes everything after it.
 
+## Export as PNG or PDF
+
+Click the **download** button in the toolbar (or run an **Export** command from the command palette while a board is open) and choose a format and a range:
+
+| | Chart only | Table and chart |
+|---|---|---|
+| **PNG** | the timeline: date axis and bars | the table's visible columns, then the timeline |
+| **PDF** | the same, on A4 landscape pages | the same, on A4 landscape pages |
+
+The export is the board as it is shown now: its filters, grouping, collapsed groups, columns, zoom and theme, and **every row, including those scrolled out of view**. A title (the folder and today's date) sits on top. A PDF fits the board's width to an A4 landscape page and, if the board is tall, continues on the next pages between rows, with the date axis (and table header) repeated on each. The file goes to the folder where your vault keeps attachments, and a notice offers to open it. A very large board is scaled down to fit the canvas limits; filter it or collapse groups for a sharper image. A PDF holds the board as an image, so its text can't be selected.
+
 ## Undo and redo
 
 Every change made on the board can be undone with **Ctrl/Cmd+Z** or the undo button, and redone with **Ctrl/Cmd+Shift+Z**, **Ctrl/Cmd+Y** or the redo button: cell edits, everything in the detail panel (including renames and body text), dragging bars, dependencies, moves and subtasks, tags, and creating or deleting a task. Undoing a delete re-creates the note in place. Successors that moved along with a task move back with it. While you are typing in a text field, the shortcuts undo your typing instead. Renaming or moving the board's tasks or folders from the file explorer joins the history too, so undo always walks back in the order things happened. The history lasts while the board is open.
@@ -430,6 +441,17 @@ after:
 - **期間を変える**（セルのダブルクリック、または詳細パネルの欄）と、開始日はそのままで期限日が動きます。開始日が無いタスクは今日から始まります。
 - **開始日だけを変える**と、期限日も一緒に動き、期間が保たれます（バーが平行移動します）。期限日を変えた場合は期間が変わります。タイムラインでバーの端をドラッグしたときは、これまでどおり伸び縮みします。
 - FS 依存と組み合わせると 期間でスケジュールを組めます。各タスクに期間を入れて FS でつなげば、遅れたタスクがその後ろをまとめて押し出します。
+
+## PNG・PDF で書き出す
+
+ツールバーの**ダウンロード**ボタン（または、ボードを開いているときにコマンドパレットの**書き出し**コマンド）から、形式と範囲を選びます。
+
+| | チャートのみ | 表とチャート |
+|---|---|---|
+| **PNG** | タイムライン（日付軸とバー） | 表の表示中の列と、タイムライン |
+| **PDF** | 同じ内容を A4 横のページに | 同じ内容を A4 横のページに |
+
+書き出されるのは、今表示しているボードそのままです。絞り込み、グループ、折りたたみ、列、ズーム、テーマが反映され、**画面外にスクロールした行も全部**含まれます。上には表題（フォルダ名と今日の日付）が付きます。PDF は、ボードの幅を A4 横の幅に合わせて並べ、縦に長ければ行の境目で次のページに続けます。各ページには日付軸（と表の見出し）が付きます。ファイルは Vault の添付ファイルの置き場所に保存され、通知から開けます。とても大きなボードは、キャンバスの上限に収まるよう縮小されます。鮮明にしたいときは、絞り込むかグループを畳んでください。PDF はボードを画像として収めるので、文字は選択できません。
 
 ## 取り消し・やり直し
 

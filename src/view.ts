@@ -1,4 +1,4 @@
-import { ItemView, Menu, MarkdownRenderer, WorkspaceLeaf, setIcon, Notice, TFile, ViewStateResult, moment } from "obsidian";
+import { ItemView, Menu, MarkdownRenderer, WorkspaceLeaf, setIcon, Notice, Platform, TFile, ViewStateResult, moment } from "obsidian";
 import type GanttPlugin from "./main";
 import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, DateValue, DateOp, DateField, DateUnit, DateDir, StatusGroup, STATUS_GROUPS } from "./types";
 import {
@@ -43,6 +43,7 @@ import { linkLabel } from "./links";
 import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } from "./linkui";
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
+import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
 import { applyFilters, regroup, GroupBy } from "./filter";
 import { BoardContext, Move, MutateResult } from "./board";
@@ -85,6 +86,7 @@ export class GanttView extends ItemView {
   private ppd = 16;
   private selectedPath: string | null = null;
   private folder = ""; // 表示対象フォルダ / scoped folder path
+  private exporting = false; // 書き出し中（同時に 1 つだけ）/ an export is running (one at a time)
   private collapsed = new Set<string>(); // 折りたたみ中フォルダのキー / collapsed folder keys
 
   // 表示オプション（ビューを開いている間だけ保持）/ view options (kept while the view is open)
@@ -892,6 +894,12 @@ export class GanttView extends ItemView {
     this.redoBtn = redo;
     this.updateUndoButton();
 
+    // 書き出し（PNG / PDF × チャートのみ / 表とチャート）/ export (PNG or PDF × chart only or table and chart)
+    const exp = bar.createEl("button");
+    setIcon(exp, "download");
+    exp.setAttr("aria-label", tr().exportAria);
+    exp.onclick = (e) => this.openExportMenu(e);
+
     const reload = bar.createEl("button");
     setIcon(reload, "refresh-cw");
     reload.setAttr("aria-label", tr().reloadAria);
@@ -1273,6 +1281,65 @@ export class GanttView extends ItemView {
       },
       (v) => this.renameTaskTo(t.path, t.name, v)
     );
+  }
+
+  // 書き出しのメニュー（形式 2 × 範囲 2）/ the export menu (2 formats × 2 scopes)
+  private openExportMenu(e: MouseEvent): void {
+    const menu = new Menu();
+    const items: [string, ExportFormat, ExportScope, string][] = [
+      [tr().exportPngChart, "png", "chart", "image-down"],
+      [tr().exportPngTable, "png", "table", "image-down"],
+      [tr().exportPdfChart, "pdf", "chart", "file-down"],
+      [tr().exportPdfTable, "pdf", "table", "file-down"],
+    ];
+    items.forEach(([title, format, scope, icon], i) => {
+      if (i === 2) menu.addSeparator();
+      menu.addItem((it) => it.setTitle(title).setIcon(icon).onClick(() => void this.exportBoard(format, scope)));
+    });
+    menu.showAtMouseEvent(e);
+  }
+
+  // 今見えているボード（絞り込み・グループ・折りたたみ・列・テーマのまま）を、添付ファイルの置き場所へ書き出す
+  // export the board as it is shown (filters, grouping, collapsing, columns, theme) into the vault's attachment folder
+  async exportBoard(format: ExportFormat, scope: ExportScope): Promise<void> {
+    const grid = this.gridHost?.querySelector<HTMLElement>(".ogantt-grid");
+    if (!grid || !this.rows.length) return void new Notice(tr().exportNothing);
+    if (this.exporting) return;
+    this.exporting = true;
+    const base = this.folder.split("/").pop() || "vault";
+    const stamp = dayToStr(todayIndex());
+    // 名前は最初に決める / named up front
+    const name = `Gantt ${base} ${stamp} ${scope === "chart" ? "chart" : "table-chart"}.${format}`;
+    try {
+      const input = {
+        grid,
+        scope,
+        chartW: (this.range.max - this.range.min + 1) * this.ppd,
+        tableW: this.tableWidth(),
+        rows: this.rows.length,
+        rowH: ROW_H,
+        headH: HEAD_H,
+        title: `${this.folder || "(vault root)"} — ${formatDate(stamp, this.plugin.settings.dateFormat)}`,
+        maxPixels: Platform.isMobile ? 16e6 : 3e7,
+      };
+      const bytes = format === "png" ? await boardToPng(input) : await boardToPdf(input);
+      // "/" を渡すと、相対の添付先の設定も、適当なノートではなく Vault のルートから決まる
+      // "/" makes a relative attachment setting resolve from the vault root rather than from some note
+      const path = await this.app.fileManager.getAvailablePathForAttachment(name, "/");
+      const file = await this.app.vault.createBinary(path, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+      new Notice(
+        createFragment((f) => {
+          f.createSpan({ text: tr().exportDone(file.path) + " " });
+          f.createEl("button", { text: tr().exportOpen }).onclick = () => void this.app.workspace.getLeaf("tab").openFile(file);
+        }),
+        8000
+      );
+    } catch (e) {
+      console.error("Task Gantt: export failed", e);
+      new Notice(tr().exportFailed);
+    } finally {
+      this.exporting = false;
+    }
   }
 
   // 詳細パネルを閉じて選択を外す / close the detail panel and clear the selection

@@ -35,6 +35,26 @@ export default class GanttPlugin extends Plugin {
       callback: () => void this.activateView(this.currentFolder()),
     });
 
+    // 書き出し 4 通り（開いているガントのボードに対して）/ the four exports, for the open Gantt board
+    const exports: [string, string, "png" | "pdf", "chart" | "table"][] = [
+      ["export-png-chart", t().exportPngChart, "png", "chart"],
+      ["export-png-table", t().exportPngTable, "png", "table"],
+      ["export-pdf-chart", t().exportPdfChart, "pdf", "chart"],
+      ["export-pdf-table", t().exportPdfTable, "pdf", "table"],
+    ];
+    for (const [id, label, format, scope] of exports) {
+      this.addCommand({
+        id,
+        name: `${t().exportAria}: ${label}`,
+        checkCallback: (checking) => {
+          const view = this.app.workspace.getActiveViewOfType(GanttView);
+          if (!view) return false;
+          if (!checking) void view.exportBoard(format, scope);
+          return true;
+        },
+      });
+    }
+
     // フォルダ右クリック → このフォルダを Gantt 表示 / folder context menu
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu: Menu, file: TAbstractFile) => {
