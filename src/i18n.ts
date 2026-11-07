@@ -60,6 +60,10 @@ interface Strings {
   viewDelete: string;
   viewDeleteBody: (name: string) => string;
   viewCopyName: (name: string) => string;
+  viewKanban: string;
+  kanbanUnassigned: string;
+  optCards: string;
+  kanbanSubtasks: (n: number) => string;
   optHideLabels: string; // バーの名前・担当を隠す / hide the names and assignees on the bars
   optOverdue: string; // 期限切れを強調 / highlight overdue tasks
   overdueTitle: (n: number) => string;
@@ -347,6 +351,10 @@ const STRINGS: Record<Lang, Strings> = {
     viewDelete: "削除",
     viewDeleteBody: (name) => `ビュー「${name}」を削除しますか。このビューの設定（フィルタ、列、グループなど）が消えます。タスクは消えません。`,
     viewCopyName: (name) => `${name} のコピー`,
+    viewKanban: "カンバン",
+    kanbanUnassigned: "未割当",
+    optCards: "カードの項目",
+    kanbanSubtasks: (n) => `サブタスク ${n} 件`,
     optHideLabels: "バーの名前・担当を隠す",
     optOverdue: "期限切れを強調",
     overdueTitle: (n) => `期限切れ ${n} 件`,
@@ -615,6 +623,10 @@ const STRINGS: Record<Lang, Strings> = {
     viewDelete: "Delete",
     viewDeleteBody: (name) => `Delete the view "${name}"? Its settings (filters, columns, grouping and so on) are lost. No tasks are deleted.`,
     viewCopyName: (name) => `${name} (copy)`,
+    viewKanban: "Kanban",
+    kanbanUnassigned: "Unassigned",
+    optCards: "Card fields",
+    kanbanSubtasks: (n) => `${n} subtasks`,
     optHideLabels: "Hide bar labels",
     optOverdue: "Highlight overdue",
     overdueTitle: (n) => `${n} overdue`,
@@ -883,6 +895,10 @@ const STRINGS: Record<Lang, Strings> = {
     viewDelete: "删除",
     viewDeleteBody: (name) => `删除视图“${name}”？它的设置（筛选、列、分组等）将丢失，不会删除任何任务。`,
     viewCopyName: (name) => `${name}（副本）`,
+    viewKanban: "看板",
+    kanbanUnassigned: "未分配",
+    optCards: "卡片字段",
+    kanbanSubtasks: (n) => `${n} 个子任务`,
     optHideLabels: "隐藏条上的标签",
     optOverdue: "突出显示逾期",
     overdueTitle: (n) => `${n} 个已逾期`,
@@ -1151,6 +1167,10 @@ const STRINGS: Record<Lang, Strings> = {
     viewDelete: "刪除",
     viewDeleteBody: (name) => `刪除檢視「${name}」？它的設定（篩選、欄位、群組等）會遺失，不會刪除任何任務。`,
     viewCopyName: (name) => `${name}（副本）`,
+    viewKanban: "看板",
+    kanbanUnassigned: "未分配",
+    optCards: "卡片欄位",
+    kanbanSubtasks: (n) => `${n} 個子任務`,
     optHideLabels: "隱藏長條標籤",
     optOverdue: "標示逾期",
     overdueTitle: (n) => `${n} 個已逾期`,
@@ -1419,6 +1439,10 @@ const STRINGS: Record<Lang, Strings> = {
     viewDelete: "삭제",
     viewDeleteBody: (name) => `"${name}" 보기를 삭제할까요? 이 보기의 설정(필터, 열, 그룹 등)이 사라지며, 작업은 삭제되지 않습니다.`,
     viewCopyName: (name) => `${name} (복사본)`,
+    viewKanban: "칸반",
+    kanbanUnassigned: "미할당",
+    optCards: "카드 항목",
+    kanbanSubtasks: (n) => `하위 작업 ${n}개`,
     optHideLabels: "막대 라벨 숨기기",
     optOverdue: "기한 초과 강조",
     overdueTitle: (n) => `기한 초과 ${n}건`,
@@ -1687,6 +1711,10 @@ const STRINGS: Record<Lang, Strings> = {
     viewDelete: "Supprimer",
     viewDeleteBody: (name) => `Supprimer la vue « ${name} » ? Ses réglages (filtres, colonnes, regroupement, etc.) seront perdus. Aucune tâche n'est supprimée.`,
     viewCopyName: (name) => `${name} (copie)`,
+    viewKanban: "Kanban",
+    kanbanUnassigned: "Non attribué",
+    optCards: "Champs de la carte",
+    kanbanSubtasks: (n) => `${n} sous-tâches`,
     optHideLabels: "Masquer les libellés des barres",
     optOverdue: "Mettre en évidence les retards",
     overdueTitle: (n) => `${n} en retard`,
@@ -1955,6 +1983,10 @@ const STRINGS: Record<Lang, Strings> = {
     viewDelete: "Eliminar",
     viewDeleteBody: (name) => `¿Eliminar la vista «${name}»? Se perderán sus ajustes (filtros, columnas, agrupación, etc.). No se elimina ninguna tarea.`,
     viewCopyName: (name) => `${name} (copia)`,
+    viewKanban: "Kanban",
+    kanbanUnassigned: "Sin asignar",
+    optCards: "Campos de la tarjeta",
+    kanbanSubtasks: (n) => `${n} subtareas`,
     optHideLabels: "Ocultar etiquetas de las barras",
     optOverdue: "Resaltar vencidas",
     overdueTitle: (n) => `${n} vencidas`,
@@ -2223,6 +2255,10 @@ const STRINGS: Record<Lang, Strings> = {
     viewDelete: "Удалить",
     viewDeleteBody: (name) => `Удалить вид «${name}»? Его настройки (фильтры, столбцы, группировка и т. д.) будут потеряны. Задачи не удаляются.`,
     viewCopyName: (name) => `${name} (копия)`,
+    viewKanban: "Канбан",
+    kanbanUnassigned: "Не назначено",
+    optCards: "Поля карточки",
+    kanbanSubtasks: (n) => `Подзадач: ${n}`,
     optHideLabels: "Скрыть подписи на полосах",
     optOverdue: "Выделять просроченные",
     overdueTitle: (n) => `просрочено: ${n}`,

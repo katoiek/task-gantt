@@ -141,6 +141,126 @@
   align-self: center;
   margin-left: 2px;
 }
+/* カンバン：ステータスごとの列にカード。列の色はステータスの色（--ogantt-col）/ Kanban: a column per status, cards in it; a column's colour is its status's (--ogantt-col) */
+.is-kanban .ogantt-gantt-only {
+  display: none;
+}
+.ogantt-kanban {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+}
+.ogantt-kcol {
+  display: flex;
+  flex: 0 0 280px;
+  flex-direction: column;
+  max-height: 100%;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ogantt-col) 8%, var(--background-secondary));
+}
+.ogantt-kcol.is-drop {
+  outline: 2px dashed var(--interactive-accent);
+}
+.ogantt-kcol-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ogantt-col) 28%, var(--background-primary));
+  font-weight: 600;
+}
+.ogantt-kcol-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ogantt-col);
+}
+.ogantt-kcol-count {
+  color: var(--text-muted);
+  font-weight: normal;
+}
+.ogantt-kcol-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 80px;
+  padding: 8px;
+  overflow-y: auto;
+}
+.ogantt-kcard {
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  cursor: pointer;
+}
+.ogantt-kcard:hover,
+.ogantt-kcard.is-selected {
+  border-color: var(--interactive-accent);
+}
+.ogantt-kcard.is-selected {
+  box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+.ogantt-kcard.is-dragging {
+  opacity: 0.5;
+}
+.ogantt-kcard-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+  word-break: break-word;
+}
+.ogantt-kcard-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+.ogantt-kfield {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ogantt-kfield-label {
+  color: var(--text-faint);
+}
+.ogantt-kcard-subs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--background-modifier-border-hover);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  cursor: pointer;
+}
+.ogantt-kcard-subs.is-open {
+  color: var(--text-normal);
+}
+.ogantt-ksub {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--background-modifier-border-hover);
+  font-size: 0.9em;
+}
+.ogantt-ksub:last-child {
+  border-bottom: none;
+}
+.ogantt-ksub-status {
+  flex: none;
+  color: var(--ogantt-col);
+  font-size: 0.85em;
+}
 /* 「表示」ボタン（空フォルダ・ロールアップ・フラット・稲妻線・ラベル・期限切れのメニュー）/ the Display button (menu of empty folders, roll up, flat, progress line, labels, overdue) */
 .ogantt-opt-display {
   display: inline-flex;

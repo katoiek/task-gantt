@@ -46,7 +46,8 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { BoardView, ViewConfig, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView } from "./views";
+import { KanbanColumn, buildKanbanColumns, subtasksOf } from "./kanban";
+import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
 import { applyFilters, regroup } from "./filter";
@@ -102,6 +103,8 @@ export class GanttView extends ItemView {
   private renamingId: string | null = null; // 名前を直しているビュー / the view being renamed
   private persistTimer: number | null = null;
   private zoomBtns = new Map<ZoomMode, HTMLButtonElement>();
+  private kanbanExpanded = new Set<string>(); // サブタスクを開いているカード（パス）/ cards whose subtasks are open (paths)
+  private dragPath: string | null = null; // ドラッグ中のカード / the card being dragged
 
   // 全体の設定の上に、ビューごとに違う 6 項目（フィルタ・一致条件・列・列幅・並べ替え）だけを重ねたもの。それ以外は全体の設定をそのまま読む。保存には使わない（保存は plugin.settings）
   // the global settings with just the six per-view items (filters, match, columns, widths, sort) laid over them; everything else reads through. Never saved itself (save plugin.settings)
@@ -312,8 +315,13 @@ export class GanttView extends ItemView {
     if (!this.gridHost) this.buildSkeleton();
     this.bindBoardViews(); // このボードのビューを使う / use this board's views
     this.schedulePersist(); // 変えた設定を保存する / save what changed
+    this.contentEl.toggleClass("is-kanban", this.activeType() === "kanban"); // ガント専用の操作を隠す / hides the Gantt-only controls
     this.renderOptions(); // グループ/色分け/凡例を最新データで更新 / refresh layout options + legend
     this.renderFilterBar(); // 統合フィルタ行を最新データで更新 / refresh the unified filter row
+    if (this.activeType() === "kanban") {
+      this.renderKanban(); // カンバンはここで描く。ガントの行・タイムラインは作らない / Kanban draws here; no Gantt rows or timeline
+      return;
+    }
     const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
     const compare = taskComparator(this.columns(), this.vs);
     if (this.flat) {
@@ -421,16 +429,17 @@ export class GanttView extends ItemView {
     const menu = new Menu();
     menu.addItem((it) => it.setTitle(tr().viewCopyThis).setIcon("copy").onClick(() => this.duplicateActiveView()));
     menu.addSeparator();
-    menu.addItem((it) => it.setTitle(tr().viewGantt).setIcon("gantt-chart").onClick(() => this.addNewView()));
+    menu.addItem((it) => it.setTitle(tr().viewGantt).setIcon("gantt-chart").onClick(() => this.addNewView("gantt")));
+    menu.addItem((it) => it.setTitle(tr().viewKanban).setIcon("kanban").onClick(() => this.addNewView("kanban")));
     menu.showAtMouseEvent(e);
   }
 
-  // 新しいガントのビュー（フィルタなし・既定の列とグループ）/ a new Gantt view (no filters, default columns and grouping)
-  private addNewView(): void {
+  // 新しいビュー（フィルタなし・既定の列とグループ・カードの項目）/ a new view (no filters, default columns and grouping, default card fields)
+  private addNewView(type: ViewType): void {
     const bv = this.currentViews();
     if (!bv) return;
     this.flushPersist();
-    const v = addView(bv, tr().viewGantt, defaultViewConfig(this.plugin.settings));
+    const v = addView(bv, type === "kanban" ? tr().viewKanban : tr().viewGantt, defaultViewConfig(this.plugin.settings), type);
     this.switchView(v.id);
   }
 
@@ -488,7 +497,7 @@ export class GanttView extends ItemView {
     host.empty();
     for (const v of bv.views) {
       const tab = host.createDiv({ cls: "ogantt-viewtab" + (v.id === bv.active ? " is-active" : "") });
-      setIcon(tab.createSpan({ cls: "ogantt-opt-ico" }), "gantt-chart");
+      setIcon(tab.createSpan({ cls: "ogantt-opt-ico" }), v.type === "kanban" ? "kanban" : "gantt-chart");
       if (this.renamingId === v.id) {
         const input = tab.createEl("input", { type: "text", cls: "ogantt-viewtab-rename", value: v.name });
         let done = false;
@@ -522,6 +531,167 @@ export class GanttView extends ItemView {
     setIcon(add, "plus");
     add.setAttr("aria-label", tr().viewAddAria);
     add.onclick = (ev) => this.openAddViewMenu(ev);
+  }
+
+  // ----- カンバン（ステータスごとの列に、タスクのカードを並べるビュー）/ Kanban (a column per status, the tasks as cards) -----
+
+  private activeType(): ViewType {
+    const bv = this.currentViews();
+    return bv ? activeView(bv).type : "gantt";
+  }
+
+  // 列（ステータス）に、フィルタ済みのタスクをカードとして並べる。並びは、このビューの並べ替え
+  // columns (statuses) holding the filtered tasks as cards, in this view's sort order
+  private renderKanban(): void {
+    this.rows = []; // 書き出しなど、ガントの行を使う処理が古い行を見ないように / so Gantt-row code (export and the like) never sees stale rows
+    const host = this.gridHost;
+    host.empty();
+    if (this.tasks.length === 0) {
+      host.createDiv({ cls: "ogantt-empty" }).setText(tr().emptyMessage(this.folder || "vault"));
+      return;
+    }
+    const { filters, filterMatch, statuses } = this.vs;
+    const list = [...applyFilters(this.tasks, filters, filterMatch, statuses, todayIndex())].sort(taskComparator(this.columns(), this.vs));
+    const board = host.createDiv({ cls: "ogantt-kanban" });
+    for (const col of buildKanbanColumns(list, statuses, this.cfg.columnOrder)) {
+      if (col.status === null && col.cards.length === 0) continue; // 未割当は、カードがあるときだけ / unassigned only when it has cards
+      this.renderKanbanColumn(board, col);
+    }
+  }
+
+  private renderKanbanColumn(board: HTMLElement, col: KanbanColumn): void {
+    const status = col.status ? this.plugin.settings.statuses.find((s) => s.id === col.status) : undefined;
+    const colEl = board.createDiv({ cls: "ogantt-kcol" });
+    colEl.setCssProps({ "--ogantt-col": status?.color ?? "var(--text-faint)" }); // 列の色＝ステータスの色 / the column's colour is the status's
+    const head = colEl.createDiv({ cls: "ogantt-kcol-head" });
+    head.createSpan({ cls: "ogantt-kcol-dot" });
+    head.createSpan({ cls: "ogantt-kcol-name", text: status?.label ?? tr().kanbanUnassigned });
+    head.createSpan({ cls: "ogantt-kcol-count", text: String(col.cards.length) });
+    const body = colEl.createDiv({ cls: "ogantt-kcol-body" });
+    for (const t of col.cards) this.renderKanbanCard(body, t);
+    // ドロップ：この列へ動かしたカードは、この列のステータスになる / drop: a card moved here takes this column's status
+    colEl.addEventListener("dragover", (e) => {
+      if (!this.dragPath) return;
+      e.preventDefault();
+      colEl.addClass("is-drop");
+    });
+    colEl.addEventListener("dragleave", (e) => {
+      if (!colEl.contains(e.relatedTarget as Node | null)) colEl.removeClass("is-drop");
+    });
+    colEl.addEventListener("drop", (e) => {
+      e.preventDefault();
+      colEl.removeClass("is-drop");
+      const path = this.dragPath;
+      this.dragPath = null;
+      if (path) void this.moveTaskToStatus(path, col.status);
+    });
+  }
+
+  private renderKanbanCard(body: HTMLElement, t: Task): void {
+    const card = body.createDiv({ cls: "ogantt-kcard", attr: { "data-path": t.path, draggable: "true" } });
+    if (this.selectedPath === t.path && this.detailEl?.hasClass("is-open")) card.addClass("is-selected");
+    card.createDiv({ cls: "ogantt-kcard-title", text: t.name });
+    // 項目：選んだ列の中身を、表と同じ描き方でそのまま出す（既定は担当・開始・期限）。値の無い項目は出さない
+    // fields: the chosen columns painted just as the table does (assignee, start and due by default); an empty value is left out
+    const fields = card.createDiv({ cls: "ogantt-kcard-fields" });
+    const defs = this.columns();
+    for (const id of this.cfg.cardFields) {
+      const def = defs.find((c) => c.id === id);
+      if (!def || def.kind !== "cell") continue;
+      const field = fields.createDiv({ cls: "ogantt-kfield" });
+      const value = field.createSpan({ cls: "ogantt-kfield-value" });
+      def.paint(this.board, value, { kind: "task", group: "", depth: 0, task: t });
+      if (!value.hasChildNodes()) {
+        field.remove();
+        continue;
+      }
+      field.insertBefore(createSpan({ cls: "ogantt-kfield-label", text: def.label() }), value);
+    }
+    if (!fields.hasChildNodes()) fields.remove();
+    // サブタスク：件数のアイコンを押すと、カードの中に開く / subtasks: the count icon opens them inside the card
+    const subs = subtasksOf(this.tasks, t.path);
+    if (subs.length) {
+      const open = this.kanbanExpanded.has(t.path);
+      const bar = card.createDiv({ cls: "ogantt-kcard-subs" + (open ? " is-open" : "") });
+      setIcon(bar.createSpan({ cls: "ogantt-opt-ico" }), "list-tree");
+      bar.createSpan({ text: String(subs.length) });
+      bar.setAttr("aria-label", tr().kanbanSubtasks(subs.length));
+      bar.onclick = (e) => {
+        e.stopPropagation();
+        if (open) this.kanbanExpanded.delete(t.path);
+        else this.kanbanExpanded.add(t.path);
+        this.rerender();
+      };
+      if (open) {
+        for (const sub of subs) {
+          const row = card.createDiv({ cls: "ogantt-ksub" });
+          row.createSpan({ cls: "ogantt-ksub-name", text: sub.name });
+          const st = this.plugin.settings.statuses.find((x) => x.id === sub.status);
+          if (st) {
+            const chip = row.createSpan({ cls: "ogantt-ksub-status", text: st.label });
+            chip.setCssProps({ "--ogantt-col": st.color });
+          }
+          row.onclick = (e) => {
+            e.stopPropagation();
+            void this.openDetail(sub.path);
+          };
+        }
+      }
+    }
+    card.onclick = () => void this.openDetail(t.path);
+    card.addEventListener("dragstart", (e) => {
+      this.dragPath = t.path;
+      e.dataTransfer?.setData("text/plain", t.path);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      card.addClass("is-dragging");
+    });
+    card.addEventListener("dragend", () => {
+      this.dragPath = null;
+      card.removeClass("is-dragging");
+      body.ownerDocument.querySelectorAll(".ogantt-kcol.is-drop").forEach((el) => el.removeClass("is-drop"));
+    });
+  }
+
+  // カードを別の列へ動かす＝ステータスを書き換える（取り消せる）。未割当の列へ動かすとステータスを外す
+  // moving a card to another column rewrites its status (undoable); the unassigned column clears it
+  private async moveTaskToStatus(path: string, status: string | null): Promise<void> {
+    const t = this.tasks.find((x) => x.path === path);
+    if (!t) return;
+    const known = this.plugin.settings.statuses.some((s) => s.id === t.status);
+    const current = known ? (t.status ?? null) : null;
+    if (current === status) return;
+    await this.mutate(tr().undoEdit(t.name), [path], () => writeField(this.app, path, this.plugin.settings.keys.status, status ?? undefined));
+    await this.refresh();
+  }
+
+  // カンバンのオプション行：カードに出す項目のメニューだけ / the Kanban options row: just the card fields menu
+  private renderKanbanOptions(host: HTMLElement): void {
+    const btn = host.createEl("button", { cls: "ogantt-opt-display" });
+    setIcon(btn.createSpan({ cls: "ogantt-opt-ico" }), "layout-list");
+    btn.createSpan({ text: tr().optCards });
+    btn.setAttr("aria-label", tr().optCards);
+    btn.onclick = () => this.openCardFieldsMenu(btn);
+  }
+
+  // カードに出す項目：表の「列の表示」と同じ形（チェックボックス）。ステータスは列そのものなので除く
+  // the card fields: checkboxes like the table's column menu; status is the column itself, so it's left out
+  private openCardFieldsMenu(anchor: HTMLElement): void {
+    this.openPopover(anchor, "ogantt-colmenu", (menu) => {
+      for (const col of this.columns()) {
+        if (col.kind !== "cell" || col.id === "status") continue;
+        const item = menu.createEl("label", { cls: "ogantt-colmenu-item" });
+        const cb = item.createEl("input", { type: "checkbox" });
+        cb.checked = this.cfg.cardFields.includes(col.id);
+        item.createSpan({ text: col.label() });
+        cb.addEventListener("change", () => {
+          const set = new Set(this.cfg.cardFields);
+          if (cb.checked) set.add(col.id);
+          else set.delete(col.id);
+          this.cfg.cardFields = this.columns().filter((c) => c.kind === "cell" && c.id !== "status" && set.has(c.id)).map((c) => c.id); // 定義順を保つ / keep the definition order
+          this.rerender();
+        });
+      }
+    });
   }
 
   // ----- テーブル列 / table columns -----
@@ -1127,10 +1297,10 @@ export class GanttView extends ItemView {
     // 以降のコントロールは「＋」の右に左詰めで並べる（詳細パネルで隠れないように）
     // keep the following controls left-packed next to "+" (so the detail panel can't hide them)
     // 今日へスクロール / scroll to today
-    const todayBtn = bar.createEl("button", { cls: "ogantt-today-btn", text: tr().today });
+    const todayBtn = bar.createEl("button", { cls: "ogantt-today-btn ogantt-gantt-only", text: tr().today });
     todayBtn.onclick = () => this.scrollToToday();
     (["Day", "Week", "Month", "Fit"] as ZoomMode[]).forEach((z) => {
-      const btn = bar.createEl("button", { text: z });
+      const btn = bar.createEl("button", { cls: "ogantt-gantt-only", text: z });
       this.zoomBtns.set(z, btn);
       if (z === this.zoom) btn.addClass("is-active");
       btn.onclick = () => {
@@ -1154,7 +1324,7 @@ export class GanttView extends ItemView {
     this.updateUndoButton();
 
     // 書き出し（PNG / PDF × チャートのみ / 表とチャート）/ export (PNG or PDF × chart only or table and chart)
-    const exp = bar.createEl("button");
+    const exp = bar.createEl("button", { cls: "ogantt-gantt-only" }); // カンバンでは書き出せない / no export from Kanban yet
     setIcon(exp, "download");
     exp.setAttr("aria-label", tr().exportAria);
     exp.onclick = (e) => this.openExportMenu(e);
@@ -1173,6 +1343,10 @@ export class GanttView extends ItemView {
   private renderOptions(): void {
     const host = this.optionsHost;
     host.empty();
+    if (this.activeType() === "kanban") {
+      this.renderKanbanOptions(host);
+      return;
+    }
     const statuses = this.plugin.settings.statuses;
     const none = tr().noneLabel;
     // 現在のフォルダ内に実在する担当者一覧（凡例で使用）/ assignees present in the folder (used by the legend)
@@ -2431,6 +2605,8 @@ export class GanttView extends ItemView {
     // 選択行ハイライト更新 / refresh selection highlight
     this.tbodyEl?.querySelectorAll(".ogantt-tr.is-selected").forEach((el) => el.removeClass("is-selected"));
     this.tbodyEl?.querySelector(`.ogantt-tr[data-path="${CSS.escape(path)}"]`)?.addClass("is-selected");
+    this.gridHost?.querySelectorAll(".ogantt-kcard.is-selected").forEach((el) => el.removeClass("is-selected"));
+    this.gridHost?.querySelector(`.ogantt-kcard[data-path="${CSS.escape(path)}"]`)?.addClass("is-selected");
 
     const k = this.plugin.settings.keys;
     const d = this.detailEl;

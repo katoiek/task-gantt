@@ -74,6 +74,18 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 - Double-click a tab, or use the **▾** on the open tab (or right-click any tab), to **rename**, **duplicate** or **delete** a view. The last view can't be deleted, and deleting a view never deletes tasks.
 - Changes are saved to the open view automatically. Saved filter **presets** stay shared by all views. The first time a board is opened, its first view takes over your current settings, so nothing changes at first.
 
+## Kanban view
+
+**＋ → Kanban** adds a Kanban view next to your Gantt views. It shows the board's tasks as **cards in one column per status**, the way Wrike's Board view does. The columns take their name and colour from your statuses (add a status in **Settings** and a column appears); tasks without a status go into an **Unassigned** column.
+
+- **Move a card to another column** by dragging it: the task's status becomes the column's status (undoable with **Ctrl/Cmd+Z**). Dropping on **Unassigned** clears the status.
+- **Click a card** to open its detail panel.
+- **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **Card fields** button lists every other column, including custom fields, as checkboxes (the same fields as the table's column menu).
+- **Subtasks**: a card with subtasks shows a count icon; click it to open the first-level subtasks inside the card. A subtask is not a card of its own while its parent is shown.
+- **Filters** and **presets** work as in the Gantt views, and the cards in a column follow the view's sort. The view keeps its own filters and card fields, like every view.
+
+Dragging a card onto another card to make a subtask isn't supported (Wrike's board doesn't either); use the table.
+
 ## Custom fields
 
 Show any frontmatter key as a table column. In **Settings → Task Gantt → Custom fields**, click **Add field** and give it a **key** (the frontmatter property, e.g. `client`), an optional **label** for the column header, and a **type**:
@@ -383,6 +395,18 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 - **＋** でビューを追加します。**今のビューをコピー**は、すべての設定を複製して、元の隣に開きます。**ガント**は、既定の設定でフィルタのない新しいビューを追加します。
 - タブをダブルクリックするか、開いているタブの **▾**（または任意のタブの右クリック）から、ビューの**名前の変更**・**複製**・**削除**ができます。最後の 1 つは削除できません。ビューを削除しても、タスクは消えません。
 - 変更は、開いているビューに自動で保存されます。保存済みのフィルタの**プリセット**は、全ビューで共有のままです。ボードを初めて開くときは、最初のビューが今の設定を引き継ぐので、最初は何も変わりません。
+
+## カンバンビュー
+
+**＋ → カンバン**で、ガントのビューの隣に、カンバンのビューを追加できます。Wrike のボードビューのように、ボードのタスクを、**ステータスごとの列にカード**として並べます。列の名前と色は、ステータスのものです（**設定**でステータスを足すと、列が増えます）。ステータスのないタスクは、**未割当**の列に入ります。
+
+- **カードを別の列へドラッグ**すると、タスクのステータスが、その列のステータスに変わります（**Ctrl/Cmd+Z** で取り消せます）。**未割当**にドロップすると、ステータスが外れます。
+- **カードをクリック**すると、詳細パネルが開きます。
+- **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カードの項目**ボタンから、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます（表の「列の表示」と同じ項目です）。
+- **サブタスク**: サブタスクのあるカードには、件数のアイコンが出ます。クリックすると、1 階層目のサブタスクが、カードの中に開きます。親が表示されているあいだ、サブタスクは独立したカードにはなりません。
+- **フィルタ**と**プリセット**は、ガントのビューと同じように使えます。列の中のカードは、ビューの並べ替えに従います。フィルタとカードの項目は、ほかのビューと同じく、ビューごとに保存されます。
+
+カードを別のカードにドラッグしてサブタスクにする操作は、対応していません（Wrike のボードも同じです）。表で行ってください。
 
 ## カスタムフィールド
 
