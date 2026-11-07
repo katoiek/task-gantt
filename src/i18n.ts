@@ -51,6 +51,7 @@ interface Strings {
   optFlat: string;
   optRollup: string;
   optProgressLine: string;
+  optDisplay: string; // 表示メニュー / the Display menu
   optHideLabels: string; // バーの名前・担当を隠す / hide the names and assignees on the bars
   optOverdue: string; // 期限切れを強調 / highlight overdue tasks
   overdueTitle: (n: number) => string;
@@ -329,6 +330,7 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "フラット表示",
     optRollup: "ロールアップ",
     optProgressLine: "稲妻線",
+    optDisplay: "表示",
     optHideLabels: "バーの名前・担当を隠す",
     optOverdue: "期限切れを強調",
     overdueTitle: (n) => `期限切れ ${n} 件`,
@@ -588,6 +590,7 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "Flat",
     optRollup: "Roll up",
     optProgressLine: "Progress line",
+    optDisplay: "Display",
     optHideLabels: "Hide bar labels",
     optOverdue: "Highlight overdue",
     overdueTitle: (n) => `${n} overdue`,
@@ -847,6 +850,7 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "平铺",
     optRollup: "汇总",
     optProgressLine: "进度线",
+    optDisplay: "显示",
     optHideLabels: "隐藏条上的标签",
     optOverdue: "突出显示逾期",
     overdueTitle: (n) => `${n} 个已逾期`,
@@ -1106,6 +1110,7 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "平面",
     optRollup: "彙總",
     optProgressLine: "進度線",
+    optDisplay: "顯示",
     optHideLabels: "隱藏長條標籤",
     optOverdue: "標示逾期",
     overdueTitle: (n) => `${n} 個已逾期`,
@@ -1365,6 +1370,7 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "평면",
     optRollup: "롤업",
     optProgressLine: "진척선",
+    optDisplay: "표시",
     optHideLabels: "막대 라벨 숨기기",
     optOverdue: "기한 초과 강조",
     overdueTitle: (n) => `기한 초과 ${n}건`,
@@ -1624,6 +1630,7 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "À plat",
     optRollup: "Synthèse",
     optProgressLine: "Ligne d'avancement",
+    optDisplay: "Affichage",
     optHideLabels: "Masquer les libellés des barres",
     optOverdue: "Mettre en évidence les retards",
     overdueTitle: (n) => `${n} en retard`,
@@ -1883,6 +1890,7 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "Plano",
     optRollup: "Resumen",
     optProgressLine: "Línea de avance",
+    optDisplay: "Vista",
     optHideLabels: "Ocultar etiquetas de las barras",
     optOverdue: "Resaltar vencidas",
     overdueTitle: (n) => `${n} vencidas`,
@@ -2142,6 +2150,7 @@ const STRINGS: Record<Lang, Strings> = {
     optFlat: "Плоский список",
     optRollup: "Сводка",
     optProgressLine: "Линия прогресса",
+    optDisplay: "Вид",
     optHideLabels: "Скрыть подписи на полосах",
     optOverdue: "Выделять просроченные",
     overdueTitle: (n) => `просрочено: ${n}`,

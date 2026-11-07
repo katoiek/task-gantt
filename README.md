@@ -34,7 +34,7 @@ The UI follows Obsidian's display language. Supported: English, Japanese, Korean
 
 ## View options
 
-An options row above the table shapes how the board is displayed.
+An options row above the table shapes how the board is displayed. The on/off display toggles — **Show empty folders**, **Roll up**, **Flat view**, **Progress line**, **Hide bar labels** and **Highlight overdue** — are gathered in the **Display** menu, which lists them as checkboxes like the column menu; the button is tinted when any of them differs from its default.
 
 **Group by** folder, status, or assignee, and **color by** status or assignee (with a legend):
 
@@ -325,6 +325,8 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 ## 表示オプション
 
 表の上のオプション行で、ボードの見せ方を調整できます。
+
+表示の入り切り（**空フォルダを表示**・**ロールアップ**・**フラット表示**・**稲妻線**・**バーのラベルを隠す**・**期限切れを強調**）は、**表示**メニューにチェックボックスとして並びます（列の表示メニューと同じ形）。既定から変えたものがあると、ボタンの色が変わります。
 
 **グループ化**（フォルダ／ステータス／担当者）と**色分け**（ステータス／担当者・凡例付き）：
 

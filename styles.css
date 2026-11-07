@@ -88,6 +88,18 @@
   width: 16px;
   height: 16px;
 }
+/* 「表示」ボタン（空フォルダ・ロールアップ・フラット・稲妻線・ラベル・期限切れのメニュー）/ the Display button (menu of empty folders, roll up, flat, progress line, labels, overdue) */
+.ogantt-opt-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: inherit;
+}
+.ogantt-opt-display.is-on,
+.ogantt-opt-display.is-on .ogantt-opt-ico {
+  color: var(--interactive-accent);
+}
 /* 列メニュー（ポップオーバー）/ column-visibility popover */
 .ogantt-colmenu {
   position: fixed;

@@ -405,6 +405,38 @@ export class GanttView extends ItemView {
   }
 
   // 列の出し分けポップオーバー（チェックボックス）/ column-visibility popover (checkboxes)
+  // 「表示」メニュー：チェックの入り切り（列メニューと同じ見た目）。フラットを切り替えるとフォルダ用の項目が出入りするので、そのたびに中身を作り直す
+  // the Display menu: checkboxes, looking like the column menu; flat view adds or removes the folder-only items, so the contents are rebuilt on each change
+  private openDisplayMenu(anchor: HTMLElement): void {
+    this.openPopover(anchor, "ogantt-colmenu", (menu) => {
+      const fill = (): void => {
+        menu.empty();
+        const folderOnly = this.groupBy === "folder" && !this.flat; // 空フォルダとロールアップはフォルダでグループ化しているときだけ / empty folders and roll up need folder grouping
+        const toggles: { icon: string; label: string; show: boolean; get: () => boolean; set: (v: boolean) => void }[] = [
+          { icon: "folder", label: tr().optShowEmpty, show: folderOnly, get: () => this.showEmptyFolders, set: (v) => (this.showEmptyFolders = v) },
+          { icon: "git-merge", label: tr().optRollup, show: folderOnly, get: () => this.rollup, set: (v) => (this.rollup = v) },
+          { icon: "list", label: tr().optFlat, show: true, get: () => this.flat, set: (v) => (this.flat = v) },
+          { icon: "zap", label: tr().optProgressLine, show: true, get: () => this.progressLine, set: (v) => (this.progressLine = v) },
+          { icon: "eye-off", label: tr().optHideLabels, show: true, get: () => this.hideLabels, set: (v) => (this.hideLabels = v) },
+          { icon: "alarm-clock", label: tr().optOverdue, show: true, get: () => this.markOverdue, set: (v) => (this.markOverdue = v) },
+        ];
+        for (const it of toggles.filter((x) => x.show)) {
+          const item = menu.createEl("label", { cls: "ogantt-colmenu-item" });
+          const cb = item.createEl("input", { type: "checkbox" });
+          cb.checked = it.get();
+          setIcon(item.createSpan({ cls: "ogantt-opt-ico" }), it.icon);
+          item.createSpan({ text: it.label });
+          cb.addEventListener("change", () => {
+            it.set(cb.checked);
+            this.rerender();
+            fill();
+          });
+        }
+      };
+      fill();
+    });
+  }
+
   private openColumnMenu(anchor: HTMLElement): void {
     this.openPopover(anchor, "ogantt-colmenu", (menu) => {
       for (const col of this.columns().filter((c) => c.optional)) {
@@ -936,17 +968,6 @@ export class GanttView extends ItemView {
       sel.addEventListener("change", () => on(sel.value));
     };
 
-    // チェックボックス（ラベル全体クリックで切替）/ checkbox (the whole label toggles it)
-    const makeCheckbox = (icon: string, label: string, checked: boolean, on: (v: boolean) => void): void => {
-      const wrap = host.createEl("label", { cls: "ogantt-opt ogantt-opt-check" });
-      const cb = wrap.createEl("input", { type: "checkbox" });
-      cb.checked = checked;
-      const ic = wrap.createSpan({ cls: "ogantt-opt-ico" });
-      setIcon(ic, icon);
-      wrap.createSpan({ text: label });
-      cb.addEventListener("change", () => on(cb.checked));
-    };
-
     // 列の表示/非表示（歯車）＝オプション行の一番左 / column visibility (gear) — leftmost of the options row
     const colBtn = host.createEl("button", { cls: "ogantt-opt-gear clickable-icon" });
     setIcon(colBtn, "settings");
@@ -971,43 +992,16 @@ export class GanttView extends ItemView {
       (v) => { this.colorBy = v as typeof this.colorBy; this.rerender(); }
     );
 
-    // ── 表示切替（絞り込みは下の統合フィルタ行へ集約）/ display toggles (filtering lives in the filter row below) ──
+    // ── 表示切替：空フォルダ・ロールアップ・フラット・稲妻線・ラベル・期限切れを 1 つの「表示」メニューにまとめる（絞り込みは下の統合フィルタ行）──
+    // ── display toggles gathered into one Display menu (filtering lives in the filter row below) ──
     host.createDiv({ cls: "ogantt-opt-divider" });
-
-    // 空フォルダ表示の切替（フォルダグループ化時のみ・フラットでは無効）/ show-empty-folders (folder grouping only; off in flat)
-    if (this.groupBy === "folder" && !this.flat) {
-      makeCheckbox("folder", tr().optShowEmpty, this.showEmptyFolders, (v) => {
-        this.showEmptyFolders = v;
-        this.rerender();
-      });
-    }
-    // ロールアップの切替（親タスクのバーを子孫の集約で描く・フォルダグループ化時のみ）/ rollup (folder grouping only)
-    if (this.groupBy === "folder" && !this.flat) {
-      makeCheckbox("git-merge", tr().optRollup, this.rollup, (v) => {
-        this.rollup = v;
-        this.rerender();
-      });
-    }
-    // フラット表示の切替（フォルダ/親子を無視した全タスク一覧）/ flat view (all tasks, no grouping/nesting)
-    makeCheckbox("list", tr().optFlat, this.flat, (v) => {
-      this.flat = v;
-      this.rerender();
-    });
-    // 稲妻線の切替（今日基準の進捗折れ線）/ progress line against today
-    makeCheckbox("zap", tr().optProgressLine, this.progressLine, (v) => {
-      this.progressLine = v;
-      this.rerender();
-    });
-    // バーの名前・担当を隠す / hide the names and assignees on the bars
-    makeCheckbox("eye-off", tr().optHideLabels, this.hideLabels, (v) => {
-      this.hideLabels = v;
-      this.rerender();
-    });
-    // 期限切れの強調 / highlight overdue tasks
-    makeCheckbox("alarm-clock", tr().optOverdue, this.markOverdue, (v) => {
-      this.markOverdue = v;
-      this.rerender();
-    });
+    const displayBtn = host.createEl("button", { cls: "ogantt-opt-display" });
+    setIcon(displayBtn.createSpan({ cls: "ogantt-opt-ico" }), "sliders-horizontal");
+    displayBtn.createSpan({ text: tr().optDisplay });
+    displayBtn.setAttr("aria-label", tr().optDisplay);
+    // 既定から変えた表示があるときは色で知らせる（メニューの中は見えないため）/ tint the button when a display option differs from its default (the menu hides it)
+    if (this.flat || this.rollup || this.progressLine || this.hideLabels || this.markOverdue || !this.showEmptyFolders) displayBtn.addClass("is-on");
+    displayBtn.onclick = () => this.openDisplayMenu(displayBtn);
 
     // 凡例（色分けの基準を説明）/ legend explaining the current color basis
     const legend = host.createDiv({ cls: "ogantt-legend" });
