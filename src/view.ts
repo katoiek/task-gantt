@@ -553,10 +553,9 @@ export class GanttView extends ItemView {
     const { filters, filterMatch, statuses } = this.vs;
     const list = [...applyFilters(this.tasks, filters, filterMatch, statuses, todayIndex())].sort(taskComparator(this.columns(), this.vs));
     const board = host.createDiv({ cls: "ogantt-kanban" });
-    for (const col of buildKanbanColumns(list, statuses, this.cfg.columnOrder)) {
-      if (col.status === null && col.cards.length === 0) continue; // 未割当は、カードがあるときだけ / unassigned only when it has cards
-      this.renderKanbanColumn(board, col);
-    }
+    // どの列も、カードが 0 件でも残す（空の列にも、カードを落としてステータスを付け外しできるように）
+    // every column stays even with no cards (so a card can still be dropped there to set or clear its status)
+    for (const col of buildKanbanColumns(list, statuses, this.cfg.columnOrder)) this.renderKanbanColumn(board, col);
   }
 
   private renderKanbanColumn(board: HTMLElement, col: KanbanColumn): void {
