@@ -576,8 +576,18 @@ export class GanttView extends ItemView {
     head.createSpan({ cls: "ogantt-kcol-dot" });
     head.createSpan({ cls: "ogantt-kcol-name", text: status?.label ?? tr().kanbanUnassigned });
     head.createSpan({ cls: "ogantt-kcol-count", text: String(col.cards.length) });
+    // その列のステータスでタスクを作る（未割当の列ならステータスなし）/ create a task with this column's status (none for Unassigned)
+    const addHere = (): void => void this.createTaskWith({ status: col.status ?? undefined });
+    const plus = head.createSpan({ cls: "ogantt-kcol-add" });
+    setIcon(plus, "plus");
+    plus.setAttr("aria-label", tr().kanbanAddTask);
+    plus.onclick = addHere;
     const body = colEl.createDiv({ cls: "ogantt-kcol-body" });
     for (const t of col.cards) this.renderKanbanCard(body, t);
+    const addBtn = body.createEl("button", { cls: "ogantt-kcol-addbtn" });
+    setIcon(addBtn.createSpan({ cls: "ogantt-opt-ico" }), "plus");
+    addBtn.createSpan({ text: tr().kanbanAddTask });
+    addBtn.onclick = addHere;
     // 見出しをドラッグして、列の順序を入れ替える。順序はこのビューに保存する（初期値は設定のステータスの順）。未割当は先頭に固定
     // drag the header to reorder the columns; the order is saved in this view (it starts from the settings' status order); Unassigned stays first
     if (col.status !== null) {
@@ -646,6 +656,17 @@ export class GanttView extends ItemView {
     const card = body.createDiv({ cls: "ogantt-kcard", attr: { "data-path": t.path, draggable: "true" } });
     if (this.selectedPath === t.path && this.detailEl?.hasClass("is-open")) card.addClass("is-selected");
     card.createDiv({ cls: "ogantt-kcard-title", text: t.name });
+    const more = card.createSpan({ cls: "ogantt-kcard-more" });
+    setIcon(more, "ellipsis");
+    more.setAttr("aria-label", tr().kanbanCardMenu);
+    more.onclick = (e) => {
+      e.stopPropagation();
+      this.openCardMenu(e, t);
+    };
+    card.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this.openCardMenu(e, t);
+    });
     // 項目：選んだ列の中身を、表と同じ描き方でそのまま出す（既定は担当・開始・期限）。値の無い項目は出さない
     // fields: the chosen columns painted just as the table does (assignee, start and due by default); an empty value is left out
     const fields = card.createDiv({ cls: "ogantt-kcard-fields" });
@@ -707,6 +728,15 @@ export class GanttView extends ItemView {
     });
   }
 
+  // カードのメニュー（⋯ か右クリック）：サブタスクを追加・削除 / the card menu (the dots or a right-click): add a subtask, delete
+  private openCardMenu(e: MouseEvent, t: Task): void {
+    const menu = new Menu();
+    menu.addItem((it) => it.setTitle(tr().kanbanAddSubtask).setIcon("plus").onClick(() => void this.createTaskWith({ parentPath: t.path })));
+    menu.addSeparator();
+    menu.addItem((it) => it.setTitle(tr().menuDelete).setIcon("trash-2").onClick(() => this.confirmDelete(t.path)));
+    menu.showAtMouseEvent(e);
+  }
+
   // カードを別の列へ動かす＝ステータスを書き換える（取り消せる）。未割当の列へ動かすとステータスを外す
   // moving a card to another column rewrites its status (undoable); the unassigned column clears it
   private async moveTaskToStatus(path: string, status: string | null): Promise<void> {
@@ -719,11 +749,10 @@ export class GanttView extends ItemView {
     await this.refresh();
   }
 
-  // カンバンのオプション行：カードに出す項目のメニューだけ / the Kanban options row: just the card fields menu
+  // カンバンのオプション行：歯車（カードに出す項目のメニュー）だけ / the Kanban options row: just the gear (the card fields menu)
   private renderKanbanOptions(host: HTMLElement): void {
-    const btn = host.createEl("button", { cls: "ogantt-opt-display" });
-    setIcon(btn.createSpan({ cls: "ogantt-opt-ico" }), "layout-list");
-    btn.createSpan({ text: tr().optCards });
+    const btn = host.createEl("button", { cls: "ogantt-opt-gear clickable-icon" }); // ガントの「列の表示」と同じ歯車 / the same gear as the Gantt's column menu
+    setIcon(btn, "settings");
     btn.setAttr("aria-label", tr().optCards);
     btn.onclick = () => this.openCardFieldsMenu(btn);
   }
@@ -2561,10 +2590,20 @@ export class GanttView extends ItemView {
   // ----- 新規タスク作成 / create a new task -----
   // 今のフォルダにタスクを作り（既定は 1 日タスク＝開始・終了とも今日。設定でバックログ＝日付なしにできる）、詳細パネルを開いて命名を促す
   // create a task in the current folder (by default a 1-day task, start = end = today; a setting makes it a backlog task with no dates), then open the panel to name it
-  private async createNewTask(): Promise<void> {
+  private createNewTask(): Promise<void> {
+    return this.createTaskWith();
+  }
+
+  // タスクを作る。status を渡すとそのステータスで（カンバンの列の「＋」）、parentPath を渡すとそのタスクのサブタスクとして。サブタスクは親と同じフォルダに作る（サブツリーは同じフォルダに同居する決まり）
+  // create a task; with `status` it gets that status (a Kanban column's "+"), with `parentPath` it is that task's subtask, made in its parent's folder (a subtree lives in one folder)
+  private async createTaskWith(opts: { status?: string; parentPath?: string } = {}): Promise<void> {
+    const parentFile = opts.parentPath ? this.app.vault.getAbstractFileByPath(opts.parentPath) : null;
+    const parent = parentFile instanceof TFile ? parentFile : null;
+    if (opts.parentPath && !parent) return;
+    const folder = parent ? (parent.parent?.path ?? this.folder) : this.folder;
     let created: string | null = null;
     await this.mutate(tr().undoCreate(tr().newTaskName), [], async () => {
-      const file = await createTask(this.app, this.folder, tr().newTaskName);
+      const file = await createTask(this.app, folder, tr().newTaskName);
       if (!file) return false;
       const k = this.plugin.settings.keys;
       // 設定が today なら開始・期限とも今日、backlog なら日付を入れない / "today" fills start and due with today; "backlog" leaves the dates empty
@@ -2573,10 +2612,17 @@ export class GanttView extends ItemView {
         await writeField(this.app, file.path, k.start, dates.start);
         await writeField(this.app, file.path, k.end, dates.end);
       }
+      if (opts.status) await writeField(this.app, file.path, k.status, opts.status);
+      if (parent) {
+        await this.app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+          fm[k.parent] = this.app.fileManager.generateMarkdownLink(parent, file.path);
+        });
+      }
       created = file.path;
       return { created: [file.path] };
     });
     if (!created) return;
+    if (parent) this.kanbanExpanded.add(parent.path); // 作ったサブタスクが見えるように、親のカードを開く / open the parent's card so the new subtask shows
     await this.refresh();
     await this.openDetail(created, true);
   }

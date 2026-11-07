@@ -64,6 +64,9 @@ interface Strings {
   kanbanUnassigned: string;
   optCards: string;
   kanbanSubtasks: (n: number) => string;
+  kanbanAddTask: string;
+  kanbanAddSubtask: string;
+  kanbanCardMenu: string;
   optHideLabels: string; // バーの名前・担当を隠す / hide the names and assignees on the bars
   optOverdue: string; // 期限切れを強調 / highlight overdue tasks
   overdueTitle: (n: number) => string;
@@ -357,6 +360,9 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanUnassigned: "未割当",
     optCards: "カードの項目",
     kanbanSubtasks: (n) => `サブタスク ${n} 件`,
+    kanbanAddTask: "タスクを追加",
+    kanbanAddSubtask: "サブタスクを追加",
+    kanbanCardMenu: "カードのメニュー",
     optHideLabels: "バーの名前・担当を隠す",
     optOverdue: "期限切れを強調",
     overdueTitle: (n) => `期限切れ ${n} 件`,
@@ -631,6 +637,9 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanUnassigned: "Unassigned",
     optCards: "Card fields",
     kanbanSubtasks: (n) => `${n} subtasks`,
+    kanbanAddTask: "Add task",
+    kanbanAddSubtask: "Add subtask",
+    kanbanCardMenu: "Card menu",
     optHideLabels: "Hide bar labels",
     optOverdue: "Highlight overdue",
     overdueTitle: (n) => `${n} overdue`,
@@ -905,6 +914,9 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanUnassigned: "未分配",
     optCards: "卡片字段",
     kanbanSubtasks: (n) => `${n} 个子任务`,
+    kanbanAddTask: "添加任务",
+    kanbanAddSubtask: "添加子任务",
+    kanbanCardMenu: "卡片菜单",
     optHideLabels: "隐藏条上的标签",
     optOverdue: "突出显示逾期",
     overdueTitle: (n) => `${n} 个已逾期`,
@@ -1179,6 +1191,9 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanUnassigned: "未分配",
     optCards: "卡片欄位",
     kanbanSubtasks: (n) => `${n} 個子任務`,
+    kanbanAddTask: "新增任務",
+    kanbanAddSubtask: "新增子任務",
+    kanbanCardMenu: "卡片選單",
     optHideLabels: "隱藏長條標籤",
     optOverdue: "標示逾期",
     overdueTitle: (n) => `${n} 個已逾期`,
@@ -1453,6 +1468,9 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanUnassigned: "미할당",
     optCards: "카드 항목",
     kanbanSubtasks: (n) => `하위 작업 ${n}개`,
+    kanbanAddTask: "작업 추가",
+    kanbanAddSubtask: "하위 작업 추가",
+    kanbanCardMenu: "카드 메뉴",
     optHideLabels: "막대 라벨 숨기기",
     optOverdue: "기한 초과 강조",
     overdueTitle: (n) => `기한 초과 ${n}건`,
@@ -1727,6 +1745,9 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanUnassigned: "Non attribué",
     optCards: "Champs de la carte",
     kanbanSubtasks: (n) => `${n} sous-tâches`,
+    kanbanAddTask: "Ajouter une tâche",
+    kanbanAddSubtask: "Ajouter une sous-tâche",
+    kanbanCardMenu: "Menu de la carte",
     optHideLabels: "Masquer les libellés des barres",
     optOverdue: "Mettre en évidence les retards",
     overdueTitle: (n) => `${n} en retard`,
@@ -2001,6 +2022,9 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanUnassigned: "Sin asignar",
     optCards: "Campos de la tarjeta",
     kanbanSubtasks: (n) => `${n} subtareas`,
+    kanbanAddTask: "Añadir tarea",
+    kanbanAddSubtask: "Añadir subtarea",
+    kanbanCardMenu: "Menú de la tarjeta",
     optHideLabels: "Ocultar etiquetas de las barras",
     optOverdue: "Resaltar vencidas",
     overdueTitle: (n) => `${n} vencidas`,
@@ -2275,6 +2299,9 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanUnassigned: "Не назначено",
     optCards: "Поля карточки",
     kanbanSubtasks: (n) => `Подзадач: ${n}`,
+    kanbanAddTask: "Добавить задачу",
+    kanbanAddSubtask: "Добавить подзадачу",
+    kanbanCardMenu: "Меню карточки",
     optHideLabels: "Скрыть подписи на полосах",
     optOverdue: "Выделять просроченные",
     overdueTitle: (n) => `просрочено: ${n}`,

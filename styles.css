@@ -186,6 +186,45 @@
 .ogantt-kcol.is-col-after {
   box-shadow: 4px 0 0 var(--interactive-accent);
 }
+.ogantt-kcol-add {
+  display: inline-flex;
+  margin-left: auto;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.ogantt-kcol-add:hover {
+  opacity: 1;
+}
+.ogantt-kcol-add svg {
+  width: 16px;
+  height: 16px;
+}
+.ogantt-kcol-addbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  background: color-mix(in srgb, var(--ogantt-col) 14%, var(--background-secondary));
+  border: none;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.ogantt-kcard-more {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  opacity: 0.5;
+  cursor: pointer;
+}
+.ogantt-kcard-more:hover {
+  opacity: 1;
+}
+.ogantt-kcard-more svg {
+  width: 16px;
+  height: 16px;
+}
 .ogantt-kcol-dot {
   flex: none;
   width: 10px;
@@ -207,6 +246,7 @@
   overflow-y: auto;
 }
 .ogantt-kcard {
+  position: relative;
   padding: 8px 10px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
@@ -225,6 +265,7 @@
 }
 .ogantt-kcard-title {
   margin-bottom: 4px;
+  padding-right: 22px;
   font-weight: 600;
   word-break: break-word;
 }
