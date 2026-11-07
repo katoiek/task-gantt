@@ -849,6 +849,14 @@ input.ogantt-cell-input[type="number"] {
   dominant-baseline: middle;
   pointer-events: none;
 }
+/* 期限切れ：ラベル（⚠・名前・担当）を赤く、⚠ は大きく太く / overdue: the whole label in red, the ⚠ larger and bold */
+.ogantt-bar-label.is-overdue {
+  fill: var(--color-red);
+}
+.ogantt-overdue-mark {
+  font-size: 17px;
+  font-weight: 700;
+}
 .ogantt-dep {
   fill: none;
   stroke: var(--text-normal);

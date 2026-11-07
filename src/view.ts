@@ -1735,10 +1735,12 @@ export class GanttView extends ItemView {
         }
         // ラベル（タスク名＋担当）/ label
         // 名前を隠していても、期限切れの ⚠ だけは出す / with the names hidden, the overdue ⚠ still shows
-        const text = (overdue ? "⚠ " : "") + (this.hideLabels ? "" : t.assignee ? `${t.name} · @${linkLabel(t.assignee)}` : t.name);
-        if (text.trim()) {
-          const label = this.svgEl("text", { x: x + w + 6, y: cyText(i), class: "ogantt-bar-label" });
-          label.textContent = text.trimEnd();
+        // 期限切れは、⚠ を大きく、ラベル全体を赤く / overdue: a larger ⚠ and the whole label in red
+        const name = this.hideLabels ? "" : t.assignee ? `${t.name} · @${linkLabel(t.assignee)}` : t.name;
+        if (overdue || name) {
+          const label = this.svgEl("text", { x: x + w + 6, y: cyText(i), class: "ogantt-bar-label" + (overdue ? " is-overdue" : "") });
+          if (overdue) label.appendChild(this.svgEl("tspan", { class: "ogantt-overdue-mark" })).textContent = "⚠";
+          if (name) label.appendChild(this.svgEl("tspan", overdue ? { dx: 5 } : {})).textContent = name;
           g.appendChild(label);
         }
         this.attachDrag(g, rect, t);
