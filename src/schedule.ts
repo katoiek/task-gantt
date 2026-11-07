@@ -121,12 +121,6 @@ export function keepDurationOnStartChange(
   return shiftEnd(orig.start, orig.end, next.start, cal);
 }
 
-// 期限日の無い（開始日だけの）タスクを 1 日のまま動かすときは、期限日を書き足さない（終わりを決めていないタスクに、勝手に期限日を付けない）
-// moving a task that has no due date, while it stays a single day, writes none (a task with no end isn't given one by moving it)
-export function addsNoDueDate(orig: Pick<Task, "end">, end: string, nextStart: string): boolean {
-  return !orig.end && !!end && end === nextStart;
-}
-
 // ----- 依存による後続の連動 / cascading dates along dependencies -----
 
 export interface ScheduleOptions {

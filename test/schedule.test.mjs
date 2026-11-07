@@ -12,7 +12,6 @@ import {
   keepDurationOnStartChange,
   successorClosure,
   wouldLoop,
-  addsNoDueDate,
   cascadeDates,
 } from "./schedule.mjs";
 import { dayIndex, dayToStr } from "./timeline.mjs";
@@ -113,14 +112,6 @@ const mk = (path, o = {}) => ({ path, name: path, groups: [], deps: [], mileston
   check("wouldLoop: 間接の逆向き（A→B→C があるとき C→A）は輪", wouldLoop(chain, "C", "A"));
   check("wouldLoop: 同じ向きの追加（A→C）は輪ではない", !wouldLoop(chain, "A", "C"));
   check("wouldLoop: 無関係なタスクとの依存は輪ではない", !wouldLoop(chain, "D", "A") && !wouldLoop(chain, "A", "D"));
-}
-
-// ── addsNoDueDate ──
-{
-  check("addsNoDueDate: 期限日の無いタスクが 1 日のまま動く → 足さない", addsNoDueDate({ end: undefined }, "2026-08-20", "2026-08-20"));
-  check("addsNoDueDate: 複数日に伸ばしたら期限日を書く", !addsNoDueDate({ end: undefined }, "2026-08-22", "2026-08-20"));
-  check("addsNoDueDate: 期限日のあるタスクは常に書く（1 日でも）", !addsNoDueDate({ end: "2026-08-20" }, "2026-08-21", "2026-08-21"));
-  check("addsNoDueDate: 期限日が空になる動きは対象外", !addsNoDueDate({ end: undefined }, "", "2026-08-20"));
 }
 
 // ── cascadeDates ──
