@@ -1,5 +1,5 @@
 // カンバンの振り分け（列の並び・未割当・サブタスク）の検証 / Tests for the Kanban sorting (column order, unassigned, subtasks)
-import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf } from "./kanban.mjs";
+import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY } from "./kanban.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -76,6 +76,22 @@ check("列: タスクが無くても全部の列が出る", buildKanbanColumns([
   const all = [T("p", "todo"), T("s1", "doing", "p"), T("s2", "done", "p"), T("q", "todo"), T("s3", "todo", "q")];
   check("subtasksOf: 直下のサブタスクを、渡された順に", subtasksOf(all, "p").map((t) => t.path).join() === "s1,s2");
   check("subtasksOf: 子が無ければ空", subtasksOf(all, "s1").length === 0);
+}
+
+// ── 折りたたみ ──
+{
+  check("columnKey: ステータスは ID、未割当は決まった文字列", columnKey("todo") === "todo" && columnKey(null) === UNASSIGNED_KEY);
+  check("toggleCollapsed: 足す", toggleCollapsed(["a"], "b").join() === "a,b");
+  check("toggleCollapsed: 外す", toggleCollapsed(["a", "b"], "a").join() === "b");
+  const a = ["a"];
+  toggleCollapsed(a, "b");
+  check("toggleCollapsed: 元の配列は変えない", a.join() === "a");
+  const cols = buildKanbanColumns([T("x", "todo"), T("y", undefined)], ST, []);
+  check("collapseColumns all: 今出ている列すべて", collapseColumns(cols, [], "all").join() === `${UNASSIGNED_KEY},todo,doing,done`);
+  check("collapseColumns empty: カードの無い列を足す", collapseColumns(cols, [], "empty").join() === "doing,done");
+  check("collapseColumns empty: 今の折りたたみは保つ", collapseColumns(cols, ["todo"], "empty").join() === "todo,doing,done");
+  check("collapseColumns empty: 出ていない列のキーは捨てる", collapseColumns(cols, ["ghost"], "empty").join() === "doing,done");
+  check("collapseColumns none: すべて開く", collapseColumns(cols, ["todo", "done"], "none").length === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

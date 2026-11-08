@@ -48,7 +48,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { KanbanColumn, buildKanbanColumns, moveId, orderStatusIds, subtasksOf } from "./kanban";
+import { KanbanColumn, buildKanbanColumns, collapseColumns, columnKey, moveId, orderStatusIds, subtasksOf, toggleCollapsed } from "./kanban";
 import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
@@ -564,15 +564,35 @@ export class GanttView extends ItemView {
     const board = host.createDiv({ cls: "ogantt-kanban" });
     // ステータスの列は、カードが 0 件でも残す（空の列にもカードを落とせるように）。未割当だけは、カードがあるときだけ出す
     // a status column stays even with no cards (so a card can still be dropped there); only Unassigned shows just when it has cards
-    for (const col of buildKanbanColumns(list, statuses, order)) {
-      if (col.status === null && col.cards.length === 0) continue;
-      this.renderKanbanColumn(board, col);
-    }
+    const cols = buildKanbanColumns(list, statuses, order).filter((c) => c.status !== null || c.cards.length > 0);
+    for (const col of cols) this.renderKanbanColumn(board, col, cols);
   }
 
-  private renderKanbanColumn(board: HTMLElement, col: KanbanColumn): void {
+  // 列の折りたたみを変えて保存する（描き直しのときに、ビューへ保存される）/ change the columns' collapse; saved with the view on the redraw
+  private setCollapsedColumns(keys: string[]): void {
+    this.cfg.collapsedColumns = keys;
+    this.rerender();
+  }
+
+  // 列の見出しのメニュー：この列を折りたたむ／開く、空の列・すべてを折りたたむ、すべて開く
+  // the column header menu: collapse / expand this column, collapse the empty ones or all, expand all
+  private openColumnHeadMenu(e: MouseEvent, col: KanbanColumn, cols: KanbanColumn[]): void {
+    const key = columnKey(col.status);
+    const current = this.cfg.collapsedColumns;
+    const menu = new Menu();
+    menu.addItem((it) => it.setTitle(tr().kanbanCollapseCol).setIcon("fold-horizontal").onClick(() => this.setCollapsedColumns(toggleCollapsed(current, key))));
+    menu.addSeparator();
+    menu.addItem((it) => it.setTitle(tr().kanbanCollapseEmpty).setIcon("fold-horizontal").onClick(() => this.setCollapsedColumns(collapseColumns(cols, current, "empty"))));
+    menu.addItem((it) => it.setTitle(tr().kanbanCollapseAll).setIcon("fold-horizontal").onClick(() => this.setCollapsedColumns(collapseColumns(cols, current, "all"))));
+    menu.addItem((it) => it.setTitle(tr().kanbanExpandAll).setIcon("unfold-horizontal").onClick(() => this.setCollapsedColumns(collapseColumns(cols, current, "none"))));
+    menu.showAtMouseEvent(e);
+  }
+
+  private renderKanbanColumn(board: HTMLElement, col: KanbanColumn, cols: KanbanColumn[]): void {
     const status = col.status ? this.plugin.settings.statuses.find((s) => s.id === col.status) : undefined;
-    const colEl = board.createDiv({ cls: "ogantt-kcol" });
+    const key = columnKey(col.status);
+    const collapsed = this.cfg.collapsedColumns.includes(key);
+    const colEl = board.createDiv({ cls: "ogantt-kcol" + (collapsed ? " is-collapsed" : "") });
     colEl.setCssProps({ "--ogantt-col": status?.color ?? "var(--text-faint)" }); // 列の色＝ステータスの色 / the column's colour is the status's
     const head = colEl.createDiv({ cls: "ogantt-kcol-head" });
     head.createSpan({ cls: "ogantt-kcol-dot" });
@@ -580,19 +600,31 @@ export class GanttView extends ItemView {
     head.createSpan({ cls: "ogantt-kcol-count", text: String(col.cards.length) });
     // その列のステータスでタスクを作る（未割当の列ならステータスなし）/ create a task with this column's status (none for Unassigned)
     const addHere = (): void => void this.createTaskWith({ status: col.status ?? undefined });
-    const plus = head.createSpan({ cls: "ogantt-kcol-add" });
-    setIcon(plus, "plus");
-    plus.setAttr("aria-label", tr().kanbanAddTask);
-    plus.onclick = addHere;
-    const body = colEl.createDiv({ cls: "ogantt-kcol-body" });
-    for (const t of col.cards) this.renderKanbanCard(body, t);
-    const addBtn = body.createEl("button", { cls: "ogantt-kcol-addbtn" });
-    setIcon(addBtn.createSpan({ cls: "ogantt-opt-ico" }), "plus");
-    addBtn.createSpan({ text: tr().kanbanAddTask });
-    addBtn.onclick = addHere;
+    if (collapsed) {
+      // 折りたたんだ列：帯の中は、色の点・件数・名前（縦）だけ。見出しのクリックで開く。カードを落とすこともできる
+      // a collapsed column: just the colour dot, count and the name (vertical); clicking the header opens it, and cards can still be dropped on it
+      head.setAttr("aria-label", tr().kanbanExpandCol);
+      head.addClass("is-collapsed-head");
+      head.onclick = () => this.setCollapsedColumns(toggleCollapsed(this.cfg.collapsedColumns, key));
+    } else {
+      const plus = head.createSpan({ cls: "ogantt-kcol-add" });
+      setIcon(plus, "plus");
+      plus.setAttr("aria-label", tr().kanbanAddTask);
+      plus.onclick = addHere;
+      const more = head.createSpan({ cls: "ogantt-kcol-menu" });
+      setIcon(more, "ellipsis");
+      more.setAttr("aria-label", tr().kanbanColMenu);
+      more.onclick = (e) => this.openColumnHeadMenu(e, col, cols);
+      const body = colEl.createDiv({ cls: "ogantt-kcol-body" });
+      for (const t of col.cards) this.renderKanbanCard(body, t);
+      const addBtn = body.createEl("button", { cls: "ogantt-kcol-addbtn" });
+      setIcon(addBtn.createSpan({ cls: "ogantt-opt-ico" }), "plus");
+      addBtn.createSpan({ text: tr().kanbanAddTask });
+      addBtn.onclick = addHere;
+    }
     // 見出しをドラッグして、列の順序を入れ替える。順序はこのビューに保存する（初期値は設定のステータスの順）。未割当は先頭に固定
     // drag the header to reorder the columns; the order is saved in this view (it starts from the settings' status order); Unassigned stays first
-    if (col.status !== null) {
+    if (col.status !== null && !collapsed) {
       const id = col.status;
       head.addClass("is-draggable");
       head.setAttr("draggable", "true");

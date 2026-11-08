@@ -45,6 +45,7 @@ const cfg = (over = {}) => ({
   collapsed: [],
   cardFields: ["assignee", "start", "end"],
   columnOrder: [],
+  collapsedColumns: [],
   ...over,
 });
 
@@ -170,6 +171,11 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
     const r = repairBoardViews({ "folder:k": { active: "k", views: [{ id: "k", name: "K", type: "kanban", config: { cardFields: ["tags"] } }, { id: "x", name: "X", type: "weird", config: {} }] } }, base);
     const v = r["folder:k"].views;
     return v[0].type === "kanban" && v[0].config.cardFields.join() === "tags" && v[0].config.columnOrder.length === 0 && v[1].type === "gantt";
+  })());
+  check("repair: 折りたたんだ列は、無ければ空で、あれば保たれる", (() => {
+    const r = repairBoardViews({ "folder:k": { active: "k", views: [{ id: "k", name: "K", type: "kanban", config: { collapsedColumns: ["done"] } }, { id: "j", name: "J", type: "kanban", config: {} }] } }, base);
+    const v = r["folder:k"].views;
+    return v[0].config.collapsedColumns.join() === "done" && v[1].config.collapsedColumns.length === 0;
   })());
   check("repair: 開いているビューが無ければ先頭", fixed["folder:partial"].active === "a");
   fixed["folder:ok"].views[0].config.visibleColumns.push("x");

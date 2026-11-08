@@ -49,3 +49,25 @@ export function moveId(ids: string[], fromId: string, targetId: string, after: b
 export function subtasksOf(all: Task[], parentPath: string): Task[] {
   return all.filter((t) => t.parent === parentPath);
 }
+
+// 折りたたみのキー。ステータスの ID、未割当だけは決まった文字列（ステータスの ID と重ならないよう ~ で始める）
+// the key of a collapsed column: the status id, and a fixed string for Unassigned (it starts with ~ so it can't clash with a status id)
+export const UNASSIGNED_KEY = "~unassigned";
+export function columnKey(status: string | null): string {
+  return status ?? UNASSIGNED_KEY;
+}
+
+// 1 つの列の折りたたみを切り替えた新しい一覧 / the list with one column's collapse toggled
+export function toggleCollapsed(keys: string[], key: string): string[] {
+  return keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key];
+}
+
+// まとめて折りたたむ・開く。all＝今出ている列すべて、empty＝カードが 0 件の列を足す（今の折りたたみは保つ）、none＝すべて開く
+// collapse or expand in bulk: all = every column shown, empty = add the columns with no cards (the current ones stay), none = expand everything
+export function collapseColumns(cols: KanbanColumn[], current: string[], mode: "all" | "empty" | "none"): string[] {
+  if (mode === "none") return [];
+  const shown = cols.map((c) => columnKey(c.status));
+  if (mode === "all") return shown;
+  const empties = cols.filter((c) => c.cards.length === 0).map((c) => columnKey(c.status));
+  return [...new Set([...current.filter((k) => shown.includes(k)), ...empties])];
+}

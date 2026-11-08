@@ -29,6 +29,7 @@ export interface ViewConfig {
   collapsed: string[]; // 折りたたんだグループのキー / keys of the collapsed groups
   // カンバン用（ガントでは使わない）/ for Kanban (unused by Gantt)
   cardFields: string[]; // カードに出す列の id（担当・開始・期限が既定）/ ids of the columns shown on a card (assignee, start, due by default)
+  collapsedColumns: string[]; // 折りたたんだ列のキー（ステータスの ID。未割当は UNASSIGNED_KEY）/ keys of the collapsed columns (a status id; UNASSIGNED_KEY for Unassigned)
   columnOrder: string[]; // 列（ステータス）の並び。空なら設定のステータスの順＝初期値 / the order of the columns (statuses); empty follows the settings' status order, the default
 }
 

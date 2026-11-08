@@ -83,6 +83,7 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 
 - **Move a card to another column** by dragging it: the task's status becomes the column's status (undoable with **Ctrl/Cmd+Z**). Dropping on **Unassigned** clears the status.
 - **Reorder the columns** by dragging a column header. The order is saved in that view (each Kanban view has its own). **Settings** only supplies the starting order, taken once when the view is first drawn; changing the statuses' order there later (its ▲ ▼ buttons, which also set the legend's order) doesn't change existing views. A status you add in **Settings** appears at the end of each view's columns, and a deleted one disappears.
+- **Collapse columns**: the **⋯** in a column header has **Collapse column**, **Collapse empty columns**, **Collapse all columns** and **Expand all columns**. A collapsed column becomes a thin strip with its colour, count and name; click it to open it again (cards can still be dropped on it). Which columns are collapsed is saved in that view.
 - **Click a card** to open its detail panel.
 - **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **Cards** button (the list icon at the left of the toolbar, before the folder name) lists every other column, including custom fields, as checkboxes.
 
@@ -416,6 +417,7 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
 
 - **カードを別の列へドラッグ**すると、タスクのステータスが、その列のステータスに変わります（**Ctrl/Cmd+Z** で取り消せます）。**未割当**にドロップすると、ステータスが外れます。
 - **列の見出しをドラッグ**すると、列の順序を入れ替えられます。順序は、そのビューに保存されます（カンバンのビューごとに別の順序です）。**設定**が渡すのは、最初の順序だけです（ビューを最初に描くときに、一度だけ取り込みます）。あとから**設定**でステータスの順序を変えても（▲ ▼ ボタン。凡例の順序も変わります）、既存のビューは変わりません。**設定**でステータスを足すと、各ビューの列の末尾に増え、消すと、その列も消えます。
+- **列の折りたたみ**: 列の見出しの **⋯** に、**この列を折りたたむ**・**空の列をすべて折りたたむ**・**すべての列を折りたたむ**・**すべての列を開く**があります。折りたたんだ列は、色・件数・名前だけの細い帯になり、クリックで開きます（カードを落とすこともできます）。折りたたみの状態は、そのビューに保存されます。
 - **カードをクリック**すると、詳細パネルが開きます。
 - **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カード**ボタン（ツールバーの左端、フォルダ名の左にある一覧のアイコン）から、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます。
 

@@ -241,6 +241,33 @@
   width: 16px;
   height: 16px;
 }
+.ogantt-kcol-menu {
+  display: inline-flex;
+  opacity: 0.6;
+  cursor: pointer;
+}
+.ogantt-kcol-menu:hover {
+  opacity: 1;
+}
+.ogantt-kcol-menu svg {
+  width: 16px;
+  height: 16px;
+}
+/* 折りたたんだ列：細い帯に、色の点・件数・名前（縦）/ a collapsed column: a thin strip with the colour dot, count and the name (vertical) */
+.ogantt-kcol.is-collapsed {
+  flex: 0 0 44px;
+}
+.ogantt-kcol-head.is-collapsed-head {
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 4px;
+  cursor: pointer;
+}
+.is-collapsed-head .ogantt-kcol-name {
+  writing-mode: vertical-rl;
+  white-space: nowrap;
+}
 .ogantt-kcol-dot {
   flex: none;
   width: 10px;

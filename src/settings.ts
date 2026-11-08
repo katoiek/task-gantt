@@ -241,6 +241,7 @@ export function defaultViewConfig(s: GanttSettings): ViewConfig {
     collapsed: [],
     cardFields: ["assignee", "start", "end"],
     columnOrder: [],
+    collapsedColumns: [],
   };
 }
 
