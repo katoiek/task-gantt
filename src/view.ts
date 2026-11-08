@@ -9,6 +9,8 @@ import {
   reparentTask,
   subtreePaths,
   validCustomFields,
+  customValueText,
+  parseCustomInput,
   writeDates,
   combineDateTime,
   writeField,
@@ -2896,6 +2898,43 @@ export class GanttView extends ItemView {
         const a = gf.createEl("a", { text: tr().gcalOpenEvent, href: link });
         a.setAttr("target", "_blank");
       }
+    }
+
+    // カスタムフィールド（設定で宣言した任意のフロントマターのキー）：表と同じ値を、パネルでも見て編集できる。表の列を隠していても出す
+    // custom fields (frontmatter keys declared in the settings): the same values as the table, viewable and editable here too, even when their column is hidden
+    for (const f of validCustomFields(this.plugin.settings)) {
+      const label = f.label.trim() || f.key.trim();
+      const key = f.key.trim();
+      const stored = t.custom[f.id];
+      const input = fieldRow(label).createEl("input", { type: f.type === "number" ? "number" : f.type === "date" ? "date" : "text" });
+      input.setAttr("aria-label", tr().editCustomField(label));
+      let current = f.type === "date" ? (typeof stored === "string" ? stored : "") : customValueText(stored);
+      input.value = current;
+      const commit = async (): Promise<void> => {
+        const raw = input.value;
+        if (raw === current) return;
+        // 表と同じ解釈：空なら削除、数値にならない入力は書き込まない、リストだった値はカンマで分けてリストのまま
+        // read it as the table does: blank deletes, a non-number isn't written, a list value is split back into a list
+        const next = f.type === "date" ? raw || undefined : parseCustomInput(raw, f.type, Array.isArray(stored));
+        if (next === null) {
+          input.value = current;
+          return;
+        }
+        current = raw;
+        await this.mutate(tr().undoEdit(t.name), [t.path], () => writeField(this.app, t.path, key, next));
+        await this.refresh();
+      };
+      input.addEventListener("change", () => void commit());
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          input.blur();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          input.value = current;
+          input.blur();
+        }
+      });
     }
 
     // 本文 / body（既定は Obsidian と同じレンダリング表示。クリックで編集、フォーカスを外すと保存して表示に戻る）

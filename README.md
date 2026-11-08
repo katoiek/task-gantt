@@ -98,7 +98,7 @@ Show any frontmatter key as a table column. In **Settings → Task Gantt → Cus
 
 ![Custom fields in the settings tab: a key, a label and a type per field](docs/images/custom-fields-settings-en.png)
 
-A new field's column is shown right away; hide or show it from the gear menu like any other column. Custom columns sort by clicking their header and are edited by double-clicking a cell, and every edit can be undone. Changing a field's key keeps its column's visibility, width and sort, and takes effect when you press Enter or leave the box. If notes still hold values under the old key, you're asked whether to rename that property in those notes too (a note that already has a value under the new key is never overwritten) or only to point the column at the new key. Keys the plugin already reads (the Start / Due / Status / … keys under **Frontmatter keys**, and `tags`) can't be used, and if two fields share a key only the first becomes a column — the settings tab says so.
+A new field's column is shown right away; hide or show it from the gear menu like any other column. Custom columns sort by clicking their header and are edited by double-clicking a cell, and every edit can be undone. The **detail panel** shows every custom field too, between Progress and the body, and edits it there (even when its column is hidden), and the Kanban cards can show them from the gear menu. Changing a field's key keeps its column's visibility, width and sort, and takes effect when you press Enter or leave the box. If notes still hold values under the old key, you're asked whether to rename that property in those notes too (a note that already has a value under the new key is never overwritten) or only to point the column at the new key. Keys the plugin already reads (the Start / Due / Status / … keys under **Frontmatter keys**, and `tags`) can't be used, and if two fields share a key only the first becomes a column — the settings tab says so.
 
 ![Custom field columns in the table, after the built-in columns](docs/images/custom-fields-table-en.png)
 
@@ -422,7 +422,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![設定画面のカスタムフィールド。フィールドごとにキー・表示名・種類を指定](docs/images/custom-fields-settings-ja.png)
 
-追加したフィールドの列はすぐに表示され、ほかの列と同じく歯車メニューで表示を切り替えられます。見出しのクリックで並べ替え、セルのダブルクリックで編集でき、編集はすべて取り消せます。キー名を変えても、列の表示・幅・並べ替えの設定はそのまま残ります。キーの変更は Enter を押すか入力欄を離れたときに反映され、旧キーの値を持つノートがあれば、ノート側のプロパティ名も変えるか（新しいキーに既に値があるノートは上書きしません）、列が読むキーだけを変えるかを尋ねます。プラグインが既に使っているキー（**フロントマターのキー名**にある開始・期限・ステータスなどのキーと `tags`）は使えません。また、同じキーのフィールドが複数あるときは最初の 1 つだけが列になります。どちらも設定画面に注意書きが出ます。
+追加したフィールドの列はすぐに表示され、ほかの列と同じく歯車メニューで表示を切り替えられます。見出しのクリックで並べ替え、セルのダブルクリックで編集でき、編集はすべて取り消せます。**詳細パネル**にも、すべてのカスタムフィールドが、進捗と本文の間に出て、そこで編集できます（表の列を隠していても出ます）。カンバンのカードにも、歯車のメニューから出せます。キー名を変えても、列の表示・幅・並べ替えの設定はそのまま残ります。キーの変更は Enter を押すか入力欄を離れたときに反映され、旧キーの値を持つノートがあれば、ノート側のプロパティ名も変えるか（新しいキーに既に値があるノートは上書きしません）、列が読むキーだけを変えるかを尋ねます。プラグインが既に使っているキー（**フロントマターのキー名**にある開始・期限・ステータスなどのキーと `tags`）は使えません。また、同じキーのフィールドが複数あるときは最初の 1 つだけが列になります。どちらも設定画面に注意書きが出ます。
 
 ![テーブルのカスタムフィールド列。組み込みの列の後ろに並ぶ](docs/images/custom-fields-table-ja.png)
 
