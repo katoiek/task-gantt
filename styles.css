@@ -145,6 +145,15 @@
 .is-kanban .ogantt-gantt-only {
   display: none;
 }
+.ogantt-kanban-only {
+  display: none;
+}
+.is-kanban .ogantt-kanban-only {
+  display: inline-flex;
+}
+.ogantt-options:empty {
+  display: none;
+}
 .ogantt-kanban {
   display: flex;
   flex: 1;

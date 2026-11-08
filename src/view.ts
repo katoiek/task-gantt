@@ -757,14 +757,6 @@ export class GanttView extends ItemView {
     await this.refresh();
   }
 
-  // カンバンのオプション行：歯車（カードに出す項目のメニュー）だけ / the Kanban options row: just the gear (the card fields menu)
-  private renderKanbanOptions(host: HTMLElement): void {
-    const btn = host.createEl("button", { cls: "ogantt-opt-gear clickable-icon" }); // ガントの「列の表示」と同じ歯車 / the same gear as the Gantt's column menu
-    setIcon(btn, "settings");
-    btn.setAttr("aria-label", tr().optCards);
-    btn.onclick = () => this.openCardFieldsMenu(btn);
-  }
-
   // カードに出す項目：表の「列の表示」と同じ形（チェックボックス）。ステータスは列そのものなので除く
   // the card fields: checkboxes like the table's column menu; status is the column itself, so it's left out
   private openCardFieldsMenu(anchor: HTMLElement): void {
@@ -1379,6 +1371,12 @@ export class GanttView extends ItemView {
   // ----- ツールバー / toolbar -----
   private renderToolbar(root: HTMLElement): void {
     const bar = root.createDiv({ cls: "ogantt-toolbar" });
+    // カンバン専用：カードに出す項目のメニュー。ガントの歯車と区別できるよう、カードを思わせるアイコンにして、タイトルの左に置く
+    // Kanban only: the card fields menu — a card-like icon (not a gear, so it reads as "card fields"), left of the title
+    const cardBtn = bar.createEl("button", { cls: "ogantt-kanban-only clickable-icon" });
+    setIcon(cardBtn, "layout-list");
+    cardBtn.setAttr("aria-label", tr().optCards);
+    cardBtn.onclick = () => this.openCardFieldsMenu(cardBtn);
     bar.createSpan({ cls: "ogantt-title", text: this.plugin.settings.rootFolder || "(vault root)" });
     // 新規タスク追加（アイコン＋ラベル）/ add a new task (icon + label)
     const add = bar.createEl("button", { cls: "ogantt-add" });
@@ -1435,10 +1433,8 @@ export class GanttView extends ItemView {
   private renderOptions(): void {
     const host = this.optionsHost;
     host.empty();
-    if (this.activeType() === "kanban") {
-      this.renderKanbanOptions(host);
-      return;
-    }
+    if (this.activeType() === "kanban") return; // カンバンのオプションはツールバーの先頭に出す / Kanban's option lives at the start of the toolbar
+
     const statuses = this.plugin.settings.statuses;
     const none = tr().noneLabel;
     // 現在のフォルダ内に実在する担当者一覧（凡例で使用）/ assignees present in the folder (used by the legend)

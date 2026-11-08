@@ -81,7 +81,7 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 - **Move a card to another column** by dragging it: the task's status becomes the column's status (undoable with **Ctrl/Cmd+Z**). Dropping on **Unassigned** clears the status.
 - **Reorder the columns** by dragging a column header. The order is saved in that view (each Kanban view has its own). **Settings** only supplies the starting order, taken once when the view is first drawn; changing the statuses' order there later (its ▲ ▼ buttons, which also set the legend's order) doesn't change existing views. A status you add in **Settings** appears at the end of each view's columns, and a deleted one disappears.
 - **Click a card** to open its detail panel.
-- **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **gear** button (the same as the table's column menu) lists every other column, including custom fields, as checkboxes.
+- **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **card fields** button (the list icon at the left of the toolbar, before the folder name) lists every other column, including custom fields, as checkboxes.
 - **Add tasks**: the **＋** in a column header, or the **＋ Add task** button under the cards, creates a task with that column's status (none in Unassigned), using the new-task dates from **Settings**. A card's **⋯** menu (or a right-click) has **Add subtask**, which creates a subtask in its parent's folder, and **Delete**.
 - **Subtasks**: a card with subtasks shows a count icon; click it to open the first-level subtasks inside the card. A subtask is not a card of its own while its parent is shown.
 - **Filters** and **presets** work as in the Gantt views, and the cards in a column follow the view's sort. The view keeps its own filters and card fields, like every view.
@@ -405,7 +405,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 - **カードを別の列へドラッグ**すると、タスクのステータスが、その列のステータスに変わります（**Ctrl/Cmd+Z** で取り消せます）。**未割当**にドロップすると、ステータスが外れます。
 - **列の見出しをドラッグ**すると、列の順序を入れ替えられます。順序は、そのビューに保存されます（カンバンのビューごとに別の順序です）。**設定**が渡すのは、最初の順序だけです（ビューを最初に描くときに、一度だけ取り込みます）。あとから**設定**でステータスの順序を変えても（▲ ▼ ボタン。凡例の順序も変わります）、既存のビューは変わりません。**設定**でステータスを足すと、各ビューの列の末尾に増え、消すと、その列も消えます。
 - **カードをクリック**すると、詳細パネルが開きます。
-- **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**歯車**ボタン（表の「列の表示」と同じ形）から、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます。
+- **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カードの項目**ボタン（ツールバーの左端、フォルダ名の左にある一覧のアイコン）から、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます。
 - **タスクの追加**: 列の見出しの **＋**、または、カードの下の **＋ タスクを追加** で、その列のステータスのタスクを作ります（未割当の列ではステータスなし。日付は**設定**の新規タスクの日付に従います）。カードの **⋯** メニュー（または右クリック）には、**サブタスクを追加**（親と同じフォルダに作ります）と**削除**があります。
 - **サブタスク**: サブタスクのあるカードには、件数のアイコンが出ます。クリックすると、1 階層目のサブタスクが、カードの中に開きます。親が表示されているあいだ、サブタスクは独立したカードにはなりません。
 - **フィルタ**と**プリセット**は、ガントのビューと同じように使えます。列の中のカードは、ビューの並べ替えに従います。フィルタとカードの項目は、ほかのビューと同じく、ビューごとに保存されます。
