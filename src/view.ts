@@ -654,6 +654,26 @@ export class GanttView extends ItemView {
     this.rerender(); // 描き直しのときに、ビューへ保存される / saved with the view on the redraw
   }
 
+  // カードの項目：選んだ列の中身を、表と同じ描き方でそのまま出す（既定は担当・開始・期限）。値の無い項目は出さない。サブタスクの行でも同じものを使う
+  // card fields: the chosen columns painted just as the table does (assignee, start and due by default); an empty value is left out. The subtask rows use it too
+  private paintCardFields(host: HTMLElement, t: Task): void {
+    const fields = host.createDiv({ cls: "ogantt-kcard-fields" });
+    const defs = this.columns();
+    for (const id of this.cfg.cardFields) {
+      const def = defs.find((c) => c.id === id);
+      if (!def || def.kind !== "cell") continue;
+      const field = fields.createDiv({ cls: "ogantt-kfield" });
+      const value = field.createSpan({ cls: "ogantt-kfield-value" });
+      def.paint(this.board, value, { kind: "task", group: "", depth: 0, task: t });
+      if (!value.hasChildNodes()) {
+        field.remove();
+        continue;
+      }
+      field.insertBefore(createSpan({ cls: "ogantt-kfield-label", text: def.label() }), value);
+    }
+    if (!fields.hasChildNodes()) fields.remove();
+  }
+
   private renderKanbanCard(body: HTMLElement, t: Task): void {
     const card = body.createDiv({ cls: "ogantt-kcard", attr: { "data-path": t.path, draggable: "true" } });
     if (this.selectedPath === t.path && this.detailEl?.hasClass("is-open")) card.addClass("is-selected");
@@ -669,23 +689,7 @@ export class GanttView extends ItemView {
       e.preventDefault();
       this.openCardMenu(e, t);
     });
-    // 項目：選んだ列の中身を、表と同じ描き方でそのまま出す（既定は担当・開始・期限）。値の無い項目は出さない
-    // fields: the chosen columns painted just as the table does (assignee, start and due by default); an empty value is left out
-    const fields = card.createDiv({ cls: "ogantt-kcard-fields" });
-    const defs = this.columns();
-    for (const id of this.cfg.cardFields) {
-      const def = defs.find((c) => c.id === id);
-      if (!def || def.kind !== "cell") continue;
-      const field = fields.createDiv({ cls: "ogantt-kfield" });
-      const value = field.createSpan({ cls: "ogantt-kfield-value" });
-      def.paint(this.board, value, { kind: "task", group: "", depth: 0, task: t });
-      if (!value.hasChildNodes()) {
-        field.remove();
-        continue;
-      }
-      field.insertBefore(createSpan({ cls: "ogantt-kfield-label", text: def.label() }), value);
-    }
-    if (!fields.hasChildNodes()) fields.remove();
+    this.paintCardFields(card, t);
     // サブタスク：件数のアイコンを押すと、カードの中に開く / subtasks: the count icon opens them inside the card
     const subs = subtasksOf(this.tasks, t.path);
     if (subs.length) {
@@ -703,12 +707,14 @@ export class GanttView extends ItemView {
       if (open) {
         for (const sub of subs) {
           const row = card.createDiv({ cls: "ogantt-ksub" });
-          row.createSpan({ cls: "ogantt-ksub-name", text: sub.name });
+          const head = row.createDiv({ cls: "ogantt-ksub-head" });
+          head.createSpan({ cls: "ogantt-ksub-name", text: sub.name });
           const st = this.plugin.settings.statuses.find((x) => x.id === sub.status);
           if (st) {
-            const chip = row.createSpan({ cls: "ogantt-ksub-status", text: st.label });
+            const chip = head.createSpan({ cls: "ogantt-ksub-status", text: st.label });
             chip.setCssProps({ "--ogantt-col": st.color });
           }
+          this.paintCardFields(row, sub); // 親のカードと同じ項目 / the same fields as the parent card
           row.onclick = (e) => {
             e.stopPropagation();
             void this.openDetail(sub.path);

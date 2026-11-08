@@ -300,11 +300,16 @@
 }
 .ogantt-ksub {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   padding: 4px 0;
   border-bottom: 1px solid var(--background-modifier-border-hover);
   font-size: 0.9em;
+}
+.ogantt-ksub-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }
 .ogantt-ksub:last-child {
   border-bottom: none;
