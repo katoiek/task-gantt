@@ -1375,6 +1375,7 @@ export class GanttView extends ItemView {
     // Kanban only: the card fields menu — a card-like icon (not a gear, so it reads as "card fields"), left of the title
     const cardBtn = bar.createEl("button", { cls: "ogantt-kanban-only clickable-icon" });
     setIcon(cardBtn, "layout-list");
+    cardBtn.createSpan({ cls: "ogantt-opt-gear-label", text: tr().optCardsLabel }); // アイコンの右に短いラベル / a short label to the right of the icon
     cardBtn.setAttr("aria-label", tr().optCards);
     cardBtn.onclick = () => this.openCardFieldsMenu(cardBtn);
     bar.createSpan({ cls: "ogantt-title", text: this.plugin.settings.rootFolder || "(vault root)" });
@@ -1456,6 +1457,7 @@ export class GanttView extends ItemView {
     // 列の表示/非表示（歯車）＝オプション行の一番左 / column visibility (gear) — leftmost of the options row
     const colBtn = host.createEl("button", { cls: "ogantt-opt-gear clickable-icon" });
     setIcon(colBtn, "settings");
+    colBtn.createSpan({ cls: "ogantt-opt-gear-label", text: tr().optColumnsLabel }); // 歯車の右に短いラベル / a short label to the right of the gear
     colBtn.setAttr("aria-label", tr().optColumns);
     colBtn.onclick = () => this.openColumnMenu(colBtn);
 

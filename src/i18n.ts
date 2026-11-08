@@ -63,6 +63,8 @@ interface Strings {
   viewKanban: string;
   kanbanUnassigned: string;
   optCards: string;
+  optColumnsLabel: string;
+  optCardsLabel: string;
   kanbanSubtasks: (n: number) => string;
   kanbanAddTask: string;
   kanbanAddSubtask: string;
@@ -359,6 +361,8 @@ const STRINGS: Record<Lang, Strings> = {
     viewKanban: "カンバン",
     kanbanUnassigned: "未割当",
     optCards: "カードの項目",
+    optColumnsLabel: "列",
+    optCardsLabel: "カード",
     kanbanSubtasks: (n) => `サブタスク ${n} 件`,
     kanbanAddTask: "タスクを追加",
     kanbanAddSubtask: "サブタスクを追加",
@@ -636,6 +640,8 @@ const STRINGS: Record<Lang, Strings> = {
     viewKanban: "Kanban",
     kanbanUnassigned: "Unassigned",
     optCards: "Card fields",
+    optColumnsLabel: "Columns",
+    optCardsLabel: "Cards",
     kanbanSubtasks: (n) => `${n} subtasks`,
     kanbanAddTask: "Add task",
     kanbanAddSubtask: "Add subtask",
@@ -913,6 +919,8 @@ const STRINGS: Record<Lang, Strings> = {
     viewKanban: "看板",
     kanbanUnassigned: "未分配",
     optCards: "卡片字段",
+    optColumnsLabel: "列",
+    optCardsLabel: "卡片",
     kanbanSubtasks: (n) => `${n} 个子任务`,
     kanbanAddTask: "添加任务",
     kanbanAddSubtask: "添加子任务",
@@ -1190,6 +1198,8 @@ const STRINGS: Record<Lang, Strings> = {
     viewKanban: "看板",
     kanbanUnassigned: "未分配",
     optCards: "卡片欄位",
+    optColumnsLabel: "欄位",
+    optCardsLabel: "卡片",
     kanbanSubtasks: (n) => `${n} 個子任務`,
     kanbanAddTask: "新增任務",
     kanbanAddSubtask: "新增子任務",
@@ -1467,6 +1477,8 @@ const STRINGS: Record<Lang, Strings> = {
     viewKanban: "칸반",
     kanbanUnassigned: "미할당",
     optCards: "카드 항목",
+    optColumnsLabel: "열",
+    optCardsLabel: "카드",
     kanbanSubtasks: (n) => `하위 작업 ${n}개`,
     kanbanAddTask: "작업 추가",
     kanbanAddSubtask: "하위 작업 추가",
@@ -1744,6 +1756,8 @@ const STRINGS: Record<Lang, Strings> = {
     viewKanban: "Kanban",
     kanbanUnassigned: "Non attribué",
     optCards: "Champs de la carte",
+    optColumnsLabel: "Colonnes",
+    optCardsLabel: "Cartes",
     kanbanSubtasks: (n) => `${n} sous-tâches`,
     kanbanAddTask: "Ajouter une tâche",
     kanbanAddSubtask: "Ajouter une sous-tâche",
@@ -2021,6 +2035,8 @@ const STRINGS: Record<Lang, Strings> = {
     viewKanban: "Kanban",
     kanbanUnassigned: "Sin asignar",
     optCards: "Campos de la tarjeta",
+    optColumnsLabel: "Columnas",
+    optCardsLabel: "Tarjetas",
     kanbanSubtasks: (n) => `${n} subtareas`,
     kanbanAddTask: "Añadir tarea",
     kanbanAddSubtask: "Añadir subtarea",
@@ -2298,6 +2314,8 @@ const STRINGS: Record<Lang, Strings> = {
     viewKanban: "Канбан",
     kanbanUnassigned: "Не назначено",
     optCards: "Поля карточки",
+    optColumnsLabel: "Столбцы",
+    optCardsLabel: "Карточки",
     kanbanSubtasks: (n) => `Подзадач: ${n}`,
     kanbanAddTask: "Добавить задачу",
     kanbanAddSubtask: "Добавить подзадачу",
