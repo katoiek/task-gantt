@@ -273,7 +273,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 2px 10px;
-  color: var(--text-muted);
+  color: var(--text-normal);
   font-size: 0.85em;
 }
 .ogantt-kfield {
@@ -282,7 +282,7 @@
   gap: 4px;
 }
 .ogantt-kfield-label {
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 .ogantt-kcard-subs {
   display: flex;
