@@ -323,7 +323,7 @@ export async function syncGcal(plugin: GanttPlugin, opts: { pull: boolean }): Pr
   } catch (e) {
     ok = false;
     g.lastError = e instanceof Error ? e.message : String(e);
-    console.error("Task Gantt: Google Calendar sync failed", e);
+    console.error("Task Gantt Board: Google Calendar sync failed", e);
   } finally {
     running = false;
     await plugin.saveData(plugin.settings);

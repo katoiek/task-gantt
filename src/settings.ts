@@ -814,7 +814,7 @@ export class GanttSettingTab extends PluginSettingTab {
             this.save();
           });
         })
-        .catch((e) => console.error("Task Gantt: calendar list failed", e));
+        .catch((e) => console.error("Task Gantt Board: calendar list failed", e));
     });
   }
 

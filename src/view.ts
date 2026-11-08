@@ -1830,7 +1830,7 @@ export class GanttView extends ItemView {
         8000
       );
     } catch (e) {
-      console.error("Task Gantt: export failed", e);
+      console.error("Task Gantt Board: export failed", e);
       new Notice(tr().exportFailed);
     } finally {
       this.exporting = false;

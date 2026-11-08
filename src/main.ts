@@ -23,7 +23,7 @@ export default class GanttPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE_GANTT, (leaf) => new GanttView(leaf, this));
     // 本文・担当者のリンクのホバーでページプレビューを出す / Page preview for links in the body and assignee
-    this.registerHoverLinkSource(VIEW_TYPE_GANTT, { display: "Task Gantt", defaultMod: true });
+    this.registerHoverLinkSource(VIEW_TYPE_GANTT, { display: "Task Gantt Board", defaultMod: true });
 
     // 一番左の列（リボン）のアイコン＝フォーカス中フォルダで開く / ribbon opens the focused folder
     this.addRibbonIcon("gantt-chart", t().ribbonOpen, () => {

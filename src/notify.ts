@@ -118,7 +118,7 @@ async function sendWebhooks(
       await requestUrl({ url: t.url, method: "POST", contentType: "application/json", body: t.body });
     } catch (e) {
       ok = false;
-      console.error(`Task Gantt: ${t.label} notification failed`, e);
+      console.error(`Task Gantt Board: ${t.label} notification failed`, e);
     }
   }
   return ok;

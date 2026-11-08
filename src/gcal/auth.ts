@@ -115,7 +115,7 @@ export async function connectGoogle(plugin: GanttPlugin): Promise<boolean> {
       }
       const got = url.searchParams.get("state") === state ? url.searchParams.get("code") : null;
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(`<h3>Task Gantt</h3><p>${got ? "Connected. You can close this tab." : "Authorization failed."}</p>`);
+      res.end(`<h3>Task Gantt Board</h3><p>${got ? "Connected. You can close this tab." : "Authorization failed."}</p>`);
       done(got);
     });
     const done = (v: string | null) => {
@@ -164,7 +164,7 @@ export async function connectGoogle(plugin: GanttPlugin): Promise<boolean> {
     code_verifier: verifier,
   });
   if (status !== 200 || typeof json.refresh_token !== "string") {
-    console.error("Task Gantt: Google token exchange failed", status, json);
+    console.error("Task Gantt Board: Google token exchange failed", status, json);
     // Google が返した理由をそのまま出す。原因（redirect_uri_mismatch / invalid_client 等）で
     // 対処が全く変わるため、汎用メッセージだけではコンソールを開かないと切り分けられない。
     // surface Google's own reason: the fix differs entirely per cause

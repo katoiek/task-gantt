@@ -19,7 +19,7 @@ function read(plugin: GanttPlugin, id: string, legacy: string | undefined): stri
     const v = plugin.app.secretStorage.getSecret(id);
     if (v) return v;
   } catch (e) {
-    console.error("Task Gantt: failed to read secret", id, e);
+    console.error("Task Gantt Board: failed to read secret", id, e);
   }
   // 移行に失敗した場合だけ旧フィールドが残っている / the legacy field only survives a failed migration
   return legacy ?? "";
@@ -64,7 +64,7 @@ export function migrateLegacySecrets(plugin: GanttPlugin): boolean {
       moved = true;
     } catch (e) {
       // 書けなければ平文を残す（接続が切れるよりまし）/ keep the plain text if the write fails (better than losing the connection)
-      console.error("Task Gantt: failed to move secret to SecretStorage", key, e);
+      console.error("Task Gantt Board: failed to move secret to SecretStorage", key, e);
     }
   }
   return moved;

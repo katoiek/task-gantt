@@ -1,8 +1,8 @@
-# Task Gantt
+# Task Gantt Board
 
 **English** | [日本語](#日本語)
 
-An interactive project-management Gantt for Obsidian. **One Markdown file = one task**; a configured folder is shown and edited as a "table + timeline" Gantt — drag bars to reschedule, link dependencies, set milestones, sort and filter, and move tasks between folders by dragging.
+An interactive project-management Gantt and Kanban board for Obsidian. **One Markdown file = one task**; a configured folder is shown and edited as a "table + timeline" Gantt — drag bars to reschedule, link dependencies, set milestones, sort and filter, and move tasks between folders by dragging — or as a **Kanban board** with a column per status, in several saved **views**.
 
 > Requires **Obsidian 1.11.4 or later**.
 
@@ -22,7 +22,7 @@ Click a task to open the detail panel and edit its dates, status, assignee, prog
 
 ## Usage
 
-1. In **Settings → Task Gantt**, set the **target folder** (e.g. `Projects/Cleanup`).
+1. In **Settings → Task Gantt Board**, set the **target folder** (e.g. `Projects/Cleanup`).
 2. Open the view from the **"Open Gantt" ribbon icon** in the left column (or the command **"Open Gantt"**). The ribbon opens the Gantt for the folder of the currently open note — or the folder selected in the file explorer — and falls back to the default folder in settings (the **vault root** when none is set). You can also right-click any folder → **Open as Gantt**.
 3. Direct subfolders become **groups**, and the `.md` files inside them become **tasks**.
 4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter. **Every column the table can show is editable in place — just double-click the cell.** Start and Due open a calendar, Duration takes a number of workdays, Progress takes a percentage (0–100; blank or 0 clears it), Status opens a dropdown, Assignee is a text field that suggests names already used in the board (type `[[` to link a note instead), and Tags opens a small editor with a chip per tag (× to remove) and an add field that suggests the vault's existing tags. Enter or clicking away saves, Esc cancels.
@@ -58,7 +58,7 @@ Turn on **Flat** in the **Display** menu to list every task in one sorted list, 
 
 ![Step 1: show the Progress column from the gear menu](docs/images/progresscolumn_en.png)
 
-**Progress line** (step 2: turn on **Progress line** in the **Display** menu, with the Progress column shown so each number can be read against the line) draws a jagged line down the board from today, bending to each task's achieved progress: **left of today means behind schedule, right means ahead**. Per row, the line sits at the point on the bar matching the task's `progress` — so a task due last week but only 40% done pulls the line back to its 40% mark. Tasks at 100% and tasks that haven't started yet (and aren't due to) stay on the today line, as do folder rows and rolled-up parent bars. A task past its start date with no progress pulls the line back to its start date. Its color is configurable in **Settings → Task Gantt → Progress line color**.
+**Progress line** (step 2: turn on **Progress line** in the **Display** menu, with the Progress column shown so each number can be read against the line) draws a jagged line down the board from today, bending to each task's achieved progress: **left of today means behind schedule, right means ahead**. Per row, the line sits at the point on the bar matching the task's `progress` — so a task due last week but only 40% done pulls the line back to its 40% mark. Tasks at 100% and tasks that haven't started yet (and aren't due to) stay on the today line, as do folder rows and rolled-up parent bars. A task past its start date with no progress pulls the line back to its start date. Its color is configurable in **Settings → Task Gantt Board → Progress line color**.
 
 ![Step 2: turn on Progress line in the Display menu; the line follows each task's progress](docs/images/progressline_en.png)
 
@@ -76,21 +76,30 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 
 ## Kanban view
 
-**＋ → Kanban** adds a Kanban view next to your Gantt views. It shows the board's tasks as **cards in one column per status**, the way Wrike's Board view does. The columns take their name and colour from your statuses (add a status in **Settings** and a column appears), starting in the order of the statuses in **Settings** (a new Kanban view takes that order once, and keeps its own from then on). Tasks without a status go into an **Unassigned** column, which stays first and shows only while it has cards.
+**＋ → Kanban** adds a Kanban view next to your Gantt views.
+
+![The + menu: Copy this view, Gantt or Kanban, and a Kanban board with a column per status](docs/images/kanban-add-view-en.png)
+ It shows the board's tasks as **cards in one column per status**, the way Wrike's Board view does. The columns take their name and colour from your statuses (add a status in **Settings** and a column appears), starting in the order of the statuses in **Settings** (a new Kanban view takes that order once, and keeps its own from then on). Tasks without a status go into an **Unassigned** column, which stays first and shows only while it has cards.
 
 - **Move a card to another column** by dragging it: the task's status becomes the column's status (undoable with **Ctrl/Cmd+Z**). Dropping on **Unassigned** clears the status.
 - **Reorder the columns** by dragging a column header. The order is saved in that view (each Kanban view has its own). **Settings** only supplies the starting order, taken once when the view is first drawn; changing the statuses' order there later (its ▲ ▼ buttons, which also set the legend's order) doesn't change existing views. A status you add in **Settings** appears at the end of each view's columns, and a deleted one disappears.
 - **Click a card** to open its detail panel.
-- **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **card fields** button (the list icon at the left of the toolbar, before the folder name) lists every other column, including custom fields, as checkboxes.
+- **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **Cards** button (the list icon at the left of the toolbar, before the folder name) lists every other column, including custom fields, as checkboxes.
+
+  ![The Cards menu: tick the fields to show on every card](docs/images/kanban-card-fields-en.png)
 - **Add tasks**: the **＋** in a column header, or the **＋ Add task** button under the cards, creates a task with that column's status (none in Unassigned), using the new-task dates from **Settings**. A card's **⋯** menu (or a right-click) has **Add subtask**, which creates a subtask in its parent's folder, and **Delete**.
-- **Subtasks**: a card with subtasks shows a count icon; click it to open the first-level subtasks inside the card. A subtask is not a card of its own while its parent is shown.
+- **Subtasks**: a card with subtasks shows a count icon; click it to open the first-level subtasks inside the card, each with the same fields as the card. A subtask is not a card of its own while its parent is shown.
+
+  ![The subtask count icon on a card](docs/images/kanban-subtask-button-en.png)
+
+  ![The opened subtasks, with the same fields as the card](docs/images/kanban-subtasks-en.png)
 - **Filters** and **presets** work as in the Gantt views, and the cards in a column follow the view's sort. The view keeps its own filters and card fields, like every view.
 
 Dragging a card onto another card to make a subtask isn't supported (Wrike's board doesn't either); use the table.
 
 ## Custom fields
 
-Show any frontmatter key as a table column. In **Settings → Task Gantt → Custom fields**, click **Add field** and give it a **key** (the frontmatter property, e.g. `client`), an optional **label** for the column header, and a **type**:
+Show any frontmatter key as a table column. In **Settings → Task Gantt Board → Custom fields**, click **Add field** and give it a **key** (the frontmatter property, e.g. `client`), an optional **label** for the column header, and a **type**:
 
 - **Text** — shown as is. A list value is shown comma-separated, and editing it writes a list back.
 - **Number** — right-aligned and sorted numerically.
@@ -134,7 +143,7 @@ Tasks use Obsidian's native `tags` (frontmatter `tags:` plus inline `#tag`), so 
 
 ## Coloring tags and folders
 
-Every tag starts from a single **Default tag color** — Obsidian's own tag color unless you change it in **Settings → Task Gantt → Tag colors** — and you can override any individual tag on top of that. Folders get an automatic color from their name instead.
+Every tag starts from a single **Default tag color** — Obsidian's own tag color unless you change it in **Settings → Task Gantt Board → Tag colors** — and you can override any individual tag on top of that. Folders get an automatic color from their name instead.
 
 **Right-click a folder heading, a tag heading, or a tag chip** to change or reset its color. Setting a color registers that tag under **Per-tag colors** in settings; resetting removes it again, so the list holds exactly the tags you have deliberately coloured — everything else follows the default. You can also add a tag there by picking it from your vault's tags, and removing one asks for confirmation, since the settings tab has no undo. Rows are listed alphabetically. Folder colors are right-click only.
 
@@ -146,7 +155,7 @@ Every tag starts from a single **Default tag color** — Obsidian's own tag colo
 
 Press **＋ New task** to create a dated note in the current folder and rename it immediately. You don't have to start there, though: every note inside the target folder already appears as a row — **including notes with no dates yet** — so you can also click an existing note and set **Start** / **Due** in the detail panel to turn it into a scheduled task. Empty cells are double-click editable too, so you can fill a blank value straight from the table.
 
-A new task gets today as both its start and due date by default. Under **Settings → Task Gantt → Task creation**, **Dates of a new task** can be switched to **Backlog (no dates)**, which creates the note with no dates so you can schedule it later.
+A new task gets today as both its start and due date by default. Under **Settings → Task Gantt Board → Task creation**, **Dates of a new task** can be switched to **Backlog (no dates)**, which creates the note with no dates so you can schedule it later.
 
 ![Settings: Task creation, with the dates of a new task](docs/images/task-creation-settings-en.png)
 
@@ -223,7 +232,7 @@ Changes made **outside Obsidian** — renaming, moving or deleting notes in Wind
 
 ## Settings
 
-Open **Settings → Task Gantt** to configure the default folder, subfolder recursion, default zoom, and the **date display format** (`YYYY/MM/DD`, `DD/MM/YYYY`, or `MM/DD/YYYY`; stored dates always stay ISO `YYYY-MM-DD`).
+Open **Settings → Task Gantt Board** to configure the default folder, subfolder recursion, default zoom, and the **date display format** (`YYYY/MM/DD`, `DD/MM/YYYY`, or `MM/DD/YYYY`; stored dates always stay ISO `YYYY-MM-DD`).
 
 The **Timezone** setting (system or a fixed GMT offset, listed with representative cities) controls how times of day are displayed and saved. Changing it re-displays stored times in the new offset.
 
@@ -241,11 +250,11 @@ The **group** is what tells the plugin whether a task is finished. There are fou
 
 You can also rename the **frontmatter keys** the plugin reads (start, end, status, assignee, after, progress, milestone) to match your own vault conventions.
 
-![Task Gantt settings: customizable statuses and frontmatter keys](docs/images/settings-en.png)
+![Task Gantt Board settings: customizable statuses and frontmatter keys](docs/images/settings-en.png)
 
 ## Notifications (optional)
 
-Task Gantt can post reminders for tasks that have a **time of day** to **Discord** and/or **Slack** via incoming webhooks. In **Settings → Task Gantt → Notifications**, set the webhook URLs, choose the targets (start / due), and pick the lead times (1 week / 1 day / 1 hour / 10 minutes before, or at the exact time). Use **Send a test message** to verify the webhook instantly.
+Task Gantt Board can post reminders for tasks that have a **time of day** to **Discord** and/or **Slack** via incoming webhooks. In **Settings → Task Gantt Board → Notifications**, set the webhook URLs, choose the targets (start / due), and pick the lead times (1 week / 1 day / 1 hour / 10 minutes before, or at the exact time). Use **Send a test message** to verify the webhook instantly.
 
 ![Notification settings](docs/images/notification_en.png)
 
@@ -258,7 +267,7 @@ Task Gantt can post reminders for tasks that have a **time of day** to **Discord
 
 ## Google Calendar sync (optional, desktop only)
 
-Task Gantt can keep tasks and a Google calendar in **two-way sync**: task changes (create / reschedule / delete) are pushed as events, and moving or deleting those events in Google Calendar flows back into the task's frontmatter. Each direction can be toggled independently in **Settings → Task Gantt → Google Calendar**.
+Task Gantt Board can keep tasks and a Google calendar in **two-way sync**: task changes (create / reschedule / delete) are pushed as events, and moving or deleting those events in Google Calendar flows back into the task's frontmatter. Each direction can be toggled independently in **Settings → Task Gantt Board → Google Calendar**.
 
 ### Setup
 
@@ -273,7 +282,7 @@ The plugin has no server, so it uses **your own Google Cloud project**:
 
 ### How it syncs
 
-- **Pull only ever touches events that Task Gantt itself created.** Creating an event directly in Google Calendar does **not** create a task, and editing or deleting a foreign (non-plugin) event is ignored — the plugin only reads back changes to events it pushed. Anything already on your calendar is left untouched.
+- **Pull only ever touches events that Task Gantt Board itself created.** Creating an event directly in Google Calendar does **not** create a task, and editing or deleting a foreign (non-plugin) event is ignored — the plugin only reads back changes to events it pushed. Anything already on your calendar is left untouched.
 - By default only tasks with the **`gcal: true`** flag in their frontmatter sync (**opt-in**; toggle it per task in the detail panel — which also shows an **Open in Google Calendar** link once synced). Turn off **Sync flagged tasks only** to sync every dated task in the scope folder instead.
 - Date-only tasks become **all-day events**; tasks with a time of day on both ends become timed events (using the plugin's **Timezone** setting); milestones become one-day events. The linked event's ID is stored in the task's `gcalId` frontmatter key (set automatically — don't edit it by hand).
 - Local edits push within seconds; remote changes are pulled at the configured interval (default 5 minutes). Titles sync one way only (task → event): renaming the event in Google Calendar is reverted on the next push, since renaming files from outside is risky.
@@ -322,9 +331,9 @@ MIT — see [`LICENSE`](./LICENSE).
 
 # 日本語
 
-[English](#task-gantt) | **日本語**
+[English](#task-gantt-board) | **日本語**
 
-プロジェクト管理ツールのようなタスク管理 UI を Obsidian で実現するプラグインです。**1 ファイル = 1 タスク**とし、指定フォルダ配下を **「表＋タイムライン」ガント**で表示・編集します。バーのドラッグで日程変更、依存の作成、マイルストーン、ソート・フィルタ、ドラッグでのフォルダ移動などができます。
+プロジェクト管理ツールのようなタスク管理 UI を Obsidian で実現するプラグインです。**1 ファイル = 1 タスク**とし、指定フォルダ配下を **「表＋タイムライン」ガント**で表示・編集します。バーのドラッグで日程変更、依存の作成、マイルストーン、ソート・フィルタ、ドラッグでのフォルダ移動などができます。ステータスごとの列の**カンバン**でも表示でき、複数の**ビュー**を保存できます。
 
 > **Obsidian 1.11.4 以降**が必要です。
 
@@ -344,7 +353,7 @@ MIT — see [`LICENSE`](./LICENSE).
 
 ## 使い方
 
-1. **設定 → Task Gantt** で**対象フォルダ**を指定（例: `Projects/お掃除`）。
+1. **設定 → Task Gantt Board** で**対象フォルダ**を指定（例: `Projects/お掃除`）。
 2. 左列の **「Gantt を開く」リボンアイコン**（またはコマンド「Gantt を開く」）でビューを開く。リボンは、**現在開いているノートのフォルダ**（またはエクスプローラで選択中のフォルダ）を Gantt 表示し、どちらも無ければ設定の既定フォルダ（未設定なら **Vault ルート**）を開きます。フォルダを右クリック →**「Open as Gantt」**でも開けます。
 3. 直下のサブフォルダが**グループ**、その中の `.md` が**タスク**になります。
 4. バーを**ドラッグ／端をリサイズ**すると、そのファイルの `start`/`end` に書き戻します。**テーブルに表示できる列はすべて、セルをダブルクリックすればその場で編集できます。** 開始・期限はカレンダー、期間は稼働日数の入力、進捗は % の直接入力（0–100。空欄または 0 で未設定）、ステータスはドロップダウン、担当者はボード内で既に使われている名前を候補に出すテキスト欄、タグは詳細パネルと同じエディタ（タグごとのチップと × による削除＋Vault 内の既存タグを候補に出す追加欄）が開きます。Enter またはフォーカスを外すと保存、Esc で取消します。
@@ -382,7 +391,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![手順 1：歯車メニューで進捗列を表示する](docs/images/progresscolumn_ja.png)
 
-**稲妻線**（手順 2：**表示**メニューで**稲妻線**をオン。進捗列を表示しておくと、数値を線と見比べられます）は、今日を基準にした垂線を各タスクの実績到達点まで折り曲げた折れ線です。**今日より左に折れれば遅れ、右なら進み**を意味します。各行の点は、タスクの `progress` に対応するバー上の位置に置かれます（先週が期限なのに 40% のタスクは、線をその 40% 地点まで引き戻します）。100% のタスク、まだ開始日が来ていない未着手タスク、フォルダ行、ロールアップ中の親バーは今日線上を素通りします。開始日を過ぎているのに進捗 0% のタスクは、線を開始日まで引き戻します。線の色は**設定 → Task Gantt → 稲妻線の色**で変更できます。
+**稲妻線**（手順 2：**表示**メニューで**稲妻線**をオン。進捗列を表示しておくと、数値を線と見比べられます）は、今日を基準にした垂線を各タスクの実績到達点まで折り曲げた折れ線です。**今日より左に折れれば遅れ、右なら進み**を意味します。各行の点は、タスクの `progress` に対応するバー上の位置に置かれます（先週が期限なのに 40% のタスクは、線をその 40% 地点まで引き戻します）。100% のタスク、まだ開始日が来ていない未着手タスク、フォルダ行、ロールアップ中の親バーは今日線上を素通りします。開始日を過ぎているのに進捗 0% のタスクは、線を開始日まで引き戻します。線の色は**設定 → Task Gantt Board → 稲妻線の色**で変更できます。
 
 ![手順 2：表示メニューで稲妻線をオンにする。線が各タスクの進捗に沿って折れる](docs/images/progressline_ja.png)
 
@@ -400,21 +409,30 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ## カンバンビュー
 
-**＋ → カンバン**で、ガントのビューの隣に、カンバンのビューを追加できます。Wrike のボードビューのように、ボードのタスクを、**ステータスごとの列にカード**として並べます。列の名前と色は、ステータスのものです（**設定**でステータスを足すと、列が増えます）。列の順序は、最初は**設定**のステータスの順序です（新しいカンバンのビューが、その順序を一度だけ取り込み、以後は自分の順序を持ちます）。ステータスのないタスクは、**未割当**の列に入ります。未割当は、いつも先頭で、カードがあるあいだだけ表示されます。
+**＋ → カンバン**で、ガントのビューの隣に、カンバンのビューを追加できます。
+
+![＋のメニュー（今のビューをコピー・ガント・カンバン）と、ステータスごとの列のカンバン](docs/images/kanban-add-view-ja.png)
+Wrike のボードビューのように、ボードのタスクを、**ステータスごとの列にカード**として並べます。列の名前と色は、ステータスのものです（**設定**でステータスを足すと、列が増えます）。列の順序は、最初は**設定**のステータスの順序です（新しいカンバンのビューが、その順序を一度だけ取り込み、以後は自分の順序を持ちます）。ステータスのないタスクは、**未割当**の列に入ります。未割当は、いつも先頭で、カードがあるあいだだけ表示されます。
 
 - **カードを別の列へドラッグ**すると、タスクのステータスが、その列のステータスに変わります（**Ctrl/Cmd+Z** で取り消せます）。**未割当**にドロップすると、ステータスが外れます。
 - **列の見出しをドラッグ**すると、列の順序を入れ替えられます。順序は、そのビューに保存されます（カンバンのビューごとに別の順序です）。**設定**が渡すのは、最初の順序だけです（ビューを最初に描くときに、一度だけ取り込みます）。あとから**設定**でステータスの順序を変えても（▲ ▼ ボタン。凡例の順序も変わります）、既存のビューは変わりません。**設定**でステータスを足すと、各ビューの列の末尾に増え、消すと、その列も消えます。
 - **カードをクリック**すると、詳細パネルが開きます。
-- **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カードの項目**ボタン（ツールバーの左端、フォルダ名の左にある一覧のアイコン）から、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます。
+- **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カード**ボタン（ツールバーの左端、フォルダ名の左にある一覧のアイコン）から、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます。
+
+  ![カードのメニュー：すべてのカードに出す項目を選ぶ](docs/images/kanban-card-fields-ja.png)
 - **タスクの追加**: 列の見出しの **＋**、または、カードの下の **＋ タスクを追加** で、その列のステータスのタスクを作ります（未割当の列ではステータスなし。日付は**設定**の新規タスクの日付に従います）。カードの **⋯** メニュー（または右クリック）には、**サブタスクを追加**（親と同じフォルダに作ります）と**削除**があります。
-- **サブタスク**: サブタスクのあるカードには、件数のアイコンが出ます。クリックすると、1 階層目のサブタスクが、カードの中に開きます。親が表示されているあいだ、サブタスクは独立したカードにはなりません。
+- **サブタスク**: サブタスクのあるカードには、件数のアイコンが出ます。クリックすると、1 階層目のサブタスクが、親のカードと同じ項目つきで、カードの中に開きます。親が表示されているあいだ、サブタスクは独立したカードにはなりません。
+
+  ![カードのサブタスクの件数アイコン](docs/images/kanban-subtask-button-ja.png)
+
+  ![開いたサブタスク（親のカードと同じ項目つき）](docs/images/kanban-subtasks-ja.png)
 - **フィルタ**と**プリセット**は、ガントのビューと同じように使えます。列の中のカードは、ビューの並べ替えに従います。フィルタとカードの項目は、ほかのビューと同じく、ビューごとに保存されます。
 
 カードを別のカードにドラッグしてサブタスクにする操作は、対応していません（Wrike のボードも同じです）。表で行ってください。
 
 ## カスタムフィールド
 
-任意のフロントマターのキーを、テーブルの列として表示できます。**設定 → Task Gantt → カスタムフィールド**で**フィールドを追加**を押し、**キー**（フロントマターのプロパティ名。例: `client`）、列見出しに使う**表示名**（省略可）、**種類**を指定します。
+任意のフロントマターのキーを、テーブルの列として表示できます。**設定 → Task Gantt Board → カスタムフィールド**で**フィールドを追加**を押し、**キー**（フロントマターのプロパティ名。例: `client`）、列見出しに使う**表示名**（省略可）、**種類**を指定します。
 
 - **テキスト** — そのまま表示します。リストの値はカンマ区切りで表示し、編集するとリストのまま書き戻します。
 - **数値** — 右揃えで表示し、数値として並べ替えます。
@@ -458,7 +476,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ## タグ・フォルダの色
 
-タグの色はすべて **タグの既定色** を土台にし、そこから個別に上書きします。既定色は **設定 → Task Gantt → タグの色** で指定でき、未設定なら Obsidian 本体のタグ色に従います。フォルダは従来どおり名前から自動で色が付きます。
+タグの色はすべて **タグの既定色** を土台にし、そこから個別に上書きします。既定色は **設定 → Task Gantt Board → タグの色** で指定でき、未設定なら Obsidian 本体のタグ色に従います。フォルダは従来どおり名前から自動で色が付きます。
 
 **フォルダの見出し・タグの見出し・タグのチップを右クリック**して、色の変更／リセットができます。色を指定すると、そのタグが設定の**個別のタグ**に登録され、リセットすると登録が外れます。つまり一覧には**自分で色を決めたタグだけ**が並び、それ以外は既定色に従います。設定側からは Vault のタグを選んで追加でき、削除には確認が入ります（設定画面には取り消しが無いため）。並びはタグ名順です（フォルダの色は右クリックのみ）。
 
@@ -470,7 +488,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 **＋ 新規タスク**で現在のフォルダに日付付きノートを作り、すぐ名前を付けられます。もちろんそこから始める必要はありません。対象フォルダ内のノートは、**まだ日付が無いものも含めて**そのまま行として表示されるので、既存ノートをクリックして詳細パネルで **開始 / 期限** を入力すれば、そのままスケジュール付きタスクになります。各セルは**値が空のままでもダブルクリックで編集できる**ので、表から直接入力しても構いません。
 
-新規タスクは、既定で開始・期限とも作成日（今日）になります。**設定 → Task Gantt → タスク作成時の設定**の**新規タスクの日付**を**バックログ（日付なし）**に切り替えると、日付を入れずにノートを作り、あとからスケジュールできます。
+新規タスクは、既定で開始・期限とも作成日（今日）になります。**設定 → Task Gantt Board → タスク作成時の設定**の**新規タスクの日付**を**バックログ（日付なし）**に切り替えると、日付を入れずにノートを作り、あとからスケジュールできます。
 
 ![設定：タスク作成時の設定と、新規タスクの日付](docs/images/task-creation-settings-ja.png)
 
@@ -547,7 +565,7 @@ after:
 
 ## 設定
 
-**設定 → Task Gantt** から、既定フォルダ・サブフォルダの再帰・既定ズーム・**日付の表示フォーマット**（`YYYY/MM/DD`／`DD/MM/YYYY`／`MM/DD/YYYY`。保存値は常に ISO `YYYY-MM-DD`）を設定できます。
+**設定 → Task Gantt Board** から、既定フォルダ・サブフォルダの再帰・既定ズーム・**日付の表示フォーマット**（`YYYY/MM/DD`／`DD/MM/YYYY`／`MM/DD/YYYY`。保存値は常に ISO `YYYY-MM-DD`）を設定できます。
 
 **タイムゾーン**設定（システム / 固定GMTオフセット・代表都市付き一覧）で時刻の表示・保存に使うタイムゾーンを選べます。変更すると保存済みの時刻が新しいオフセットに換算されて表示されます。
 
@@ -565,11 +583,11 @@ after:
 
 プラグインが読む**フロントマターのキー名**（start / end / status / assignee / after / progress / milestone）も、各自の Vault の慣習に合わせて変更できます。
 
-![Task Gantt の設定：カスタマイズ可能なステータスとフロントマターキー](docs/images/settings-ja.png)
+![Task Gantt Board の設定：カスタマイズ可能なステータスとフロントマターキー](docs/images/settings-ja.png)
 
 ## 通知（任意）
 
-**時刻を設定した**タスクの開始・期限を、Incoming Webhook 経由で **Discord** / **Slack** に通知できます。**設定 → Task Gantt → 通知** で Webhook URL・対象（開始/期限）・通知タイミング（1週間前・1日前・1時間前・10分前・時刻ちょうど）を設定してください。**テスト送信**ボタンで Webhook の疎通をすぐ確認できます。
+**時刻を設定した**タスクの開始・期限を、Incoming Webhook 経由で **Discord** / **Slack** に通知できます。**設定 → Task Gantt Board → 通知** で Webhook URL・対象（開始/期限）・通知タイミング（1週間前・1日前・1時間前・10分前・時刻ちょうど）を設定してください。**テスト送信**ボタンで Webhook の疎通をすぐ確認できます。
 
 ![通知設定](docs/images/notification_ja.png)
 
@@ -582,7 +600,7 @@ after:
 
 ## Google カレンダー同期（任意・デスクトップ専用）
 
-タスクと Google カレンダーを**双方向で同期**できます。タスクの作成・日程変更・削除はイベントとして反映され、Google カレンダー側でのイベント移動・削除はタスクのフロントマターへ書き戻されます。**設定 → Task Gantt → Google カレンダー** で方向ごと（Push / Pull）に ON/OFF できます。
+タスクと Google カレンダーを**双方向で同期**できます。タスクの作成・日程変更・削除はイベントとして反映され、Google カレンダー側でのイベント移動・削除はタスクのフロントマターへ書き戻されます。**設定 → Task Gantt Board → Google カレンダー** で方向ごと（Push / Pull）に ON/OFF できます。
 
 ### セットアップ
 
@@ -597,7 +615,7 @@ after:
 
 ### 同期の仕組み
 
-- **Pull（Google カレンダー→タスク）が対象にするのは、Task Gantt 自身が作成したイベントのみです。** Google カレンダー側で直接イベントを新規作成しても、それがタスクとして取り込まれることは**ありません**。また、プラグインが関与していない既存イベントの編集・削除も無視されます — Pull は自分がPushしたイベントへの変更を読み戻すだけで、カレンダーに元からある予定には一切手を付けません。
+- **Pull（Google カレンダー→タスク）が対象にするのは、Task Gantt Board 自身が作成したイベントのみです。** Google カレンダー側で直接イベントを新規作成しても、それがタスクとして取り込まれることは**ありません**。また、プラグインが関与していない既存イベントの編集・削除も無視されます — Pull は自分がPushしたイベントへの変更を読み戻すだけで、カレンダーに元からある予定には一切手を付けません。
 - 既定ではフロントマターに **`gcal: true`** フラグを付けたタスクだけが同期されます（**オプトイン**。詳細パネルのトグルで切替でき、同期済みタスクには **Google カレンダーで開く** リンクも表示されます）。**フラグ付きタスクのみ同期**をオフにすると、対象フォルダ内の日付付きタスク全てが対象になります。
 - 日付のみのタスクは**終日イベント**、両端に時刻のあるタスクは時刻付きイベント（プラグインの**タイムゾーン**設定を使用）、マイルストーンは1日のイベントになります。紐付け先イベントの ID はタスクの `gcalId` キーに自動で保存されます（手動編集は不可）。
 - ローカルの編集は数秒で Push され、Google カレンダー側の変更は設定間隔（既定5分）で Pull されます。タイトルの同期はタスク→イベントの一方向のみで、イベント名を Google カレンダー側で変更しても次の Push でタスク名に戻ります（外部からのファイルリネームは危険なため）。
