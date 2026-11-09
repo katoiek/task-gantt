@@ -84,9 +84,12 @@ export type DateValue =
   | { kind: "relative"; amount: number; unit: DateUnit; dir: DateDir } // 相対日（今日基準・毎回再計算）/ relative to today, recomputed each render
   | { kind: "range"; from: string; to: string }; // 期間（op="is" のみ・ISO 両端）/ a date range (op "is" only)
 // 日付フィルタ 1 件 / one date filter (start/due)
+// カスタムフィールドのフィルタが指す項目。"cf:<フィールド ID>"（列 ID と同じ）/ the item a custom-field filter points at: "cf:<field id>" (the same as its column id)
+export type CustomFilterField = `cf:${string}`;
+
 export interface DateFilterItem {
   kind: "date";
-  field: DateField;
+  field: DateField | CustomFilterField;
   op: DateOp;
   value?: DateValue; // empty/notEmpty では未使用 / unused for empty/notEmpty
 }
@@ -106,17 +109,27 @@ export interface CategoryFilter {
 
 // ── テキスト系フィルタ（タスク名）/ text filter (task name) ──
 export type TextField = "name";
-// と一致 / 以外 / を含む / を含まない / で始まる / で終わる
-export type TextOp = "is" | "isNot" | "contains" | "notContains" | "startsWith" | "endsWith";
+// と一致 / 以外 / を含む / を含まない / で始まる / で終わる / 空 / 空でない（空と空でないは、カスタムフィールド用）
+export type TextOp = "is" | "isNot" | "contains" | "notContains" | "startsWith" | "endsWith" | "empty" | "notEmpty";
 export interface TextFilter {
   kind: "text";
-  field: TextField;
+  field: TextField | CustomFilterField; // 文字型のカスタムフィールドも / text-type custom fields too
   op: TextOp;
-  value: string; // 空文字は素通し（絞り込まない）/ empty string = no effect
+  value: string; // 空文字は素通し（絞り込まない。empty / notEmpty を除く）/ empty string = no effect (except for empty / notEmpty)
+}
+
+// ── 数値系フィルタ（数値型のカスタムフィールド）/ number filter (number-type custom fields) ──
+// ＝ / ≠ / ＞ / ＜ / 以上 / 以下 / 空 / 空でない
+export type NumberOp = "eq" | "ne" | "gt" | "lt" | "gte" | "lte" | "empty" | "notEmpty";
+export interface NumberFilter {
+  kind: "number";
+  field: CustomFilterField;
+  op: NumberOp;
+  value: number; // empty / notEmpty では未使用 / unused for empty / notEmpty
 }
 
 // 統合フィルタ（カテゴリ or 日付 or テキスト）と結合方法 / a unified filter + how multiple filters combine
-export type Filter = CategoryFilter | DateFilterItem | TextFilter;
+export type Filter = CategoryFilter | DateFilterItem | TextFilter | NumberFilter;
 export type FilterMatch = "all" | "any"; // all=AND / any=OR
 
 // フィルタ構成のプリセット（filters＋一致条件をひとまとめに）/ a saved filter configuration

@@ -1,6 +1,6 @@
 import { ItemView, Menu, MarkdownRenderer, WorkspaceLeaf, setIcon, Notice, Platform, TFile, ViewStateResult, moment } from "obsidian";
 import type GanttPlugin from "./main";
-import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, DateValue, DateOp, DateField, DateUnit, DateDir, StatusGroup, STATUS_GROUPS } from "./types";
+import { Task, Row, ZoomMode, DepType, GanttViewState, VIEW_TYPE_GANTT, Filter, FilterMatch, FilterPreset, DateFilterItem, CategoryFilter, CategoryField, CategoryOp, TextFilter, TextOp, NumberFilter, NumberOp, CustomFilterField, CustomField, DateValue, DateOp, DateField, DateUnit, DateDir, StatusGroup, STATUS_GROUPS } from "./types";
 import {
   collectTasks,
   collectFolders,
@@ -1303,12 +1303,33 @@ export class GanttView extends ItemView {
       case "notContains": return s.textOpNotContains;
       case "startsWith": return s.textOpStartsWith;
       case "endsWith": return s.textOpEndsWith;
+      case "empty": return s.dfOpEmpty;
+      case "notEmpty": return s.dfOpNotEmpty;
     }
+  }
+  // 数値の演算子（記号。空・空でないは、ほかと同じ文言）/ number operators (symbols; empty / not empty use the shared wording)
+  private numOpLabel(op: NumberOp): string {
+    const s = tr();
+    switch (op) {
+      case "eq": return "=";
+      case "ne": return "≠";
+      case "gt": return ">";
+      case "lt": return "<";
+      case "gte": return "≥";
+      case "lte": return "≤";
+      case "empty": return s.dfOpEmpty;
+      case "notEmpty": return s.dfOpNotEmpty;
+    }
+  }
+  // フィルタが指すカスタムフィールド（無ければ undefined）/ the custom field a filter points at (undefined when none)
+  private filterCustomField(field: string): CustomField | undefined {
+    return field.startsWith("cf:") ? validCustomFields(this.plugin.settings).find((c) => `cf:${c.id}` === field) : undefined;
   }
   // フィルタのフィールド名 / a filter's field label
   private filterFieldLabel(f: Filter): string {
-    if (f.kind === "date") return f.field === "start" ? tr().fieldStart : tr().fieldDue;
-    if (f.kind === "text") return tr().fieldName;
+    if (f.kind === "number") return this.customFieldName(f.field);
+    if (f.kind === "date") return f.field === "start" ? tr().fieldStart : f.field === "end" ? tr().fieldDue : this.customFieldName(f.field);
+    if (f.kind === "text") return f.field === "name" ? tr().fieldName : this.customFieldName(f.field);
     switch (f.field) {
       case "status": return tr().fieldStatus;
       case "statusGroup": return tr().fieldStatusGroup;
@@ -1316,8 +1337,13 @@ export class GanttView extends ItemView {
       case "tag": return tr().fieldTags;
     }
   }
+  private customFieldName(field: string): string {
+    const c = this.filterCustomField(field);
+    return c ? c.label.trim() || c.key.trim() : field;
+  }
   // チップ/メニューのアイコン / chip & menu icon
   private filterIcon(f: Filter): string {
+    if (f.kind === "number") return "hash";
     if (f.kind === "date") return "calendar";
     if (f.kind === "text") return "type";
     switch (f.field) {
@@ -1362,8 +1388,12 @@ export class GanttView extends ItemView {
       }
       return val ? `${field}: ${op} ${val}` : `${field}: ${op}`;
     }
+    if (f.kind === "number") {
+      return f.op === "empty" || f.op === "notEmpty" ? `${field}: ${this.numOpLabel(f.op)}` : `${field} ${this.numOpLabel(f.op)} ${Number.isFinite(f.value) ? f.value : "…"}`;
+    }
     if (f.kind === "text") {
       const q = f.value.trim();
+      if (f.op === "empty" || f.op === "notEmpty") return `${field}: ${this.textOpLabel(f.op)}`;
       return q ? `${field}: ${this.textOpLabel(f.op)} "${q}"` : `${field}: ${this.textOpLabel(f.op)}`;
     }
     if (f.op === "empty" || f.op === "notEmpty") return `${field}: ${this.catOpLabel(f.op)}`;
@@ -1446,6 +1476,20 @@ export class GanttView extends ItemView {
     };
     addDate("start", tr().fieldStart);
     addDate("end", tr().fieldDue);
+    // カスタムフィールド（設定で作ったもの）：型ごとに、文字・数値・日付のフィルタになる / custom fields (made in the settings): a text, number or date filter by type
+    const fields = validCustomFields(this.plugin.settings);
+    if (fields.length) m.addSeparator();
+    for (const cf of fields) {
+      const field: CustomFilterField = `cf:${cf.id}`;
+      const label = cf.label.trim() || cf.key.trim();
+      m.addItem((i) => i.setTitle(label).setIcon(cf.type === "number" ? "hash" : cf.type === "date" ? "calendar" : "type").onClick(() => {
+        if (cf.type === "number") this.vs.filters.push({ kind: "number", field, op: "eq", value: NaN });
+        else if (cf.type === "date") this.vs.filters.push({ kind: "date", field, op: "onOrAfter", value: { kind: "preset", preset: "today" } });
+        else this.vs.filters.push({ kind: "text", field, op: "contains", value: "" });
+        this.commitFilters();
+        this.openLastFilterEditor();
+      }));
+    }
     const r = anchor.getBoundingClientRect();
     m.showAtPosition({ x: r.left, y: r.bottom + 4 });
   }
@@ -1573,7 +1617,8 @@ export class GanttView extends ItemView {
         del.onclick = () => { this.vs.filters.splice(index, 1); commit(); close(); };
 
         if (f.kind === "category") this.renderCategoryEditor(menu, f, commit, renderBody);
-        else if (f.kind === "text") this.renderTextEditor(menu, f, commit);
+        else if (f.kind === "text") this.renderTextEditor(menu, f, commit, renderBody);
+        else if (f.kind === "number") this.renderNumberEditor(menu, f, commit, renderBody);
         else this.renderDateEditor(menu, f, commit, renderBody);
       };
       renderBody();
@@ -1608,19 +1653,40 @@ export class GanttView extends ItemView {
     }
   }
 
-  // テキスト（タスク名）のエディタ本体 / text (task name) editor body
-  private renderTextEditor(menu: HTMLElement, f: TextFilter, commit: () => void): void {
+  // テキスト（タスク名・文字型のカスタムフィールド）のエディタ本体。空・空でないは、カスタムフィールドだけ（名前は、いつも空でない）
+  // text (task name, text-type custom fields) editor body; empty / not empty only for custom fields (a name is never empty)
+  private renderTextEditor(menu: HTMLElement, f: TextFilter, commit: () => void, rebuild: () => void): void {
     const opRow = menu.createDiv({ cls: "ogantt-datemenu-val" });
     const opSel = opRow.createEl("select");
-    for (const op of ["is", "isNot", "contains", "notContains", "startsWith", "endsWith"] as TextOp[]) {
+    const ops: TextOp[] = ["is", "isNot", "contains", "notContains", "startsWith", "endsWith"];
+    if (f.field !== "name") ops.push("empty", "notEmpty");
+    for (const op of ops) {
       const o = opSel.createEl("option", { text: this.textOpLabel(op), value: op });
       if (op === f.op) o.selected = true;
     }
-    opSel.onchange = () => { f.op = opSel.value as TextOp; commit(); };
+    opSel.onchange = () => { f.op = opSel.value as TextOp; commit(); rebuild(); };
+    if (f.op === "empty" || f.op === "notEmpty") return;
     const body = menu.createDiv({ cls: "ogantt-datemenu-val" });
     const input = body.createEl("input", { type: "text", cls: "ogantt-datemenu-text" });
     input.value = f.value;
     input.oninput = () => { f.value = input.value; commit(); }; // 入力ごとに絞り込み / filter live as you type
+  }
+
+  // 数値（数値型のカスタムフィールド）のエディタ本体 / number (number-type custom fields) editor body
+  private renderNumberEditor(menu: HTMLElement, f: NumberFilter, commit: () => void, rebuild: () => void): void {
+    const opRow = menu.createDiv({ cls: "ogantt-datemenu-val" });
+    const opSel = opRow.createEl("select");
+    for (const op of ["eq", "ne", "gt", "lt", "gte", "lte", "empty", "notEmpty"] as NumberOp[]) {
+      const o = opSel.createEl("option", { text: this.numOpLabel(op), value: op });
+      if (op === f.op) o.selected = true;
+    }
+    opSel.onchange = () => { f.op = opSel.value as NumberOp; commit(); rebuild(); };
+    if (f.op === "empty" || f.op === "notEmpty") return;
+    const body = menu.createDiv({ cls: "ogantt-datemenu-val" });
+    const input = body.createEl("input", { type: "number", cls: "ogantt-datemenu-text" });
+    input.value = Number.isFinite(f.value) ? String(f.value) : "";
+    // 空欄は、まだ値が無い（絞り込まない）/ blank = no value yet (no narrowing)
+    input.oninput = () => { f.value = input.value === "" ? NaN : Number(input.value); commit(); };
   }
 
   // 日付（開始日/期限日）のエディタ本体 / date editor body

@@ -109,7 +109,7 @@ Phase 1 → Redo（Phase 1-5）→ Phase 2（列レジストリ → Custom field
 - 設定で `{ key, label, type: "text" | "number" | "date" }` の配列を宣言する（`GanttSettings.customFields`）。設定タブに追加・削除 UI を作る。
 - `collectTasks`（`src/model.ts`）で `Task.custom: Record<string, string | number | undefined>` を読む。
 - レジストリに動的な列として登録し、表示・ソート・Inline edit に対応させる（date 型は既存の日付ピッカーを流用）。書き込みは `mutate` 経由で Undo 可能にする。
-- 任意: フィルタにも対応させる（text → TextFilter 相当、number / date → 比較演算子）。
+- フィルタにも対応（3.6）：text → TextFilter（空・空でない を追加。リストは、どれか 1 つでも当てはまれば一致）、number → NumberFilter（＝ ≠ ＞ ＜ 以上 以下 空 空でない）、date → DateFilterItem の field に `cf:<id>`。フィールドを消すと、そのフィルタも消す。
 - i18n の新規文言は 8 言語すべてに追加する。
 - **実装済み**（フィルタ対応は未着手）。上の案からの変更点:
   - `CustomField` は不変の `id` を持ち、列 id は `cf:<id>`。キー名を変えても列の表示・幅・並べ替えが外れない。削除時は `visibleColumns` / `columnWidths` / `sortBy` から片付ける。

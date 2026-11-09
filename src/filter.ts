@@ -1,30 +1,59 @@
 // フィルタ判定とグループ再マッピング（ビューから切り出した純粋関数）
 // Filter matching and group remapping (pure functions extracted from the view)
-import { Task, Filter, FilterMatch, StatusDef } from "./types";
+import { Task, Filter, FilterMatch, StatusDef, CustomValue } from "./types";
 import { anchorStart, anchorEnd, statusGroupOf } from "./model";
 import { dayIndex, matchDate } from "./timeline";
 import { linkLabel } from "./links";
 
 export type GroupBy = "folder" | "status" | "assignee" | "tag";
 
+// カスタムフィールドの値を、比べる文字の一覧に。リストは要素ごと、空の文字は捨てる / a custom field's value as the texts to compare: a list per element, blanks dropped
+function customItems(v: CustomValue | undefined): string[] {
+  const list = Array.isArray(v) ? v : v === undefined ? [] : [String(v)];
+  return list.map((x) => String(x).trim()).filter((x) => x !== "");
+}
+
 // 統合フィルタ 1 件がタスクに合致するか / does one unified filter match a task
 export function matchFilter(t: Task, f: Filter, statuses: StatusDef[], today: number): boolean {
   if (f.kind === "date") {
-    const iso = f.field === "start" ? anchorStart(t) : anchorEnd(t);
+    // 開始・期限のほか、日付型のカスタムフィールド（日付部分のみ）/ start and due, and date-type custom fields (the date part only)
+    const cv = f.field === "start" || f.field === "end" ? undefined : t.custom[f.field.slice(3)];
+    const iso = f.field === "start" ? anchorStart(t) : f.field === "end" ? anchorEnd(t) : typeof cv === "string" && cv ? cv.slice(0, 10) : undefined;
     return matchDate(iso ? dayIndex(iso) : undefined, f, today);
   }
-  // テキスト（タスク名）：大文字小文字を無視。空の入力は素通し / text (name): case-insensitive; empty query = no effect
+  // 数値（カスタムフィールド）：数値でない値は「空」として扱う / number (custom fields): a non-number counts as empty
+  if (f.kind === "number") {
+    const cv = t.custom[f.field.slice(3)];
+    const n = typeof cv === "number" && Number.isFinite(cv) ? cv : undefined;
+    if (f.op === "empty") return n === undefined;
+    if (f.op === "notEmpty") return n !== undefined;
+    if (!Number.isFinite(f.value)) return true; // 値がまだ無いフィルタは、絞り込まない / a filter without a value yet doesn't narrow
+    if (n === undefined) return false; // 数値の無いタスクは、比較から外れる（空のときだけ別）/ a task without a number drops out of a comparison (only "empty" differs)
+    switch (f.op) {
+      case "eq": return n === f.value;
+      case "ne": return n !== f.value;
+      case "gt": return n > f.value;
+      case "lt": return n < f.value;
+      case "gte": return n >= f.value;
+      case "lte": return n <= f.value;
+    }
+  }
+  // テキスト（タスク名・文字型のカスタムフィールド）：大文字小文字を無視。空の入力は素通し。リストの値は、どれか 1 つでも当てはまれば一致（否定の演算は、どれも当てはまらないとき）
+  // text (name, text-type custom fields): case-insensitive; an empty query = no effect. A list value matches when any element does (a negative op: when none does)
   if (f.kind === "text") {
+    const items = f.field === "name" ? [t.name] : customItems(t.custom[f.field.slice(3)]);
+    if (f.op === "empty") return items.length === 0;
+    if (f.op === "notEmpty") return items.length > 0;
     const q = f.value.trim().toLowerCase();
     if (q === "") return true;
-    const name = t.name.toLowerCase();
+    const low = items.map((x) => x.toLowerCase());
     switch (f.op) {
-      case "is": return name === q;
-      case "isNot": return name !== q;
-      case "contains": return name.includes(q);
-      case "notContains": return !name.includes(q);
-      case "startsWith": return name.startsWith(q);
-      case "endsWith": return name.endsWith(q);
+      case "is": return low.some((x) => x === q);
+      case "isNot": return !low.some((x) => x === q);
+      case "contains": return low.some((x) => x.includes(q));
+      case "notContains": return !low.some((x) => x.includes(q));
+      case "startsWith": return low.some((x) => x.startsWith(q));
+      case "endsWith": return low.some((x) => x.endsWith(q));
     }
   }
   // カテゴリ（ステータス/グループ/担当者/タグ）：タスクの該当値集合を作って判定 / category: build the task's value set

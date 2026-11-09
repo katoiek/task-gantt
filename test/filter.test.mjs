@@ -86,5 +86,33 @@ check("status grouping uses labels, raw id for unknown, none for unset",
 check("assignee grouping", groupsOf(regroup(ALL, "assignee", false, STATUSES, "(none)")) === "Alpha Plan:kei,Beta:(none),gamma:(none),Delta:(none)");
 check("regroup doesn't mutate the input", A.groups[0] === "Proj");
 
+// ── カスタムフィールド（文字・数値・日付）/ custom fields (text, number, date) ──
+{
+  const cf = (name, custom) => task({ name, custom });
+  const X = cf("X", { c1: "Acme Corp", n1: 10, d1: "2026-11-02", l1: ["red", "blue"] });
+  const Y = cf("Y", { c1: "Beta Inc", n1: 3, d1: "2026-12-01", l1: ["green"] });
+  const Z = cf("Z", {}); // 何も無い / nothing set
+  const ctext = (field, op, value) => ({ kind: "text", field, op, value });
+  const m = (t, f) => matchFilter(t, f, STATUSES, TODAY);
+  check("custom text: 含む・で始まる（大文字小文字無視）", m(X, ctext("cf:c1", "contains", "ACME")) && !m(Y, ctext("cf:c1", "contains", "acme")) && m(Y, ctext("cf:c1", "startsWith", "be")));
+  check("custom text: 空・空でない", m(Z, ctext("cf:c1", "empty", "")) && !m(X, ctext("cf:c1", "empty", "")) && m(X, ctext("cf:c1", "notEmpty", "")) && !m(Z, ctext("cf:c1", "notEmpty", "")));
+  check("custom text: 値の無いタスクは、含むに合わない・含まないに合う", !m(Z, ctext("cf:c1", "contains", "a")) && m(Z, ctext("cf:c1", "notContains", "a")));
+  check("custom text: 空の入力は、絞り込まない", m(X, ctext("cf:c1", "contains", "  ")) && m(Z, ctext("cf:c1", "contains", "")));
+  check("custom text: リストは、どれか 1 つでも当てはまれば一致", m(X, ctext("cf:l1", "is", "blue")) && m(X, ctext("cf:l1", "contains", "re")) && !m(Y, ctext("cf:l1", "is", "blue")));
+  check("custom text: リストの否定は、どれも当てはまらないとき", !m(X, ctext("cf:l1", "isNot", "blue")) && m(Y, ctext("cf:l1", "isNot", "blue")) && !m(X, ctext("cf:l1", "notContains", "re")));
+  const cnum = (op, value) => ({ kind: "number", field: "cf:n1", op, value });
+  check("custom number: 6 つの比較", m(X, cnum("eq", 10)) && !m(Y, cnum("eq", 10)) && m(Y, cnum("ne", 10)) && m(X, cnum("gt", 5)) && !m(Y, cnum("gt", 5)) && m(Y, cnum("lt", 5)) && m(X, cnum("gte", 10)) && m(Y, cnum("lte", 3)) && !m(X, cnum("lte", 9)));
+  check("custom number: 空・空でない", m(Z, cnum("empty", NaN)) && !m(X, cnum("empty", NaN)) && m(X, cnum("notEmpty", NaN)) && !m(Z, cnum("notEmpty", NaN)));
+  check("custom number: 数値の無いタスクは、比較から外れる", !m(Z, cnum("eq", 0)) && !m(Z, cnum("ne", 0)) && !m(Z, cnum("lt", 100)));
+  check("custom number: 値がまだ無いフィルタ（空欄・null）は、絞り込まない", m(X, cnum("gt", NaN)) && m(Z, cnum("gt", NaN)) && m(Y, cnum("eq", null)));
+  check("custom number: 文字の値は、空として扱う", m(cf("W", { n1: "abc" }), cnum("empty", NaN)));
+  const cdate = (op, value) => ({ kind: "date", field: "cf:d1", op, value });
+  const spec = (date) => ({ kind: "specific", date });
+  check("custom date: 日付の比較（開始・期限と同じ）", m(X, cdate("is", spec("2026-11-02"))) && m(X, cdate("before", spec("2026-11-10"))) && !m(Y, cdate("before", spec("2026-11-10"))) && m(Y, cdate("onOrAfter", spec("2026-12-01"))));
+  check("custom date: 期間・空・空でない", m(X, cdate("is", { kind: "range", from: "2026-11-01", to: "2026-11-30" })) && !m(Y, cdate("is", { kind: "range", from: "2026-11-01", to: "2026-11-30" })) && m(Z, cdate("empty")) && m(X, cdate("notEmpty")) && !m(Z, cdate("onOrAfter", spec("2000-01-01"))));
+  check("custom date: 時刻つきの値は、日付の部分で比べる", m(cf("T", { d1: "2026-11-02T09:30:00+09:00" }), cdate("is", spec("2026-11-02"))));
+  check("custom: applyFilters で、すべて（AND）・どれか（OR）", names(applyFilters([X, Y, Z], [cnum("gt", 1), ctext("cf:c1", "contains", "acme")], "all", STATUSES, TODAY)) === "X" && names(applyFilters([X, Y, Z], [cnum("gt", 5), ctext("cf:c1", "contains", "beta")], "any", STATUSES, TODAY)) === "X,Y");
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

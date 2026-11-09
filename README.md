@@ -149,6 +149,8 @@ A **filter row** below the options narrows the board. Click **Add filter** and p
 - **Status / Status group / Assignee / Tag** let you tick several values — including **(none)** for unset — with *is / is not / is empty / is not empty*.
 - **Start date / Due date** compare against a preset (yesterday/today/tomorrow), a specific date, a relative date (e.g. *1 week from now*, recomputed each day), or a date range, with *is / before / after / on or before / on or after / empty / not empty*.
 
+- **Custom fields** you made in the settings appear at the end of the **Add filter** list, and filter by their type. **Text**: *is / is not / contains / does not contain / starts with / ends with / empty / not empty* (case-insensitive; a list value matches when any one of its items does, and *is not* / *does not contain* when none does). **Number**: *= / ≠ / > / < / ≥ / ≤ / empty / not empty*. **Date**: the same choices as Start and Due. A task without a value drops out of every comparison except *empty*. Deleting a custom field removes its filters.
+
 ![The filter row with chips and the match toggle](docs/images/filter-en.png)
 
 With two or more filters, choose **Show items matching → Match all** (AND) or **Match any** (OR) on the right.
@@ -357,7 +359,7 @@ See [`docs/adr/`](./docs/adr/) for the rationale behind design decisions (latest
 
 ## Limitations
 
-Auto-scheduling (critical path), sub-day time granularity, and cross-folder aggregation are not implemented. Custom fields can't be used in filters yet.
+Auto-scheduling (critical path), sub-day time granularity, and cross-folder aggregation are not implemented.
 
 ## License
 
@@ -517,6 +519,7 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
 - **名前**：と一致／以外／を含む／を含まない／で始まる／で終わる
 - **ステータス／ステータスグループ／担当者／タグ**：複数値をチェックで選択（**（なし）＝未設定**も選べます）。と一致／以外／未設定／設定あり
 - **開始日／期限日**：プリセット（昨日・今日・明日）／具体的な日付／相対的な日付（例：*1 週間後*・毎日再計算）／期間と比較。と一致／より前／より後／以前／以後／未設定／設定あり
+- **カスタムフィールド**：設定で作ったフィールドが、**フィルタを追加**の一覧の最後に並び、種類ごとに絞り込めます。**文字**：と一致／以外／を含む／を含まない／で始まる／で終わる／未設定／設定あり（大文字小文字は区別しません。リストの値は、どれか 1 つでも当てはまれば一致し、「以外」「を含まない」は、どれも当てはまらないときに一致します）。**数値**：＝／≠／＞／＜／以上／以下／未設定／設定あり。**日付**：開始日・期限日と同じ選択肢。値のないタスクは、「未設定」以外の比較から外れます。カスタムフィールドを削除すると、そのフィールドのフィルタも消えます。
 
 ![チップと一致条件トグルを備えたフィルタ行](docs/images/filter-ja.png)
 
@@ -726,7 +729,7 @@ npm test         # ヘッドレスのモデルテスト
 
 ## 既知の制限
 
-自動スケジューリング（クリティカルパス）・時刻粒度・複数フォルダ横断は未実装。カスタムフィールドはまだフィルタに使えません。
+自動スケジューリング（クリティカルパス）・時刻粒度・複数フォルダ横断は未実装。
 
 ## ライセンス
 
