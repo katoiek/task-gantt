@@ -22,7 +22,9 @@ export interface BoardContext {
   // 開始・期限を書き、後続タスクへ連動する（取り消し可）。開始日だけの変更は期間を保って期限日も動かす。
   // 戻り値は実際に書いた期限日 / write start & due and cascade to successors (undoable); a start-only change keeps
   // the duration by moving the due date too. Returns the due date actually written
-  reschedule(path: string, next: { start: string; end: string }, times?: { start?: string; end?: string }): Promise<string>;
+  // pure を真にすると、開始日だけの変更でも期限日を動かさず、入力をそのまま書く（貼り付け・フィルの純粋なコピー用）
+  // with `pure`, a start-only change doesn't move the due date: the input is written as it is (for the pure copy of paste and fill)
+  reschedule(path: string, next: { start: string; end: string }, times?: { start?: string; end?: string }, pure?: boolean): Promise<string>;
   refresh(): Promise<void>; // ディスクから読み直して再描画 / reload from disk and re-render
   rerender(): void; // メモリ上のタスクから再描画 / re-render from in-memory tasks
 

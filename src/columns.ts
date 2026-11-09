@@ -439,23 +439,28 @@ function dateCopyText(ctx: BoardContext, t: Task, row: Row, which: "start" | "en
   return formatDate(date, fmt) + (time ? ` ${time}` : "");
 }
 
-// 貼り付け・フィルで日付を書く。ピッカーと同じ規則：開始のみは期限=開始、時刻は引き継ぎ（同日で逆転したら期限=開始）、後続へ連動
-// write a date from paste / fill with the picker's rules: start-only fills due = start, the time of day carries over (clamped if inverted on one day), successors follow
+// 貼り付け・フィルで日付を書く＝純粋なコピー：そのセルの日付（と時刻）だけを、元のとおりに書く。開始日を書いても期限日は動かさず、時刻も元のまま（無ければ外す）。
+// 守るのは、日付の決まりだけ：開始のみは不可（期限が空なら期限=開始）、開始が期限を越えるなら、もう一方を合わせる。後続への連動は、依存の決まりなので、いつもどおり
+// write a date from paste / fill as a pure copy: only that cell's date (and time), exactly as given. A start never moves the due date, and the time is the source's (none clears it).
+// Only the date rules are kept: no start-only (an empty due takes the start), and when start would pass due the other side follows. Successors still move, that is the dependency rule
 async function applyDateText(ctx: BoardContext, t: Task, which: "start" | "end", text: string): Promise<boolean> {
   const p = parseDateTimeText(text, ctx.settings.dateFormat);
   if (!p) return false;
   const state = { start: t.start ?? "", end: t.end ?? "" };
   state[which] = p.date;
-  if (state.start && !state.end) state.end = state.start;
   let ts = t.startTime;
   let te = t.endTime;
-  // 日付を入れたときだけ時刻を決める（書かれていなければ今の時刻のまま）。空にするときは、その側の時刻も外す
-  // set the time only when a date is given (keep the current one if the text has none); blanking a side drops its time too
-  if (which === "start") ts = p.date ? p.time ?? ts : undefined;
-  else te = p.date ? p.time ?? te : undefined;
+  if (which === "start") ts = p.date ? p.time : undefined;
+  else te = p.date ? p.time : undefined;
+  if (state.start && !state.end) state.end = state.start;
+  else if (state.start && state.end && state.start > state.end) {
+    // 日付が逆転するときだけ、もう一方を合わせる / only when the dates would invert does the other side follow
+    if (which === "start") state.end = state.start;
+    else state.start = state.end;
+  }
   if (state.start && state.start === state.end && ts && te && te < ts) te = ts;
   if (state.start === (t.start ?? "") && state.end === (t.end ?? "") && ts === t.startTime && te === t.endTime) return true;
-  await ctx.reschedule(t.path, state, { start: ts, end: te });
+  await ctx.reschedule(t.path, state, { start: ts, end: te }, true);
   return true;
 }
 

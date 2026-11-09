@@ -1116,6 +1116,15 @@ input.ogantt-cell-input[type="number"] {
   color: var(--text-normal);
   overflow: hidden;
   text-overflow: ellipsis;
+  align-self: stretch; /* 行の高さいっぱいに（選択の枠が、ほかのセルと同じ大きさになる）/ the full row height, so the selection outline is as tall as the other cells' */
+  display: flex;
+  align-items: center;
+}
+.ogantt-td-name > span:not(.ogantt-task-chevron) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ogantt-td-group {
   display: flex;

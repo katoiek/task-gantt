@@ -86,7 +86,7 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 - **Fill**: drag the small square at the bottom-right of the selection up or down to copy the selected values into the rows you pass.
 - **Clear**: **Delete** or **Backspace** empties the selected cells (a column that can't be blank, like duration, is left as it is).
 - **Summary**: with two or more cells selected, the bottom of the board shows the count, and the sum, average, minimum and maximum for numbers, or the minimum and maximum for dates.
-- Pasting, filling and clearing are each **one undo step** (Ctrl/Cmd+Z). Dates follow the same rules as editing a cell: a start-only date fills the due date, and successors move.
+- Pasting, filling and clearing are each **one undo step** (Ctrl/Cmd+Z). Paste and fill are a **pure copy**: a date is written exactly as given, so a new Start doesn't move the Due date and the time of day is the source's. Only the date rules apply: a task never has a start without a due date (an empty Due takes the Start), and if a date would pass the other one, the other follows. Tasks that depend on it still move, as with any date change.
 - **Add a task**: the **＋ Add task** row at the bottom of the table creates a task (with the new-task dates from **Settings**) and lets you type its name right in the table, without opening the detail panel.
 - A row is dragged to move it or make it a subtask from its **name** cell; dragging from any other cell selects a range.
 
@@ -455,7 +455,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 - **フィル**: 選んだ範囲の右下の小さな四角を、上か下にドラッグすると、選んだ値を、通った行にコピーします。
 - **消去**: **Delete** か **Backspace** で、選んだセルを空にします（期間のように、空にできない列は、そのままです）。
 - **集計**: 2 セル以上を選ぶと、ボードの下に、件数と、数値なら合計・平均・最小・最大、日付なら最小・最大が出ます。
-- 貼り付け・フィル・消去は、それぞれ**まとめて 1 回の取り消し**（Ctrl/Cmd+Z）です。日付は、セルの編集と同じ規則で、開始日だけなら期限も入り、後続タスクも動きます。
+- 貼り付け・フィル・消去は、それぞれ**まとめて 1 回の取り消し**（Ctrl/Cmd+Z）です。貼り付けとフィルは**純粋なコピー**です。日付は、元のとおりに書かれ、開始日を変えても期限は動かず、時刻も元のものになります。守るのは日付の決まりだけで、開始日だけのタスクは作らず（期限が空なら、開始日が入ります）、日付が逆転するときだけ、もう一方が合わせて動きます。依存している後続タスクは、日付を変えたときと同じく動きます。
 - **タスクの追加**: テーブルの最下段の **＋ タスクを追加** の行で、タスクを作ります（日付は**設定**の新規タスクの日付に従います）。詳細パネルは開かず、表のその場で、名前を入力できます。
 - 行のドラッグ（移動・サブタスク化）は、**名前**のセルから始めます。ほかのセルからのドラッグは、範囲の選択になります。
 

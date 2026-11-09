@@ -2752,12 +2752,12 @@ export class GanttView extends ItemView {
   }
 
   // 開始・期限を書いて後続へ連動する（BoardContext.reschedule の本体）/ write dates and cascade (backs BoardContext.reschedule)
-  private async reschedule(path: string, next: { start: string; end: string }, times: { start?: string; end?: string } = {}): Promise<string> {
+  private async reschedule(path: string, next: { start: string; end: string }, times: { start?: string; end?: string } = {}, pure = false): Promise<string> {
     const t = this.tasks.find((x) => x.path === path);
     if (!t) return next.end;
     const k = this.plugin.settings.keys;
     const tz = this.plugin.settings.tz;
-    const end = keepDurationOnStartChange(t, next, scheduleOptions(this.plugin.settings).cal);
+    const end = pure ? next.end : keepDurationOnStartChange(t, next, scheduleOptions(this.plugin.settings).cal);
     await this.mutate(tr().undoReschedule(t.name), [path, ...this.cascadePaths(path)], async () => {
       await writeField(this.app, path, k.start, combineDateTime(next.start || undefined, times.start, tz));
       await writeField(this.app, path, k.end, combineDateTime(end || undefined, times.end, tz));
@@ -3631,7 +3631,7 @@ export class GanttView extends ItemView {
         get tasks() { return tasks(); },
         get rollup() { return rollup(); },
         mutate: (label, paths, fn) => this.mutate(label, paths, fn),
-        reschedule: (path, next, times) => this.reschedule(path, next, times),
+        reschedule: (path, next, times, pure) => this.reschedule(path, next, times, pure),
         refresh: () => this.refresh(),
         rerender: () => this.rerender(),
         inlineInput: (cell, value, repaint, commit, configure) => this.inlineInput(cell, value, repaint, commit, configure),
