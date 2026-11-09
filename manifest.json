@@ -1,7 +1,7 @@
 {
   "id": "task-gantt",
   "name": "Task Gantt Board",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "minAppVersion": "1.11.4",
   "description": "Manage tasks on an interactive Gantt timeline or Kanban board where each note is a single task. Drag bars to reschedule, link FS/SS/FF dependencies, set milestones, and edit details in a side panel.",
   "author": "Kei Kato",
