@@ -2371,7 +2371,6 @@ export class GanttView extends ItemView {
           if (col.kind === "name") {
             const nameTd = tr.createDiv({ cls: "ogantt-td ogantt-td-name" });
             nameTd.dataset.col = "name";
-            nameTd.dataset.ro = "1"; // 名前は貼り付け・フィルの対象外（コピーはできる）/ the name can be copied but not pasted or filled into
             this.wireCellSelect(nameTd, t.path, "name");
             nameTd.style.paddingLeft = `${indent}px`;
             // シェブロン枠は常に確保＝親でも単独タスクでも名前位置を揃える
@@ -3882,10 +3881,11 @@ export class GanttView extends ItemView {
     const res = await this.applyCellTexts(tr().cellsPaste, items);
     skipped += res.skipped;
     if (skipped > 0) new Notice(tr().cellsPasted(res.done, skipped));
-    // 貼り付けた範囲を選び直す / select what was pasted
+    // 貼り付けた範囲を選び直す（名前を変えたファイルは、新しいパスで）/ select what was pasted (a renamed file under its new path)
     const r1 = Math.min(rows.length - 1, rect.r0 + h - 1);
     const c1 = Math.min(cols.length - 1, rect.c0 + w - 1);
-    this.cellSel = { anchor: { path: rows[rect.r0], col: cols[rect.c0] }, focus: { path: rows[r1], col: cols[c1] } };
+    const np = (p: string): string => res.moved.get(p) ?? p;
+    this.cellSel = { anchor: { path: np(rows[rect.r0]), col: cols[rect.c0] }, focus: { path: np(rows[r1]), col: cols[c1] } };
     this.paintSelection();
   }
 
@@ -3900,13 +3900,21 @@ export class GanttView extends ItemView {
     await this.applyCellTexts(tr().cellsClear, items);
   }
 
-  // 文字をセルに書く（貼り付け・フィル・消去の共通）。全部まとめて 1 回の取り消しにする。書けた数と、書けなかった数を返す
-  // write texts into cells (shared by paste, fill and clear), all as one undo step; returns how many were written and how many couldn't be
-  private async applyCellTexts(label: string, items: { path: string; col: string; text: string }[]): Promise<{ done: number; skipped: number }> {
+  // 文字をセルに書く（貼り付け・フィル・消去の共通）。全部まとめて 1 回の取り消しにする。書けた数・書けなかった数と、名前を変えて動いたファイル（旧パス→新パス）を返す
+  // write texts into cells (shared by paste, fill and clear), all as one undo step; returns how many were written and how many couldn't be, and the files that moved by a rename (old path → new path)
+  private async applyCellTexts(label: string, items: { path: string; col: string; text: string }[]): Promise<{ done: number; skipped: number; moved: Map<string, string> }> {
     const defs = new Map(this.columns().map((c) => [c.id, c]));
     const todo: { path: string; def: CellColumn; text: string }[] = [];
+    const renames: { path: string; name: string }[] = [];
     let skipped = 0;
     for (const it of items) {
+      if (it.col === "name") {
+        // 名前＝タイトル：1 行目をファイル名にする。空にはできない / the name is the title: the first line becomes the file name; it can't be blanked
+        const name = it.text.split("\n")[0].trim();
+        if (name && this.tasks.some((x) => x.path === it.path)) renames.push({ path: it.path, name });
+        else skipped++;
+        continue;
+      }
       const def = defs.get(it.col);
       if (!def || def.kind !== "cell" || !def.applyText || this.cellEl(it.path, it.col)?.dataset.ro === "1") {
         skipped++;
@@ -3914,23 +3922,46 @@ export class GanttView extends ItemView {
       }
       todo.push({ path: it.path, def, text: it.text });
     }
-    if (!todo.length) return { done: 0, skipped };
+    const moved = new Map<string, string>();
+    if (!todo.length && !renames.length) return { done: 0, skipped, moved };
     const paths = [...new Set(todo.map((x) => x.path))];
     let done = 0;
-    await this.mutate(label, [...new Set([...paths, ...paths.flatMap((p) => this.cascadePaths(p))])], async () => {
+    await this.mutate(label, [...new Set([...paths, ...renames.map((r) => r.path), ...paths.flatMap((p) => this.cascadePaths(p))])], async () => {
       this.batchActive = true;
+      const moves: Move[] = [];
       try {
         for (const x of todo) {
           const t = this.tasks.find((y) => y.path === x.path);
           if (t && (await x.def.applyText!(this.board, t, x.text))) done++;
           else skipped++;
         }
+        // 名前の変更は最後に：ファイルのパスが変わるので、ほかの列の書き込みが終わってから。同じ名前は「名前 2」…にする
+        // renames come last: they change file paths, so the other columns are written first; a repeated name becomes "name 2", …
+        for (const r of renames) {
+          const t = this.tasks.find((y) => y.path === r.path);
+          if (t && t.name === r.name) {
+            done++;
+            continue;
+          }
+          const np = await renameTask(this.app, r.path, r.name, true);
+          if (!np) {
+            skipped++;
+            continue;
+          }
+          done++;
+          if (np !== r.path) {
+            moves.push({ from: r.path, to: np });
+            moved.set(r.path, np);
+          }
+        }
       } finally {
         this.batchActive = false;
       }
+      return { moves };
     });
+    for (const [from, to] of moved) if (this.selectedPath === from) this.selectedPath = to;
     await this.refresh();
-    return { done, skipped };
+    return { done, skipped, moved };
   }
 
   // フィルハンドルのドラッグ：選んだ範囲の値を、ドラッグした行まで（上にも下にも）繰り返しコピーする
@@ -3972,11 +4003,12 @@ export class GanttView extends ItemView {
       const src = rect.r0 + fillSourceIndex(r - rect.r0, n);
       for (let c = rect.c0; c <= rect.c1; c++) items.push({ path: rows[r], col: cols[c], text: this.cellCopyText(rows[src], cols[c]) });
     }
-    await this.applyCellTexts(tr().cellsFill, items);
-    // 埋めた分まで、選択を広げる / grow the selection over what was filled
+    const res = await this.applyCellTexts(tr().cellsFill, items);
+    // 埋めた分まで、選択を広げる（名前を変えたファイルは、新しいパスで）/ grow the selection over what was filled (a renamed file under its new path)
     const r0 = Math.min(rect.r0, target.from);
     const r1 = Math.max(rect.r1, target.to);
-    this.cellSel = { anchor: { path: rows[r0], col: cols[rect.c0] }, focus: { path: rows[r1], col: cols[rect.c1] } };
+    const np = (p: string): string => res.moved.get(p) ?? p;
+    this.cellSel = { anchor: { path: np(rows[r0]), col: cols[rect.c0] }, focus: { path: np(rows[r1]), col: cols[rect.c1] } };
     this.paintSelection();
   }
 

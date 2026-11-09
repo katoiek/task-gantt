@@ -572,14 +572,20 @@ export function newTaskDates(mode: string, today: string): { start: string; end:
 }
 
 // タスク（ファイル）をリネーム。リンクも更新される / rename the task file (updates links)
-export async function renameTask(app: App, path: string, newName: string): Promise<string | null> {
+export async function renameTask(app: App, path: string, newName: string, unique = false): Promise<string | null> {
   const file = app.vault.getAbstractFileByPath(path);
   if (!(file instanceof TFile)) return null;
   const safe = newName.replace(/[\\/:*?"<>|]/g, "").trim();
   if (!safe) return null;
   const dir = file.parent && file.parent.path !== "/" ? file.parent.path + "/" : "";
-  const newPath = `${dir}${safe}.md`;
+  let newPath = `${dir}${safe}.md`;
   if (newPath === path) return path;
+  // unique：同じ名前のノートが既にあれば、「名前 2」「名前 3」…と、空いている名前にする（フィルで同じタイトルを並べるときのため）
+  // unique: when a note of that name exists, take the next free "name 2", "name 3"… (for fill, which repeats one title)
+  if (unique) {
+    let i = 1;
+    while (app.vault.getAbstractFileByPath(newPath)) newPath = `${dir}${safe} ${++i}.md`;
+  }
   await app.fileManager.renameFile(file, newPath);
   return newPath;
 }
