@@ -1894,3 +1894,18 @@ button.ogantt-cal-title:hover {
 .ogantt-selbar-label {
   color: var(--text-faint);
 }
+
+/* テーブルビューの最下段：「＋ タスク」の行 / the table view's bottom row: "+ task" */
+.ogantt-addrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ogantt-addrow:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}

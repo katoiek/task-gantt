@@ -2436,7 +2436,15 @@ export class GanttView extends ItemView {
 
     this.paintSelection();
     // (4) タイムライン SVG / timeline SVG
-    if (isTable) return; // テーブルビューはここまで / the table view stops here
+    if (isTable) {
+      // テーブルビューは、最下段の「＋ タスク」の行までで終わり / the table view ends with the "+ task" row at the bottom
+      const addRow = grid.createDiv({ cls: "ogantt-addrow" });
+      addRow.style.height = `${ROW_H}px`;
+      setIcon(addRow.createSpan({ cls: "ogantt-opt-ico" }), "plus");
+      addRow.createSpan({ text: strings.kanbanAddTask });
+      addRow.onclick = () => void this.createTaskWith({ inline: true });
+      return;
+    }
     const svgWrap = grid.createDiv({ cls: "ogantt-svgwrap" });
     const svg = svgWrap.createSvg("svg", { cls: "ogantt-svg" });
     svg.setAttribute("width", String(width));
@@ -2988,7 +2996,7 @@ export class GanttView extends ItemView {
 
   // タスクを作る。status を渡すとそのステータスで（カンバンの列の「＋」）、parentPath を渡すとそのタスクのサブタスクとして。サブタスクは親と同じフォルダに作る（サブツリーは同じフォルダに同居する決まり）
   // create a task; with `status` it gets that status (a Kanban column's "+"), with `parentPath` it is that task's subtask, made in its parent's folder (a subtree lives in one folder)
-  private async createTaskWith(opts: { status?: string; parentPath?: string } = {}): Promise<void> {
+  private async createTaskWith(opts: { status?: string; parentPath?: string; inline?: boolean } = {}): Promise<void> {
     const parentFile = opts.parentPath ? this.app.vault.getAbstractFileByPath(opts.parentPath) : null;
     const parent = parentFile instanceof TFile ? parentFile : null;
     if (opts.parentPath && !parent) return;
@@ -3016,7 +3024,22 @@ export class GanttView extends ItemView {
     if (!created) return;
     if (parent) this.kanbanExpanded.add(parent.path); // 作ったサブタスクが見えるように、親のカードを開く / open the parent's card so the new subtask shows
     await this.refresh();
+    // テーブルの最下段から作ったときは、詳細パネルを開かず、表のその場で名前を打てるようにする / made from the table's bottom row: no detail panel, the name is typed right in the table
+    if (opts.inline && this.startInlineRename(created)) return;
     await this.openDetail(created, true);
+  }
+
+  // 新しい行の名前のセルを選んで、その場で名前の入力に入る。できなければ false / select the new row's name cell and start typing its name in place; false when that isn't possible
+  private startInlineRename(path: string): boolean {
+    const row = this.tbodyEl?.querySelector<HTMLElement>(`.ogantt-tr[data-path="${CSS.escape(path)}"]`);
+    const t = this.tasks.find((x) => x.path === path);
+    const nameText = row?.querySelector<HTMLElement>(".ogantt-td-name")?.lastElementChild as HTMLElement | null | undefined;
+    if (!row || !t || !nameText) return false;
+    this.cellSel = { anchor: { path, col: "name" }, focus: { path, col: "name" } };
+    this.paintSelection();
+    row.scrollIntoView({ block: "nearest" });
+    this.renameInCell(nameText, t, row);
+    return true;
   }
 
   // ----- ドラッグ＆ドロップ（フォルダへ＝親解除して移動／タスクへ＝サブタスク化）-----
