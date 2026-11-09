@@ -48,7 +48,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, applyManualOrder, buildKanbanColumns, collapseColumns, columnKey, laneKeyOf, moveId, orderStatusIds, placeInOrder, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
+import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, applyManualOrder, buildKanbanColumns, cardZone, collapseColumns, columnKey, laneKeyOf, moveId, orderStatusIds, placeInOrder, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
 import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView, LaneBy } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
@@ -771,24 +771,30 @@ export class GanttView extends ItemView {
       const t = this.tasks.find((x) => x.path === this.dragPath);
       return !!t && laneKeyOf(t, "folder") === laneKey;
     };
-    // 落とす位置：ポインタより下で最初のカードの前。無ければ最後のカードの後ろ（カードが無ければ末尾）。ドラッグ中のカード自身は数えない
-    // the drop slot: before the first card below the pointer, else after the last card (the end when there are none); the dragged card itself doesn't count
-    const slotAt = (e: DragEvent): { ref: HTMLElement | null; after: boolean } => {
+    // 落とす位置：ポインタがカードの上なら、そのカードの前・後ろ・真ん中（サブタスクにする）。カードの間や空きなら、ポインタより下で最初のカードの前、無ければ最後のカードの後ろ（カードが無ければ末尾）。ドラッグ中のカード自身は数えない
+    // the drop slot: over a card it is before, after or the middle of it (make a subtask); between cards or in the empty part, before the first card below the pointer, else after the last card (the end when there are none); the dragged card itself doesn't count
+    const slotAt = (e: DragEvent): { ref: HTMLElement | null; after: boolean; child: boolean } => {
       const cards = Array.from(el.querySelectorAll<HTMLElement>(".ogantt-kcol-body > .ogantt-kcard")).filter((c) => c.dataset.path !== this.dragPath);
       for (const c of cards) {
         const r = c.getBoundingClientRect();
-        if (e.clientY < r.top + r.height / 2) return { ref: c, after: false };
+        if (e.clientY < r.top || e.clientY > r.bottom) continue;
+        const zone = cardZone(e.clientY, r.top, r.height);
+        return { ref: c, after: zone === "after", child: zone === "child" };
       }
-      return { ref: cards[cards.length - 1] ?? null, after: true };
+      for (const c of cards) {
+        const r = c.getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) return { ref: c, after: false, child: false };
+      }
+      return { ref: cards[cards.length - 1] ?? null, after: true, child: false };
     };
-    const clearMarks = (): void => el.querySelectorAll(".is-drop-before, .is-drop-after").forEach((c) => c.removeClasses(["is-drop-before", "is-drop-after"]));
+    const clearMarks = (): void => el.querySelectorAll(".is-drop-before, .is-drop-after, .is-drop-child").forEach((c) => c.removeClasses(["is-drop-before", "is-drop-after", "is-drop-child"]));
     el.addEventListener("dragover", (e) => {
       if (this.dragColumn || !allowed()) return;
       e.preventDefault();
       el.addClass("is-drop");
       clearMarks();
       const slot = slotAt(e);
-      slot.ref?.addClass(slot.after ? "is-drop-after" : "is-drop-before");
+      slot.ref?.addClass(slot.child ? "is-drop-child" : slot.after ? "is-drop-after" : "is-drop-before");
     });
     el.addEventListener("dragleave", (e) => {
       if (el.contains(e.relatedTarget as Node | null)) return;
@@ -804,7 +810,15 @@ export class GanttView extends ItemView {
       clearMarks();
       const path = this.dragPath;
       this.dragPath = null;
-      if (path && ok) void this.moveTaskToCell(path, col.status, laneKey, { ref: slot.ref?.dataset.path ?? null, after: slot.after });
+      if (!path || !ok) return;
+      const refPath = slot.ref?.dataset.path ?? null;
+      // カードの真ん中に落とした＝そのカードのサブタスクにする（親と同じフォルダへ移る。取り消せる）/ dropped on the middle of a card = make it that card's subtask (it moves into the parent's folder; undoable)
+      if (slot.child && refPath) {
+        this.kanbanExpanded.add(refPath); // 入ったサブタスクが見えるように、親のカードを開く / open the parent's card so the new subtask shows
+        void this.reparentTo(path, this.taskFolder(refPath), refPath);
+        return;
+      }
+      void this.moveTaskToCell(path, col.status, laneKey, { ref: refPath, after: slot.after });
     });
   }
 
@@ -882,6 +896,14 @@ export class GanttView extends ItemView {
             e.stopPropagation();
             void this.openDetail(sub.path);
           };
+          // 右クリックで、親から切り離す（独立したカードに戻る）/ right-click detaches it from its parent (it becomes a card of its own again)
+          row.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const menu = new Menu();
+            menu.addItem((it) => it.setTitle(tr().kanbanDetachSub).setIcon("unlink").onClick(() => void this.reparentTo(sub.path, this.taskFolder(sub.path), null)));
+            menu.showAtMouseEvent(e);
+          });
         }
       }
     }
@@ -896,7 +918,7 @@ export class GanttView extends ItemView {
       this.dragPath = null;
       card.removeClass("is-dragging");
       body.ownerDocument.querySelectorAll(".ogantt-kcol.is-drop").forEach((el) => el.removeClass("is-drop"));
-      body.ownerDocument.querySelectorAll(".is-drop-before, .is-drop-after").forEach((el) => el.removeClasses(["is-drop-before", "is-drop-after"]));
+      body.ownerDocument.querySelectorAll(".is-drop-before, .is-drop-after, .is-drop-child").forEach((el) => el.removeClasses(["is-drop-before", "is-drop-after", "is-drop-child"]));
     });
   }
 
@@ -904,6 +926,7 @@ export class GanttView extends ItemView {
   private openCardMenu(e: MouseEvent, t: Task): void {
     const menu = new Menu();
     menu.addItem((it) => it.setTitle(tr().kanbanAddSubtask).setIcon("plus").onClick(() => void this.createTaskWith({ parentPath: t.path })));
+    if (t.parent) menu.addItem((it) => it.setTitle(tr().kanbanDetachSub).setIcon("unlink").onClick(() => void this.reparentTo(t.path, this.taskFolder(t.path), null)));
     menu.addSeparator();
     menu.addItem((it) => it.setTitle(tr().menuDelete).setIcon("trash-2").onClick(() => this.confirmDelete(t.path)));
     menu.showAtMouseEvent(e);

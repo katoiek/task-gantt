@@ -128,3 +128,12 @@ export function placeInOrder(order: string[], shown: string[], path: string, ref
   const hidden = order.filter((p) => p !== path && !shown.includes(p));
   return [...list, ...hidden];
 }
+
+// ── カードへのドロップ位置 / where on a card a drop lands ──
+// カードの上 30% は「前に入れる」、下 30% は「後ろに入れる」、真ん中は「そのカードのサブタスクにする」
+// the top 30% of a card means "place before it", the bottom 30% "place after it", the middle "make it that card's subtask"
+export type CardZone = "before" | "child" | "after";
+export function cardZone(y: number, top: number, height: number): CardZone {
+  const r = height > 0 ? (y - top) / height : 0.5;
+  return r < 0.3 ? "before" : r > 0.7 ? "after" : "child";
+}

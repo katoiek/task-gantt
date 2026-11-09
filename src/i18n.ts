@@ -80,6 +80,7 @@ interface Strings {
   kanbanSortManual: string;
   kanbanSortTitle: string;
   kanbanSortAsc: string;
+  kanbanDetachSub: string;
   kanbanSortDesc: string;
   optHideLabels: string; // バーの名前・担当を隠す / hide the names and assignees on the bars
   optOverdue: string; // 期限切れを強調 / highlight overdue tasks
@@ -390,6 +391,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortManual: "手動",
     kanbanSortTitle: "タスク名",
     kanbanSortAsc: "昇順",
+    kanbanDetachSub: "親タスクから切り離す",
     kanbanSortDesc: "降順",
     optHideLabels: "バーの名前・担当を隠す",
     optOverdue: "期限切れを強調",
@@ -681,6 +683,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortManual: "Manual",
     kanbanSortTitle: "Task title",
     kanbanSortAsc: "Ascending",
+    kanbanDetachSub: "Detach from parent",
     kanbanSortDesc: "Descending",
     optHideLabels: "Hide bar labels",
     optOverdue: "Highlight overdue",
@@ -972,6 +975,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortManual: "手动",
     kanbanSortTitle: "任务标题",
     kanbanSortAsc: "升序",
+    kanbanDetachSub: "从父任务分离",
     kanbanSortDesc: "降序",
     optHideLabels: "隐藏条上的标签",
     optOverdue: "突出显示逾期",
@@ -1263,6 +1267,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortManual: "手動",
     kanbanSortTitle: "任務標題",
     kanbanSortAsc: "升冪",
+    kanbanDetachSub: "從父任務分離",
     kanbanSortDesc: "降冪",
     optHideLabels: "隱藏長條標籤",
     optOverdue: "標示逾期",
@@ -1554,6 +1559,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortManual: "수동",
     kanbanSortTitle: "작업 제목",
     kanbanSortAsc: "오름차순",
+    kanbanDetachSub: "상위 작업에서 분리",
     kanbanSortDesc: "내림차순",
     optHideLabels: "막대 라벨 숨기기",
     optOverdue: "기한 초과 강조",
@@ -1845,6 +1851,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortManual: "Manuel",
     kanbanSortTitle: "Titre de la tâche",
     kanbanSortAsc: "Croissant",
+    kanbanDetachSub: "Détacher de la tâche parente",
     kanbanSortDesc: "Décroissant",
     optHideLabels: "Masquer les libellés des barres",
     optOverdue: "Mettre en évidence les retards",
@@ -2136,6 +2143,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortManual: "Manual",
     kanbanSortTitle: "Título de la tarea",
     kanbanSortAsc: "Ascendente",
+    kanbanDetachSub: "Separar de la tarea principal",
     kanbanSortDesc: "Descendente",
     optHideLabels: "Ocultar etiquetas de las barras",
     optOverdue: "Resaltar vencidas",
@@ -2427,6 +2435,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortManual: "Вручную",
     kanbanSortTitle: "Название задачи",
     kanbanSortAsc: "По возрастанию",
+    kanbanDetachSub: "Отделить от родительской задачи",
     kanbanSortDesc: "По убыванию",
     optHideLabels: "Скрыть подписи на полосах",
     optOverdue: "Выделять просроченные",

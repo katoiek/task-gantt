@@ -233,6 +233,10 @@
 .ogantt-kcard.is-drop-before {
   box-shadow: 0 -4px 0 var(--interactive-accent);
 }
+.ogantt-kcard.is-drop-child {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
 .ogantt-kcard.is-drop-after {
   box-shadow: 0 4px 0 var(--interactive-accent);
 }

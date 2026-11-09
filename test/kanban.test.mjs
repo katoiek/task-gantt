@@ -1,5 +1,5 @@
 // カンバンの振り分け（列の並び・未割当・サブタスク）の検証 / Tests for the Kanban sorting (column order, unassigned, subtasks)
-import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes, applyManualOrder, placeInOrder } from "./kanban.mjs";
+import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes, applyManualOrder, placeInOrder, cardZone } from "./kanban.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -136,6 +136,14 @@ check("列: タスクが無くても全部の列が出る", buildKanbanColumns([
     placeInOrder(o, ["a", "b"], "b", "a", false);
     return o.join() === "a,b";
   })());
+}
+
+// ── カードへのドロップ位置 ──
+{
+  check("cardZone: 上 30% は前", cardZone(100, 100, 100) === "before" && cardZone(129, 100, 100) === "before");
+  check("cardZone: 真ん中はサブタスク", cardZone(130, 100, 100) === "child" && cardZone(150, 100, 100) === "child" && cardZone(170, 100, 100) === "child");
+  check("cardZone: 下 30% は後ろ", cardZone(171, 100, 100) === "after" && cardZone(200, 100, 100) === "after");
+  check("cardZone: 高さ 0 でも壊れない", cardZone(100, 100, 0) === "child");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
