@@ -1612,6 +1612,7 @@ export class GanttView extends ItemView {
       const ic = wrap.createSpan({ cls: "ogantt-opt-ico" });
       setIcon(ic, icon);
       ic.setAttr("aria-label", label); // アイコンの意味をツールチップで補助 / tooltip explains the icon
+      wrap.createSpan({ cls: "ogantt-opt-label", text: label }); // アイコンの右に、何の選択かを文字でも出す / the label as text too, so it's clear what the select changes
       const sel = wrap.createEl("select");
       for (const [val, text] of opts) {
         const o = sel.createEl("option", { text, value: val });
