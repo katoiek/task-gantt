@@ -168,7 +168,7 @@ export const DEFAULT_SETTINGS: GanttSettings = {
   boardViews: {},
   newTaskDates: "today",
   detailWidth: 380,
-  visibleColumns: ["start", "end"],
+  visibleColumns: ["start", "end", "assignee", "status"], // 新しいビューの最初の列：タイトル（常時）・開始・期限・担当者・ステータス / the columns a new view starts with: title (always), start, due, assignee, status
   columnWidths: {},
   sortBy: "start",
   sortDir: "asc",
