@@ -246,6 +246,7 @@ export function defaultViewConfig(s: GanttSettings): ViewConfig {
     collapsedLanes: [],
     manualOrder: false,
     cardOrder: {},
+    density: "default",
   };
 }
 

@@ -34,7 +34,7 @@ The UI follows Obsidian's display language. Supported: English, Japanese, Korean
 
 ## View options
 
-An options row above the table shapes how the board is displayed. The on/off display toggles — **Show empty folders**, **Roll up**, **Flat view**, **Progress line**, **Hide bar labels** and **Highlight overdue** — are gathered in the **Display** menu, which lists them as checkboxes like the column menu; the button is tinted when any of them differs from its default.
+An options row above the table shapes how the board is displayed. The on/off display toggles — **Show empty folders**, **Roll up**, **Flat view**, **Progress line**, **Hide bar labels**, **Highlight overdue** and **Compact rows** — are gathered in the **Display** menu, which lists them as checkboxes like the column menu; the button is tinted when any of them differs from its default. **Compact rows** shortens every row (30 px to 26 px) so more tasks fit on screen, in the Gantt and the Table view alike; each view remembers its own density.
 
 ![The Display menu: checkboxes for the display toggles](docs/images/display-menu-en.png)
 
@@ -405,7 +405,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 表の上のオプション行で、ボードの見せ方を調整できます。
 
-表示の入り切り（**空フォルダを表示**・**ロールアップ**・**フラット表示**・**稲妻線**・**バーのラベルを隠す**・**期限切れを強調**）は、**表示**メニューにチェックボックスとして並びます（列の表示メニューと同じ形）。既定から変えたものがあると、ボタンの色が変わります。
+表示の入り切り（**空フォルダを表示**・**ロールアップ**・**フラット表示**・**稲妻線**・**バーのラベルを隠す**・**期限切れを強調**・**コンパクト表示**）は、**表示**メニューにチェックボックスとして並びます（列の表示メニューと同じ形）。既定から変えたものがあると、ボタンの色が変わります。**コンパクト表示**は、行の高さを縮めて（30px から 26px へ）、一度にたくさんのタスクを出します。ガントでもテーブルでも使え、ビューごとに保存されます。
 
 ![表示メニュー：表示の入り切りのチェックボックス](docs/images/display-menu-ja.png)
 

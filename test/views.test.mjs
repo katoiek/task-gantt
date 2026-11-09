@@ -224,6 +224,11 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
     const one = renameOrderPaths(m, "other.md", "moved.md");
     return hit && o.todo.join() === "Q/a.md,Q/sub/b.md,P2/c.md,other.md".replace("other.md", "moved.md") && o.done.join() === "Q/a.md" && !miss && one;
   })());
+  check("repair: 行の高さは、compact だけ保たれ、それ以外は default", (() => {
+    const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "table", config: { density: "compact" } }, { id: "b", name: "B", type: "table", config: { density: "huge" } }, { id: "c", name: "C", type: "table", config: {} }] } }, base);
+    const v = r["folder:k"].views;
+    return v[0].config.density === "compact" && v[1].config.density === "default" && v[2].config.density === "default";
+  })());
   check("repair: テーブルの種類も保たれる", (() => {
     const r = repairBoardViews({ "folder:k": { active: "t", views: [{ id: "t", name: "T", type: "table", config: {} }, { id: "x", name: "X", type: "weird", config: {} }] } }, base);
     const v = r["folder:k"].views;

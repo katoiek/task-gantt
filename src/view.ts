@@ -58,6 +58,7 @@ import { BoardContext, Move, MutateResult } from "./board";
 import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnWidth, customColumn, taskComparator, visibleColumns } from "./columns";
 
 const ROW_H = 30; // 行の高さ（表とタイムラインで共通）/ shared row height
+const ROW_H_COMPACT = 26; // コンパクト表示の行の高さ / row height in the compact density
 const HEAD_H = 40; // ヘッダー高さ / header height
 const BAR_PAD = 5; // バーの上下余白 / vertical padding inside a row
 const RESIZE_EDGE = 8; // バー端リサイズの当たり幅 / edge-resize hit width
@@ -145,6 +146,11 @@ export class GanttView extends ItemView {
       }) as GanttSettings;
     }
     return this.vsCache;
+  }
+
+  // 行の高さ：表とタイムラインで共通。ビューの「コンパクト」で詰める / the row height, shared by the table and the timeline; the view's "Compact" packs it
+  private get rowH(): number {
+    return this.cfg.density === "compact" ? ROW_H_COMPACT : ROW_H;
   }
 
   // 表示オプション（ビューごとに保存）/ view options (saved per view)
@@ -1228,6 +1234,7 @@ export class GanttView extends ItemView {
           { icon: "zap", label: tr().optProgressLine, show: this.activeType() !== "table", get: () => this.progressLine, set: (v) => (this.progressLine = v) },
           { icon: "eye-off", label: tr().optHideLabels, show: this.activeType() !== "table", get: () => this.hideLabels, set: (v) => (this.hideLabels = v) },
           { icon: "alarm-clock", label: tr().optOverdue, show: true, get: () => this.markOverdue, set: (v) => (this.markOverdue = v) },
+          { icon: "rows-3", label: tr().optCompact, show: true, get: () => this.cfg.density === "compact", set: (v) => (this.cfg.density = v ? "compact" : "default") },
         ];
         for (const it of toggles.filter((x) => x.show)) {
           const item = menu.createEl("label", { cls: "ogantt-colmenu-item" });
@@ -1897,7 +1904,7 @@ export class GanttView extends ItemView {
     displayBtn.createSpan({ text: tr().optDisplay });
     displayBtn.setAttr("aria-label", tr().optDisplay);
     // 既定から変えた表示があるときは色で知らせる（メニューの中は見えないため）/ tint the button when a display option differs from its default (the menu hides it)
-    if (this.flat || this.rollup || this.progressLine || this.hideLabels || this.markOverdue || !this.showEmptyFolders) displayBtn.addClass("is-on");
+    if (this.flat || this.rollup || this.progressLine || this.hideLabels || this.markOverdue || !this.showEmptyFolders || this.cfg.density === "compact") displayBtn.addClass("is-on");
     displayBtn.onclick = () => this.openDisplayMenu(displayBtn);
 
     // 凡例（色分けの基準を説明）/ legend explaining the current color basis
@@ -2231,7 +2238,7 @@ export class GanttView extends ItemView {
         chartW: (this.range.max - this.range.min + 1) * this.ppd,
         tableW: this.tableWidth(),
         rows: this.rows.length,
-        rowH: ROW_H,
+        rowH: this.rowH,
         headH: HEAD_H,
         title: `${this.folder || "(vault root)"} — ${formatDate(stamp, this.plugin.settings.dateFormat)}`,
         maxPixels: Platform.isMobile ? 16e6 : 3e7,
@@ -2300,7 +2307,7 @@ export class GanttView extends ItemView {
   private renderGrid(main: HTMLElement): void {
     const totalDays = this.range.max - this.range.min + 1;
     const width = totalDays * this.ppd;
-    const bodyH = this.rows.length * ROW_H;
+    const bodyH = this.rows.length * this.rowH;
 
     const cols = this.visibleColumns();
     const isTable = this.activeType() === "table"; // テーブルビューは、タイムライン（日付軸と SVG）を作らない / the table view builds no timeline (date axis, SVG)
@@ -2389,7 +2396,7 @@ export class GanttView extends ItemView {
     this.tbodyEl = body;
     for (const row of this.rows) {
       const tr = body.createDiv({ cls: "ogantt-tr" });
-      tr.style.height = `${ROW_H}px`;
+      tr.style.height = `${this.rowH}px`;
       const indent = 8 + Math.min(row.depth, MAX_INDENT_DEPTH) * 16; // 入れ子インデント（上限あり）/ nesting indent (capped)
       if (row.kind === "group") {
         tr.addClass("is-group");
@@ -2512,7 +2519,7 @@ export class GanttView extends ItemView {
     if (isTable) {
       // テーブルビューは、最下段の「＋ タスク」の行までで終わり / the table view ends with the "+ task" row at the bottom
       const addRow = grid.createDiv({ cls: "ogantt-addrow" });
-      addRow.style.height = `${ROW_H}px`;
+      addRow.style.height = `${this.rowH}px`;
       setIcon(addRow.createSpan({ cls: "ogantt-opt-ico" }), "plus");
       addRow.createSpan({ text: strings.kanbanAddTask });
       addRow.onclick = () => void this.createTaskWith({ inline: true });
@@ -2541,10 +2548,10 @@ export class GanttView extends ItemView {
     // 行の区切り / row separators
     this.rows.forEach((row, i) => {
       if (row.kind === "group") {
-        const bg = this.svgEl("rect", { x: 0, y: i * ROW_H, width, height: ROW_H, class: "ogantt-grid-group" });
+        const bg = this.svgEl("rect", { x: 0, y: i * this.rowH, width, height: this.rowH, class: "ogantt-grid-group" });
         svg.appendChild(bg);
       }
-      const line = this.svgEl("line", { x1: 0, y1: (i + 1) * ROW_H, x2: width, y2: (i + 1) * ROW_H, class: "ogantt-grid-row" });
+      const line = this.svgEl("line", { x1: 0, y1: (i + 1) * this.rowH, x2: width, y2: (i + 1) * this.rowH, class: "ogantt-grid-row" });
       svg.appendChild(line);
     });
     // 今日の線 / today marker
@@ -2592,7 +2599,7 @@ export class GanttView extends ItemView {
       const w = Math.max((dayIndex(endStr) - dayIndex(aStart) + 1) * this.ppd, 6);
       return { startX: x, width: Number.isFinite(w) ? w : 0, progress: t.progress };
     });
-    const pts = buildProgressLine(lineRows, basisX, ROW_H, height);
+    const pts = buildProgressLine(lineRows, basisX, this.rowH, height);
     const line = this.svgEl("polyline", {
       points: pts.map((p) => `${p.x},${p.y}`).join(" "),
       class: "ogantt-progress-line",
@@ -2608,13 +2615,15 @@ export class GanttView extends ItemView {
 
   private drawBars(svg: SVGElement, handlesLayer: SVGElement): void {
     const statusColor = new Map(this.plugin.settings.statuses.map((s) => [s.id, s.color]));
+    const rowH = this.rowH;
+    const cyText = (i: number): number => i * rowH + rowH / 2 + 4; // バーの後ろの文字の縦位置 / the vertical position of the text after a bar
     this.rows.forEach((row, i) => {
       // グループ行のまとめバー / group summary bar
       if (row.kind === "group") {
         if (!row.span) return;
         const gx = this.xOf(row.span.start);
         const gw = Math.max((dayIndex(row.span.end) - dayIndex(row.span.start) + 1) * this.ppd, 6);
-        const gy = i * ROW_H + ROW_H / 2 - 3;
+        const gy = i * this.rowH + this.rowH / 2 - 3;
         svg.appendChild(this.svgEl("rect", { x: gx, y: gy, width: gw, height: 6, rx: 2, class: "ogantt-group-bar" }));
         // 端のキャップ / end caps
         svg.appendChild(this.svgEl("path", { d: `M ${gx} ${gy} l 0 8 l 5 -8 z`, class: "ogantt-group-cap" }));
@@ -2627,8 +2636,8 @@ export class GanttView extends ItemView {
       if (this.rollup && row.span) {
         const sx = this.xOf(row.span.start);
         const sw = Math.max((dayIndex(row.span.end) - dayIndex(row.span.start) + 1) * this.ppd, 6);
-        const yy = i * ROW_H + BAR_PAD;
-        const hh = ROW_H - BAR_PAD * 2;
+        const yy = i * this.rowH + BAR_PAD;
+        const hh = this.rowH - BAR_PAD * 2;
         const c =
           this.colorBy === "assignee"
             ? t.assignee ? hashColor(t.assignee) : FALLBACK_BAR
@@ -2636,7 +2645,7 @@ export class GanttView extends ItemView {
         const rg = this.svgEl("g", { class: "ogantt-bar-g ogantt-rollup-g", "data-path": t.path });
         rg.appendChild(this.svgEl("rect", { x: sx, y: yy, width: sw, height: hh, rx: 4, class: "ogantt-bar ogantt-rollup-bar", fill: c }));
         if (!this.hideLabels) {
-          const lbl = this.svgEl("text", { x: sx + sw + 6, y: i * ROW_H + ROW_H / 2 + 4, class: "ogantt-bar-label" });
+          const lbl = this.svgEl("text", { x: sx + sw + 6, y: i * this.rowH + this.rowH / 2 + 4, class: "ogantt-bar-label" });
           lbl.textContent = t.name;
           rg.appendChild(lbl);
         }
@@ -2646,8 +2655,8 @@ export class GanttView extends ItemView {
       }
       const aStart = anchorStart(t);
       if (!aStart) return;
-      const y = i * ROW_H + BAR_PAD;
-      const h = ROW_H - BAR_PAD * 2;
+      const y = i * this.rowH + BAR_PAD;
+      const h = this.rowH - BAR_PAD * 2;
       const x = this.xOf(aStart);
       const color =
         this.colorBy === "assignee"
@@ -2656,7 +2665,7 @@ export class GanttView extends ItemView {
 
       const g = this.svgEl("g", { class: "ogantt-bar-g", "data-path": t.path });
       const overdue = this.markOverdue && isOverdue(t, this.plugin.settings.statuses, todayIndex()); // 期限切れの強調 / the overdue highlight
-      const cyMid = i * ROW_H + ROW_H / 2;
+      const cyMid = i * this.rowH + this.rowH / 2;
       let lx = x; // 左端ハンドル位置 / left handle x
       let rx = x; // 右端ハンドル位置 / right handle x
 
@@ -2727,10 +2736,6 @@ export class GanttView extends ItemView {
       });
       svg.appendChild(g);
     });
-
-    function cyText(i: number): number {
-      return i * ROW_H + ROW_H / 2 + 4;
-    }
   }
 
   // ハンドルから線を引いて他タスクへドロップ＝依存作成 / drag from a handle to another task = create dependency
@@ -2753,7 +2758,7 @@ export class GanttView extends ItemView {
       const y2 = e.clientY - box.top;
       tmp.setAttribute("d", `M ${x1} ${y1} C ${x1 + 30} ${y1}, ${x2 - 30} ${y2}, ${x2} ${y2}`);
       clearHi();
-      const row = this.rows[Math.floor(y2 / ROW_H)];
+      const row = this.rows[Math.floor(y2 / this.rowH)];
       if (row?.kind === "task" && row.task && row.task.path !== source.path) {
         svg
           .querySelector(`.ogantt-bar-g[data-path="${CSS.escape(row.task.path)}"] .ogantt-bar, .ogantt-bar-g[data-path="${CSS.escape(row.task.path)}"] .ogantt-milestone`)
@@ -2768,7 +2773,7 @@ export class GanttView extends ItemView {
       clearHi();
       // クリック抑止フラグはこの後の click 後に解除 / clear the click-suppress flag after the click fires
       window.setTimeout(() => this.dragged.set(g, false), 0);
-      const row = this.rows[Math.floor((e.clientY - box.top) / ROW_H)];
+      const row = this.rows[Math.floor((e.clientY - box.top) / this.rowH)];
       if (row?.kind === "task" && row.task && row.task.path !== source.path) {
         const target = row.task;
         // ドロップ先のどの端か判定（左半分=start, 右半分=finish）/ which end was dropped on
@@ -2864,7 +2869,7 @@ export class GanttView extends ItemView {
       if (!sStart || !sEnd) continue;
       const sLeft = this.xOf(sStart);
       const sRight = this.xOf(sEnd) + this.ppd;
-      const sy = si * ROW_H + ROW_H / 2;
+      const sy = si * this.rowH + this.rowH / 2;
 
       for (const dep of t.deps) {
         const pi = rowOf.get(dep.path);
@@ -2875,7 +2880,7 @@ export class GanttView extends ItemView {
         if (!pStartD || !pEndD) continue;
         const pLeft = this.xOf(pStartD);
         const pRight = this.xOf(pEndD) + this.ppd;
-        const py = pi * ROW_H + ROW_H / 2;
+        const py = pi * this.rowH + this.rowH / 2;
         const mid = (py + sy) / 2;
 
         let d: string;
