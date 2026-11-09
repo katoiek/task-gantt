@@ -107,6 +107,10 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 - **Filters** and **presets** work as in the Gantt views, and the cards in a column follow the view's sort (**Sort** button) or its manual order. The view keeps its own filters and card fields, like every view.
 - **Make a subtask by dragging**: drop a card on the **middle** of another card (an outline appears; the top and bottom edges still place it before or after) and it becomes that card's subtask, moving into the parent's folder like in the table (undoable). To turn a subtask back into a card of its own, right-click it inside its parent card, or use **Detach from parent** in the card's **⋯** menu.
 
+  ![Dragging a card onto the middle of another task](docs/images/kanban-subtask-drag-en.png)
+
+  ![Right-clicking a subtask: Detach from parent](docs/images/kanban-subtask-detach-en.png)
+
 ## Custom fields
 
 Show any frontmatter key as a table column. In **Settings → Task Gantt Board → Custom fields**, click **Add field** and give it a **key** (the frontmatter property, e.g. `client`), an optional **label** for the column header, and a **type**:
@@ -449,6 +453,10 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
   ![開いたサブタスク（親のカードと同じ項目つき）](docs/images/kanban-subtasks-ja.png)
 - **フィルタ**と**プリセット**は、ガントのビューと同じように使えます。列の中のカードは、ビューの並べ替え（**並べ替え**ボタン）か、手動の順序に従います。フィルタとカードの項目は、ほかのビューと同じく、ビューごとに保存されます。
 - **ドラッグでサブタスクにする**: カードを、別のカードの**真ん中**にドロップすると（枠が出ます。上下の端なら、これまでどおり前後への並べ替えです）、そのカードのサブタスクになります。表と同じく、親のフォルダへ移ります（取り消せます）。サブタスクを独立したカードに戻すには、親のカードの中でサブタスクを右クリックするか、カードの **⋯** メニューの**親タスクから切り離す**を使います。
+
+  ![カードを別のタスクの真ん中にドラッグ＆ドロップ](docs/images/kanban-subtask-drag-ja.png)
+
+  ![サブタスクを右クリック：親タスクから切り離す](docs/images/kanban-subtask-detach-ja.png)
 
 ## カスタムフィールド
 
