@@ -1,5 +1,5 @@
 // カンバンの振り分け（列の並び・未割当・サブタスク）の検証 / Tests for the Kanban sorting (column order, unassigned, subtasks)
-import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY } from "./kanban.mjs";
+import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes } from "./kanban.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -92,6 +92,27 @@ check("列: タスクが無くても全部の列が出る", buildKanbanColumns([
   check("collapseColumns empty: 今の折りたたみは保つ", collapseColumns(cols, ["todo"], "empty").join() === "todo,doing,done");
   check("collapseColumns empty: 出ていない列のキーは捨てる", collapseColumns(cols, ["ghost"], "empty").join() === "doing,done");
   check("collapseColumns none: すべて開く", collapseColumns(cols, ["todo", "done"], "none").length === 0);
+}
+
+// ── スイムレーン ──
+{
+  const TA = (path, status, assignee, groups = [], parent) => ({ ...T(path, status, parent), assignee, groups });
+  check("laneKeyOf: 担当者（前後の空白は無視、無ければ決まったキー）", laneKeyOf(TA("a", "todo", " Kei "), "assignee") === "Kei" && laneKeyOf(TA("a", "todo", undefined), "assignee") === UNASSIGNED_KEY && laneKeyOf(TA("a", "todo", "  "), "assignee") === UNASSIGNED_KEY);
+  check("laneKeyOf: フォルダ（階層は / でつなぐ、直下は決まったキー）", laneKeyOf(TA("a", "todo", "x", ["A", "B"]), "folder") === "A/B" && laneKeyOf(TA("a", "todo", "x", []), "folder") === ROOT_LANE_KEY);
+  check("laneKeyOf: レーンなしは空", laneKeyOf(TA("a", "todo", "x"), "none") === "");
+
+  const tasks = [TA("a", "todo", "Zed"), TA("b", "doing", "Kei"), TA("c", "todo", undefined), TA("d", "todo", "Kei"), TA("e", "done", "Ann")];
+  const cols = buildKanbanColumns(tasks, ST, []);
+  const lanes = splitLanes(cols, (t) => laneKeyOf(t, "assignee"));
+  check("splitLanes: 担当者なしが先頭、あとは名前順", lanes.map((l) => l.key).join() === `${UNASSIGNED_KEY},Ann,Kei,Zed`);
+  check("splitLanes: 全レーンが同じ列の並び", lanes.every((l) => l.columns.map((c) => c.status ?? "-").join() === "-,todo,doing,done"));
+  const kei = lanes.find((l) => l.key === "Kei");
+  check("splitLanes: カードはレーンごとに、元の順のまま", kei.columns.find((c) => c.status === "todo").cards.map((t) => t.path).join() === "d" && kei.columns.find((c) => c.status === "doing").cards.map((t) => t.path).join() === "b");
+  check("splitLanes: 件数は、レーンのカードの合計", kei.count === 2 && lanes.reduce((n, l) => n + l.count, 0) === 5);
+  const sub = buildKanbanColumns([TA("p", "todo", "Kei"), TA("s", "doing", "Ann", [], "p")], ST, []);
+  const subLanes = splitLanes(sub, (t) => laneKeyOf(t, "assignee"));
+  check("splitLanes: 親の中のサブタスクは、レーンを作らない（親のレーンに残る）", subLanes.length === 1 && subLanes[0].key === "Kei");
+  check("splitLanes: カードが無ければレーンも無い", splitLanes(buildKanbanColumns([], ST, []), (t) => laneKeyOf(t, "assignee")).length === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

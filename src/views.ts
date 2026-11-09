@@ -29,9 +29,13 @@ export interface ViewConfig {
   collapsed: string[]; // 折りたたんだグループのキー / keys of the collapsed groups
   // カンバン用（ガントでは使わない）/ for Kanban (unused by Gantt)
   cardFields: string[]; // カードに出す列の id（担当・開始・期限が既定）/ ids of the columns shown on a card (assignee, start, due by default)
+  laneBy: LaneBy; // スイムレーンの分け方（none = レーンなし）/ what the swimlanes split by (none = no lanes)
+  collapsedLanes: string[]; // 折りたたんだレーンのキー（"<分け方>:<値>"）/ keys of the collapsed lanes ("<by>:<value>")
   collapsedColumns: string[]; // 折りたたんだ列のキー（ステータスの ID。未割当は UNASSIGNED_KEY）/ keys of the collapsed columns (a status id; UNASSIGNED_KEY for Unassigned)
   columnOrder: string[]; // 列（ステータス）の並び。空なら設定のステータスの順＝初期値 / the order of the columns (statuses); empty follows the settings' status order, the default
 }
+
+export type LaneBy = "none" | "assignee" | "folder";
 
 export interface BoardView {
   id: string;
@@ -147,7 +151,10 @@ export function repairBoardViews(raw: unknown, base: ViewConfig): Record<string,
     const views: BoardView[] = [];
     for (const v of bv.views as Partial<BoardView>[]) {
       if (!v || typeof v.id !== "string" || typeof v.name !== "string") continue;
-      views.push({ id: v.id, name: v.name, type: v.type === "kanban" ? "kanban" : "gantt", config: cloneConfig({ ...base, ...(v.config ?? {}) }) });
+      const config = cloneConfig({ ...base, ...(v.config ?? {}) });
+      if (config.laneBy !== "assignee" && config.laneBy !== "folder") config.laneBy = "none";
+      if (!Array.isArray(config.collapsedLanes)) config.collapsedLanes = [];
+      views.push({ id: v.id, name: v.name, type: v.type === "kanban" ? "kanban" : "gantt", config });
     }
     if (!views.length) continue;
     out[key] = { active: views.some((v) => v.id === bv.active) ? (bv.active as string) : views[0].id, views };

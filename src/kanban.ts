@@ -2,6 +2,7 @@
 // the Kanban sorting: tasks into one column per status; the pure part (the screen is in view.ts)
 
 import type { StatusDef, Task } from "./types";
+import type { LaneBy } from "./views";
 
 export interface KanbanColumn {
   status: string | null; // null = 未割当（ステータスなし・設定にない ID）/ null = unassigned (no status, or an id the settings don't have)
@@ -70,4 +71,34 @@ export function collapseColumns(cols: KanbanColumn[], current: string[], mode: "
   if (mode === "all") return shown;
   const empties = cols.filter((c) => c.cards.length === 0).map((c) => columnKey(c.status));
   return [...new Set([...current.filter((k) => shown.includes(k)), ...empties])];
+}
+
+// ── スイムレーン / swimlanes ──
+// レーンのキー。担当者なし・フォルダ直下は決まった文字列（~ で始め、実在の名前と重ならないようにする）
+// lane keys: a fixed string for "no assignee" and "top level of the folder" (starting with ~ so it can't clash with a real name)
+export const ROOT_LANE_KEY = "~root";
+
+export function laneKeyOf(t: Task, by: LaneBy): string {
+  if (by === "assignee") return t.assignee?.trim() || UNASSIGNED_KEY;
+  if (by === "folder") return t.groups.length ? t.groups.join("/") : ROOT_LANE_KEY;
+  return "";
+}
+
+export interface KanbanLane {
+  key: string;
+  count: number; // このレーンのカードの数（親の中のサブタスクは数えない）/ cards in this lane (subtasks inside a parent aren't counted)
+  columns: KanbanColumn[]; // 全レーン共通の列の並び。カードだけがレーンごとに違う / the same columns in every lane; only the cards differ
+}
+
+// 列に分けたカードを、レーンに分ける。レーンの並びは、決まったキー（担当者なし・直下）が先頭、あとは名前順。カードの並びは保つ
+// split the columns' cards into lanes: the fixed keys (no assignee, top level) first, then by name; the cards keep their order
+export function splitLanes(cols: KanbanColumn[], keyOf: (t: Task) => string): KanbanLane[] {
+  const keys = new Set<string>();
+  for (const c of cols) for (const t of c.cards) keys.add(keyOf(t));
+  const fixed = (k: string): boolean => k === UNASSIGNED_KEY || k === ROOT_LANE_KEY;
+  const sorted = [...keys].sort((a, b) => (fixed(a) !== fixed(b) ? (fixed(a) ? -1 : 1) : a.localeCompare(b)));
+  return sorted.map((key) => {
+    const columns = cols.map((c) => ({ status: c.status, cards: c.cards.filter((t) => keyOf(t) === key) }));
+    return { key, count: columns.reduce((n, c) => n + c.cards.length, 0), columns };
+  });
 }

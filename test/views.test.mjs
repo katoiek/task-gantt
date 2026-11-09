@@ -46,6 +46,8 @@ const cfg = (over = {}) => ({
   cardFields: ["assignee", "start", "end"],
   columnOrder: [],
   collapsedColumns: [],
+  laneBy: "none",
+  collapsedLanes: [],
   ...over,
 });
 
@@ -176,6 +178,11 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
     const r = repairBoardViews({ "folder:k": { active: "k", views: [{ id: "k", name: "K", type: "kanban", config: { collapsedColumns: ["done"] } }, { id: "j", name: "J", type: "kanban", config: {} }] } }, base);
     const v = r["folder:k"].views;
     return v[0].config.collapsedColumns.join() === "done" && v[1].config.collapsedColumns.length === 0;
+  })());
+  check("repair: レーンの分け方は、正しい値だけ保たれ、不正なら none", (() => {
+    const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "kanban", config: { laneBy: "assignee", collapsedLanes: ["assignee:Kei"] } }, { id: "b", name: "B", type: "kanban", config: { laneBy: "weird", collapsedLanes: "x" } }, { id: "c", name: "C", type: "kanban", config: {} }] } }, base);
+    const v = r["folder:k"].views;
+    return v[0].config.laneBy === "assignee" && v[0].config.collapsedLanes.join() === "assignee:Kei" && v[1].config.laneBy === "none" && v[1].config.collapsedLanes.length === 0 && v[2].config.laneBy === "none";
   })());
   check("repair: 開いているビューが無ければ先頭", fixed["folder:partial"].active === "a");
   fixed["folder:ok"].views[0].config.visibleColumns.push("x");

@@ -242,6 +242,8 @@ export function defaultViewConfig(s: GanttSettings): ViewConfig {
     cardFields: ["assignee", "start", "end"],
     columnOrder: [],
     collapsedColumns: [],
+    laneBy: "none",
+    collapsedLanes: [],
   };
 }
 

@@ -75,6 +75,7 @@ interface Strings {
   kanbanCollapseEmpty: string;
   kanbanCollapseAll: string;
   kanbanExpandAll: string;
+  kanbanLaneRoot: string;
   optHideLabels: string; // バーの名前・担当を隠す / hide the names and assignees on the bars
   optOverdue: string; // 期限切れを強調 / highlight overdue tasks
   overdueTitle: (n: number) => string;
@@ -379,6 +380,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanCollapseEmpty: "空の列をすべて折りたたむ",
     kanbanCollapseAll: "すべての列を折りたたむ",
     kanbanExpandAll: "すべての列を開く",
+    kanbanLaneRoot: "（直下）",
     optHideLabels: "バーの名前・担当を隠す",
     optOverdue: "期限切れを強調",
     overdueTitle: (n) => `期限切れ ${n} 件`,
@@ -664,6 +666,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanCollapseEmpty: "Collapse empty columns",
     kanbanCollapseAll: "Collapse all columns",
     kanbanExpandAll: "Expand all columns",
+    kanbanLaneRoot: "(top level)",
     optHideLabels: "Hide bar labels",
     optOverdue: "Highlight overdue",
     overdueTitle: (n) => `${n} overdue`,
@@ -949,6 +952,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanCollapseEmpty: "折叠所有空列",
     kanbanCollapseAll: "折叠所有列",
     kanbanExpandAll: "展开所有列",
+    kanbanLaneRoot: "（顶层）",
     optHideLabels: "隐藏条上的标签",
     optOverdue: "突出显示逾期",
     overdueTitle: (n) => `${n} 个已逾期`,
@@ -1234,6 +1238,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanCollapseEmpty: "摺疊所有空欄",
     kanbanCollapseAll: "摺疊所有欄",
     kanbanExpandAll: "展開所有欄",
+    kanbanLaneRoot: "（頂層）",
     optHideLabels: "隱藏長條標籤",
     optOverdue: "標示逾期",
     overdueTitle: (n) => `${n} 個已逾期`,
@@ -1519,6 +1524,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanCollapseEmpty: "빈 열 모두 접기",
     kanbanCollapseAll: "모든 열 접기",
     kanbanExpandAll: "모든 열 펼치기",
+    kanbanLaneRoot: "(최상위)",
     optHideLabels: "막대 라벨 숨기기",
     optOverdue: "기한 초과 강조",
     overdueTitle: (n) => `기한 초과 ${n}건`,
@@ -1804,6 +1810,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanCollapseEmpty: "Réduire les colonnes vides",
     kanbanCollapseAll: "Réduire toutes les colonnes",
     kanbanExpandAll: "Développer toutes les colonnes",
+    kanbanLaneRoot: "(racine)",
     optHideLabels: "Masquer les libellés des barres",
     optOverdue: "Mettre en évidence les retards",
     overdueTitle: (n) => `${n} en retard`,
@@ -2089,6 +2096,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanCollapseEmpty: "Contraer columnas vacías",
     kanbanCollapseAll: "Contraer todas las columnas",
     kanbanExpandAll: "Expandir todas las columnas",
+    kanbanLaneRoot: "(raíz)",
     optHideLabels: "Ocultar etiquetas de las barras",
     optOverdue: "Resaltar vencidas",
     overdueTitle: (n) => `${n} vencidas`,
@@ -2374,6 +2382,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanCollapseEmpty: "Свернуть пустые столбцы",
     kanbanCollapseAll: "Свернуть все столбцы",
     kanbanExpandAll: "Развернуть все столбцы",
+    kanbanLaneRoot: "(корень)",
     optHideLabels: "Скрыть подписи на полосах",
     optOverdue: "Выделять просроченные",
     overdueTitle: (n) => `просрочено: ${n}`,

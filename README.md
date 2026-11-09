@@ -84,6 +84,7 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 - **Move a card to another column** by dragging it: the task's status becomes the column's status (undoable with **Ctrl/Cmd+Z**). Dropping on **Unassigned** clears the status.
 - **Reorder the columns** by dragging a column header. The order is saved in that view (each Kanban view has its own). **Settings** only supplies the starting order, taken once when the view is first drawn; changing the statuses' order there later (its ▲ ▼ buttons, which also set the legend's order) doesn't change existing views. A status you add in **Settings** appears at the end of each view's columns, and a deleted one disappears.
 - **Collapse columns**: the **⋯** in a column header has **Collapse column**, **Collapse empty columns**, **Collapse all columns** and **Expand all columns**. A collapsed column becomes a thin strip with its colour, count and name; click it to open it again (cards can still be dropped on it). Which columns are collapsed is saved in that view.
+- **Swimlanes**: the **Group** button at the left of the toolbar splits the board into horizontal lanes by **Assignee** or **Folder** (**None** turns them off). The column headers stay on top and every lane has the same columns; click a lane's title to collapse it. Dragging a card into another **assignee** lane changes its assignee as well as its status (one undo restores both); a card can't be dropped into another **folder**'s lane, since that would move the file. Tasks with no assignee go into an **Unassigned** lane, and tasks directly in the board's folder into a **(top level)** lane. The grouping and the collapsed lanes are saved in that view.
 - **Click a card** to open its detail panel.
 - **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **Cards** button (the list icon at the left of the toolbar, before the folder name) lists every other column, including custom fields, as checkboxes.
 
@@ -418,6 +419,7 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
 - **カードを別の列へドラッグ**すると、タスクのステータスが、その列のステータスに変わります（**Ctrl/Cmd+Z** で取り消せます）。**未割当**にドロップすると、ステータスが外れます。
 - **列の見出しをドラッグ**すると、列の順序を入れ替えられます。順序は、そのビューに保存されます（カンバンのビューごとに別の順序です）。**設定**が渡すのは、最初の順序だけです（ビューを最初に描くときに、一度だけ取り込みます）。あとから**設定**でステータスの順序を変えても（▲ ▼ ボタン。凡例の順序も変わります）、既存のビューは変わりません。**設定**でステータスを足すと、各ビューの列の末尾に増え、消すと、その列も消えます。
 - **列の折りたたみ**: 列の見出しの **⋯** に、**この列を折りたたむ**・**空の列をすべて折りたたむ**・**すべての列を折りたたむ**・**すべての列を開く**があります。折りたたんだ列は、色・件数・名前だけの細い帯になり、クリックで開きます（カードを落とすこともできます）。折りたたみの状態は、そのビューに保存されます。
+- **スイムレーン**: ツールバーの左端の**グループ**ボタンで、ボードを**担当者**または**フォルダ**ごとの横帯（レーン）に分けられます（**なし**で解除）。列の見出しは上に残り、どのレーンにも同じ列が並びます。レーンのタイトルをクリックすると、そのレーンを折りたたみます。カードを別の**担当者**のレーンへドラッグすると、ステータスに加えて担当者も書き換わります（取り消しは 1 回で両方戻ります）。別の**フォルダ**のレーンへは、ファイルの移動になるので落とせません。担当者のないタスクは**未割当**のレーン、ボードのフォルダ直下のタスクは**（直下）**のレーンに入ります。グループの設定と、折りたたんだレーンは、そのビューに保存されます。
 - **カードをクリック**すると、詳細パネルが開きます。
 - **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カード**ボタン（ツールバーの左端、フォルダ名の左にある一覧のアイコン）から、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます。
 

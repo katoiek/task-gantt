@@ -193,13 +193,16 @@
 .ogantt-kcol-head.is-draggable {
   cursor: grab;
 }
-.ogantt-kcol.is-col-dragging {
+.ogantt-kcol.is-col-dragging,
+.ogantt-kcol-hbox.is-col-dragging {
   opacity: 0.5;
 }
-.ogantt-kcol.is-col-before {
+.ogantt-kcol.is-col-before,
+.ogantt-kcol-hbox.is-col-before {
   box-shadow: -4px 0 0 var(--interactive-accent);
 }
-.ogantt-kcol.is-col-after {
+.ogantt-kcol.is-col-after,
+.ogantt-kcol-hbox.is-col-after {
   box-shadow: 4px 0 0 var(--interactive-accent);
 }
 .ogantt-kcol-add {
@@ -240,6 +243,60 @@
 .ogantt-kcard-more svg {
   width: 16px;
   height: 16px;
+}
+/* スイムレーン：見出しの行を上に固定し、その下にレーンを縦に積む / swimlanes: the header row sticks on top, the lanes are stacked below it */
+.ogantt-kanban.is-lanes {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.ogantt-kcol-heads {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+  display: flex;
+  gap: 12px;
+  padding: 12px 0 4px;
+  margin-top: -12px;
+  background: var(--background-primary);
+}
+.ogantt-kcol-hbox {
+  flex: 0 0 280px;
+  border-radius: 8px;
+}
+.ogantt-kcol-hbox.is-collapsed {
+  flex-basis: 44px;
+}
+.ogantt-kcol-hbox .ogantt-kcol-name {
+  white-space: nowrap;
+}
+.ogantt-kcol-hbox .is-collapsed-head .ogantt-kcol-name {
+  display: none;
+}
+.ogantt-klane {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ogantt-klane-title {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ogantt-klane-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.is-lanes .ogantt-kcol {
+  max-height: none;
+}
+.is-lanes .ogantt-klane-row .ogantt-kcol-body {
+  min-height: 48px;
 }
 .ogantt-kcol-menu {
   display: inline-flex;

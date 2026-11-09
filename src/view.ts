@@ -48,8 +48,8 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { KanbanColumn, buildKanbanColumns, collapseColumns, columnKey, moveId, orderStatusIds, subtasksOf, toggleCollapsed } from "./kanban";
-import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView } from "./views";
+import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, buildKanbanColumns, collapseColumns, columnKey, laneKeyOf, moveId, orderStatusIds, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
+import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView, LaneBy } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
 import { applyFilters, regroup } from "./filter";
@@ -565,7 +565,69 @@ export class GanttView extends ItemView {
     // ステータスの列は、カードが 0 件でも残す（空の列にもカードを落とせるように）。未割当だけは、カードがあるときだけ出す
     // a status column stays even with no cards (so a card can still be dropped there); only Unassigned shows just when it has cards
     const cols = buildKanbanColumns(list, statuses, order).filter((c) => c.status !== null || c.cards.length > 0);
-    for (const col of cols) this.renderKanbanColumn(board, col, cols);
+    const by = this.cfg.laneBy;
+    if (by === "none") {
+      for (const col of cols) this.renderKanbanColumn(board, col, cols);
+      return;
+    }
+    // スイムレーン：列の見出しを上に 1 本、その下にレーンを縦に並べる。幅は固定なので、見出しと各レーンの列はそろう
+    // swimlanes: one row of column headers on top, the lanes stacked below; the widths are fixed, so headers and every lane's columns line up
+    board.addClass("is-lanes");
+    const heads = board.createDiv({ cls: "ogantt-kcol-heads" });
+    for (const col of cols) {
+      const box = heads.createDiv({ cls: "ogantt-kcol-hbox" + (this.isColumnCollapsed(col) ? " is-collapsed" : "") });
+      this.setColumnColor(box, col);
+      this.renderKanbanHead(box, col, cols, box, board);
+      this.attachColumnReorder(box, col);
+    }
+    for (const lane of splitLanes(cols, (t) => laneKeyOf(t, by))) this.renderKanbanLane(board, lane, by);
+  }
+
+  // レーンの名前：担当者なし・フォルダ直下は決まった表示 / a lane's name: fixed wording for "no assignee" and "top level"
+  private laneLabel(key: string): string {
+    if (key === UNASSIGNED_KEY) return tr().kanbanUnassigned;
+    if (key === ROOT_LANE_KEY) return tr().kanbanLaneRoot;
+    return key;
+  }
+
+  private renderKanbanLane(board: HTMLElement, lane: KanbanLane, by: LaneBy): void {
+    const laneId = `${by}:${lane.key}`;
+    const collapsed = this.cfg.collapsedLanes.includes(laneId);
+    const laneEl = board.createDiv({ cls: "ogantt-klane" });
+    const title = laneEl.createDiv({ cls: "ogantt-klane-title" });
+    setIcon(title.createSpan({ cls: "ogantt-opt-ico" }), collapsed ? "chevron-right" : "chevron-down");
+    title.createSpan({ cls: "ogantt-klane-name", text: this.laneLabel(lane.key) });
+    title.createSpan({ cls: "ogantt-kcol-count", text: String(lane.count) });
+    title.onclick = () => {
+      this.cfg.collapsedLanes = toggleCollapsed(this.cfg.collapsedLanes, laneId);
+      this.rerender();
+    };
+    if (collapsed) return;
+    const row = laneEl.createDiv({ cls: "ogantt-klane-row" });
+    for (const col of lane.columns) {
+      const colCollapsed = this.isColumnCollapsed(col);
+      const cell = row.createDiv({ cls: "ogantt-kcol" + (colCollapsed ? " is-collapsed" : "") });
+      this.setColumnColor(cell, col);
+      if (!colCollapsed) this.renderKanbanBody(cell, col, false);
+      this.attachCardDrop(cell, col, lane.key);
+    }
+  }
+
+  // スイムレーンの分け方のメニュー（ツールバーの「グループ」）/ the swimlane menu (the toolbar's "Group")
+  private openLaneMenu(e: MouseEvent): void {
+    const menu = new Menu();
+    const add = (by: LaneBy, title: string): void => {
+      menu.addItem((it) =>
+        it.setTitle(title).setChecked(this.cfg.laneBy === by).onClick(() => {
+          this.cfg.laneBy = by;
+          this.rerender();
+        })
+      );
+    };
+    add("none", tr().noneLabel);
+    add("assignee", tr().fieldAssignee);
+    add("folder", tr().optGroupFolder);
+    menu.showAtMouseEvent(e);
   }
 
   // 列の折りたたみを変えて保存する（描き直しのときに、ビューへ保存される）/ change the columns' collapse; saved with the view on the redraw
@@ -588,43 +650,59 @@ export class GanttView extends ItemView {
     menu.showAtMouseEvent(e);
   }
 
+  private isColumnCollapsed(col: KanbanColumn): boolean {
+    return this.cfg.collapsedColumns.includes(columnKey(col.status));
+  }
+
+  // 列の色＝ステータスの色 / the column's colour is the status's
+  private setColumnColor(el: HTMLElement, col: KanbanColumn): void {
+    const status = col.status ? this.plugin.settings.statuses.find((x) => x.id === col.status) : undefined;
+    el.setCssProps({ "--ogantt-col": status?.color ?? "var(--text-faint)" });
+  }
+
+  // その列のステータスでタスクを作る（未割当の列ならステータスなし）/ create a task with this column's status (none for Unassigned)
+  private addTaskIn(col: KanbanColumn): void {
+    void this.createTaskWith({ status: col.status ?? undefined });
+  }
+
   private renderKanbanColumn(board: HTMLElement, col: KanbanColumn, cols: KanbanColumn[]): void {
+    const colEl = board.createDiv({ cls: "ogantt-kcol" + (this.isColumnCollapsed(col) ? " is-collapsed" : "") });
+    this.setColumnColor(colEl, col);
+    this.renderKanbanHead(colEl, col, cols, colEl, board);
+    if (!this.isColumnCollapsed(col)) this.renderKanbanBody(colEl, col, true);
+    this.attachColumnReorder(colEl, col);
+    this.attachCardDrop(colEl, col, null);
+  }
+
+  // 列の見出し：色の点・名前・件数、「＋」と「⋯」（折りたたんだ列は、クリックで開く）。ドラッグで列の順序を入れ替える（ドラッグ中の見た目は reorderEl に付ける）
+  // the column header: dot, name, count, "+" and "⋯" (a collapsed column opens on a click); dragging it reorders the columns (the drag styling goes on reorderEl)
+  private renderKanbanHead(box: HTMLElement, col: KanbanColumn, cols: KanbanColumn[], reorderEl: HTMLElement, board: HTMLElement): void {
     const status = col.status ? this.plugin.settings.statuses.find((s) => s.id === col.status) : undefined;
     const key = columnKey(col.status);
-    const collapsed = this.cfg.collapsedColumns.includes(key);
-    const colEl = board.createDiv({ cls: "ogantt-kcol" + (collapsed ? " is-collapsed" : "") });
-    colEl.setCssProps({ "--ogantt-col": status?.color ?? "var(--text-faint)" }); // 列の色＝ステータスの色 / the column's colour is the status's
-    const head = colEl.createDiv({ cls: "ogantt-kcol-head" });
+    const collapsed = this.isColumnCollapsed(col);
+    const head = box.createDiv({ cls: "ogantt-kcol-head" });
     head.createSpan({ cls: "ogantt-kcol-dot" });
     head.createSpan({ cls: "ogantt-kcol-name", text: status?.label ?? tr().kanbanUnassigned });
     head.createSpan({ cls: "ogantt-kcol-count", text: String(col.cards.length) });
-    // その列のステータスでタスクを作る（未割当の列ならステータスなし）/ create a task with this column's status (none for Unassigned)
-    const addHere = (): void => void this.createTaskWith({ status: col.status ?? undefined });
     if (collapsed) {
       // 折りたたんだ列：帯の中は、色の点・件数・名前（縦）だけ。見出しのクリックで開く。カードを落とすこともできる
       // a collapsed column: just the colour dot, count and the name (vertical); clicking the header opens it, and cards can still be dropped on it
       head.setAttr("aria-label", tr().kanbanExpandCol);
       head.addClass("is-collapsed-head");
       head.onclick = () => this.setCollapsedColumns(toggleCollapsed(this.cfg.collapsedColumns, key));
-    } else {
-      const plus = head.createSpan({ cls: "ogantt-kcol-add" });
-      setIcon(plus, "plus");
-      plus.setAttr("aria-label", tr().kanbanAddTask);
-      plus.onclick = addHere;
-      const more = head.createSpan({ cls: "ogantt-kcol-menu" });
-      setIcon(more, "ellipsis");
-      more.setAttr("aria-label", tr().kanbanColMenu);
-      more.onclick = (e) => this.openColumnHeadMenu(e, col, cols);
-      const body = colEl.createDiv({ cls: "ogantt-kcol-body" });
-      for (const t of col.cards) this.renderKanbanCard(body, t);
-      const addBtn = body.createEl("button", { cls: "ogantt-kcol-addbtn" });
-      setIcon(addBtn.createSpan({ cls: "ogantt-opt-ico" }), "plus");
-      addBtn.createSpan({ text: tr().kanbanAddTask });
-      addBtn.onclick = addHere;
+      return;
     }
+    const plus = head.createSpan({ cls: "ogantt-kcol-add" });
+    setIcon(plus, "plus");
+    plus.setAttr("aria-label", tr().kanbanAddTask);
+    plus.onclick = () => this.addTaskIn(col);
+    const more = head.createSpan({ cls: "ogantt-kcol-menu" });
+    setIcon(more, "ellipsis");
+    more.setAttr("aria-label", tr().kanbanColMenu);
+    more.onclick = (e) => this.openColumnHeadMenu(e, col, cols);
     // 見出しをドラッグして、列の順序を入れ替える。順序はこのビューに保存する（初期値は設定のステータスの順）。未割当は先頭に固定
     // drag the header to reorder the columns; the order is saved in this view (it starts from the settings' status order); Unassigned stays first
-    if (col.status !== null && !collapsed) {
+    if (col.status !== null) {
       const id = col.status;
       head.addClass("is-draggable");
       head.setAttr("draggable", "true");
@@ -632,48 +710,80 @@ export class GanttView extends ItemView {
         this.dragColumn = id;
         e.dataTransfer?.setData("text/plain", id);
         if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-        colEl.addClass("is-col-dragging");
+        reorderEl.addClass("is-col-dragging");
       });
       head.addEventListener("dragend", () => {
         this.dragColumn = null;
         board.querySelectorAll(".is-col-dragging, .is-col-before, .is-col-after").forEach((el) => el.removeClasses(["is-col-dragging", "is-col-before", "is-col-after"]));
       });
     }
+  }
+
+  // 列のカード（とレーンの外では「＋ タスクを追加」）/ a column's cards (and, outside the lanes, the "+ Add task" button)
+  private renderKanbanBody(colEl: HTMLElement, col: KanbanColumn, withAdd: boolean): void {
+    const body = colEl.createDiv({ cls: "ogantt-kcol-body" });
+    for (const t of col.cards) this.renderKanbanCard(body, t);
+    if (!withAdd) return;
+    const addBtn = body.createEl("button", { cls: "ogantt-kcol-addbtn" });
+    setIcon(addBtn.createSpan({ cls: "ogantt-opt-ico" }), "plus");
+    addBtn.createSpan({ text: tr().kanbanAddTask });
+    addBtn.onclick = () => this.addTaskIn(col);
+  }
+
+  // 列の入れ替えのドロップ先：左半分なら前、右半分なら後ろに入る / the drop target of a column reorder: the left half inserts before, the right half after
+  private attachColumnReorder(el: HTMLElement, col: KanbanColumn): void {
     const dropAfter = (e: DragEvent): boolean => {
-      const r = colEl.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
       return e.clientX > r.left + r.width / 2;
     };
-    colEl.addEventListener("dragover", (e) => {
-      if (this.dragColumn) {
-        // 列の入れ替え：左半分なら前、右半分なら後ろに入る / reordering columns: the left half inserts before, the right half after
-        if (col.status === null || col.status === this.dragColumn) return;
-        e.preventDefault();
-        const after = dropAfter(e);
-        colEl.toggleClass("is-col-after", after);
-        colEl.toggleClass("is-col-before", !after);
-        return;
-      }
-      if (!this.dragPath) return;
+    el.addEventListener("dragover", (e) => {
+      if (!this.dragColumn) return;
+      if (col.status === null || col.status === this.dragColumn) return;
       e.preventDefault();
-      colEl.addClass("is-drop");
+      const after = dropAfter(e);
+      el.toggleClass("is-col-after", after);
+      el.toggleClass("is-col-before", !after);
     });
-    colEl.addEventListener("dragleave", (e) => {
-      if (colEl.contains(e.relatedTarget as Node | null)) return;
-      colEl.removeClasses(["is-drop", "is-col-before", "is-col-after"]);
+    el.addEventListener("dragleave", (e) => {
+      if (el.contains(e.relatedTarget as Node | null)) return;
+      el.removeClasses(["is-col-before", "is-col-after"]);
     });
-    colEl.addEventListener("drop", (e) => {
+    el.addEventListener("drop", (e) => {
+      if (!this.dragColumn) return;
       e.preventDefault();
-      colEl.removeClasses(["is-drop", "is-col-before", "is-col-after"]);
-      if (this.dragColumn) {
-        const from = this.dragColumn;
-        this.dragColumn = null;
-        if (col.status !== null) this.reorderColumn(from, col.status, dropAfter(e));
-        return;
-      }
-      // カードのドロップ：この列へ動かしたカードは、この列のステータスになる / a card dropped here takes this column's status
+      el.removeClasses(["is-col-before", "is-col-after"]);
+      const from = this.dragColumn;
+      this.dragColumn = null;
+      if (col.status !== null) this.reorderColumn(from, col.status, dropAfter(e));
+    });
+  }
+
+  // カードのドロップ先：この列のステータスになる。レーンの中なら、担当者のレーンは担当者も書き換わる。フォルダのレーンへは、ファイルの移動になるので落とせない
+  // the drop target of a card: it takes this column's status; inside an assignee lane it takes that assignee too; a card can't be dropped into another folder's lane (that would move the file)
+  private attachCardDrop(el: HTMLElement, col: KanbanColumn, laneKey: string | null): void {
+    const allowed = (): boolean => {
+      if (!this.dragPath) return false;
+      if (laneKey === null || this.cfg.laneBy !== "folder") return true;
+      const t = this.tasks.find((x) => x.path === this.dragPath);
+      return !!t && laneKeyOf(t, "folder") === laneKey;
+    };
+    el.addEventListener("dragover", (e) => {
+      if (this.dragColumn || !allowed()) return;
+      e.preventDefault();
+      el.addClass("is-drop");
+    });
+    el.addEventListener("dragleave", (e) => {
+      if (el.contains(e.relatedTarget as Node | null)) return;
+      el.removeClass("is-drop");
+    });
+    el.addEventListener("drop", (e) => {
+      el.removeClass("is-drop");
+      if (this.dragColumn) return;
+      e.preventDefault();
+      const ok = allowed();
       const path = this.dragPath;
       this.dragPath = null;
-      if (path) void this.moveTaskToStatus(path, col.status);
+      if (path && ok) void this.moveTaskToCell(path, col.status, laneKey);
     });
   }
 
@@ -786,6 +896,24 @@ export class GanttView extends ItemView {
     const current = known ? (t.status ?? null) : null;
     if (current === status) return;
     await this.mutate(tr().undoEdit(t.name), [path], () => writeField(this.app, path, this.plugin.settings.keys.status, status ?? undefined));
+    await this.refresh();
+  }
+
+  // カードを列（とレーン）へ動かす：ステータスを書き換え、担当者のレーンなら担当者も書き換える（1 回の取り消しで両方戻る）
+  // move a card to a column (and lane): rewrites the status, and the assignee for an assignee lane (one undo restores both)
+  private async moveTaskToCell(path: string, status: string | null, laneKey: string | null): Promise<void> {
+    const t = this.tasks.find((x) => x.path === path);
+    if (!t) return;
+    const known = this.plugin.settings.statuses.some((s) => s.id === t.status);
+    const statusChanged = (known ? (t.status ?? null) : null) !== status;
+    const byAssignee = laneKey !== null && this.cfg.laneBy === "assignee";
+    const assigneeChanged = byAssignee && laneKeyOf(t, "assignee") !== laneKey;
+    if (!statusChanged && !assigneeChanged) return;
+    const keys = this.plugin.settings.keys;
+    await this.mutate(tr().undoEdit(t.name), [path], async () => {
+      if (statusChanged) await writeField(this.app, path, keys.status, status ?? undefined);
+      if (assigneeChanged) await writeField(this.app, path, keys.assignee, laneKey === UNASSIGNED_KEY ? undefined : laneKey);
+    });
     await this.refresh();
   }
 
@@ -1410,6 +1538,11 @@ export class GanttView extends ItemView {
     cardBtn.createSpan({ cls: "ogantt-opt-gear-label", text: tr().optCardsLabel }); // アイコンの右に短いラベル / a short label to the right of the icon
     cardBtn.setAttr("aria-label", tr().optCards);
     cardBtn.onclick = () => this.openCardFieldsMenu(cardBtn);
+    const groupBtn = bar.createEl("button", { cls: "ogantt-kanban-only clickable-icon" });
+    setIcon(groupBtn, "layers");
+    groupBtn.createSpan({ cls: "ogantt-opt-gear-label", text: tr().optGroupLabel });
+    groupBtn.setAttr("aria-label", tr().optGroupLabel);
+    groupBtn.onclick = (e) => this.openLaneMenu(e);
     bar.createSpan({ cls: "ogantt-title", text: this.plugin.settings.rootFolder || "(vault root)" });
     // 新規タスク追加（アイコン＋ラベル）/ add a new task (icon + label)
     const add = bar.createEl("button", { cls: "ogantt-add" });
