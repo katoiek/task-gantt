@@ -298,6 +298,12 @@
 .is-lanes .ogantt-klane-row .ogantt-kcol-body {
   min-height: 48px;
 }
+.ogantt-toolbar-sep {
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 2px;
+  background: var(--background-modifier-border);
+}
 .ogantt-kcol-menu {
   display: inline-flex;
   opacity: 0.6;

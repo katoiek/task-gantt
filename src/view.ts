@@ -1543,6 +1543,7 @@ export class GanttView extends ItemView {
     groupBtn.createSpan({ cls: "ogantt-opt-gear-label", text: tr().optGroupLabel });
     groupBtn.setAttr("aria-label", tr().optGroupLabel);
     groupBtn.onclick = (e) => this.openLaneMenu(e);
+    bar.createSpan({ cls: "ogantt-kanban-only ogantt-toolbar-sep" }); // カンバン専用ボタンとタイトルの区切り線 / a divider between the Kanban-only buttons and the title
     bar.createSpan({ cls: "ogantt-title", text: this.plugin.settings.rootFolder || "(vault root)" });
     // 新規タスク追加（アイコン＋ラベル）/ add a new task (icon + label)
     const add = bar.createEl("button", { cls: "ogantt-add" });
