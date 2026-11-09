@@ -6,7 +6,7 @@
 import type { Filter, FilterMatch, ZoomMode } from "./types";
 
 // ビューの種類：ガントとカンバン / view types: Gantt and Kanban
-export type ViewType = "gantt" | "kanban";
+export type ViewType = "gantt" | "kanban" | "table";
 
 // 1 つのビューが持つ設定。画面はこのオブジェクトを直接読み書きする（コピーしない）
 // what one view holds; the screen reads and writes this object directly (no copy)
@@ -159,7 +159,7 @@ export function repairBoardViews(raw: unknown, base: ViewConfig): Record<string,
       config.manualOrder = config.manualOrder === true;
       if (!config.cardOrder || typeof config.cardOrder !== "object" || Array.isArray(config.cardOrder)) config.cardOrder = {};
       for (const k of Object.keys(config.cardOrder)) if (!Array.isArray(config.cardOrder[k])) delete config.cardOrder[k];
-      views.push({ id: v.id, name: v.name, type: v.type === "kanban" ? "kanban" : "gantt", config });
+      views.push({ id: v.id, name: v.name, type: v.type === "kanban" || v.type === "table" ? v.type : "gantt", config });
     }
     if (!views.length) continue;
     out[key] = { active: views.some((v) => v.id === bv.active) ? (bv.active as string) : views[0].id, views };

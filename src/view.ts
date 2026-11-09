@@ -320,6 +320,7 @@ export class GanttView extends ItemView {
     this.bindBoardViews(); // このボードのビューを使う / use this board's views
     this.schedulePersist(); // 変えた設定を保存する / save what changed
     this.contentEl.toggleClass("is-kanban", this.activeType() === "kanban"); // ガント専用の操作を隠す / hides the Gantt-only controls
+    this.contentEl.toggleClass("is-table", this.activeType() === "table"); // テーブルでも、タイムライン用の操作を隠す / the table view hides the timeline controls too
     this.renderOptions(); // グループ/色分け/凡例を最新データで更新 / refresh layout options + legend
     this.renderFilterBar(); // 統合フィルタ行を最新データで更新 / refresh the unified filter row
     if (this.activeType() === "kanban") {
@@ -434,6 +435,7 @@ export class GanttView extends ItemView {
     menu.addItem((it) => it.setTitle(tr().viewCopyThis).setIcon("copy").onClick(() => this.duplicateActiveView()));
     menu.addSeparator();
     menu.addItem((it) => it.setTitle(tr().viewGantt).setIcon("gantt-chart").onClick(() => this.addNewView("gantt")));
+    menu.addItem((it) => it.setTitle(tr().viewTable).setIcon("table").onClick(() => this.addNewView("table")));
     menu.addItem((it) => it.setTitle(tr().viewKanban).setIcon("kanban").onClick(() => this.addNewView("kanban")));
     menu.showAtMouseEvent(e);
   }
@@ -443,7 +445,7 @@ export class GanttView extends ItemView {
     const bv = this.currentViews();
     if (!bv) return;
     this.flushPersist();
-    const v = addView(bv, type === "kanban" ? tr().viewKanban : tr().viewGantt, defaultViewConfig(this.plugin.settings), type);
+    const v = addView(bv, type === "kanban" ? tr().viewKanban : type === "table" ? tr().viewTable : tr().viewGantt, defaultViewConfig(this.plugin.settings), type);
     this.switchView(v.id);
   }
 
@@ -501,7 +503,7 @@ export class GanttView extends ItemView {
     host.empty();
     for (const v of bv.views) {
       const tab = host.createDiv({ cls: "ogantt-viewtab" + (v.id === bv.active ? " is-active" : "") });
-      setIcon(tab.createSpan({ cls: "ogantt-opt-ico" }), v.type === "kanban" ? "kanban" : "gantt-chart");
+      setIcon(tab.createSpan({ cls: "ogantt-opt-ico" }), v.type === "kanban" ? "kanban" : v.type === "table" ? "table" : "gantt-chart");
       if (this.renamingId === v.id) {
         const input = tab.createEl("input", { type: "text", cls: "ogantt-viewtab-rename", value: v.name });
         let done = false;
@@ -1153,8 +1155,8 @@ export class GanttView extends ItemView {
           { icon: "folder", label: tr().optShowEmpty, show: folderOnly, get: () => this.showEmptyFolders, set: (v) => (this.showEmptyFolders = v) },
           { icon: "git-merge", label: tr().optRollup, show: folderOnly, get: () => this.rollup, set: (v) => (this.rollup = v) },
           { icon: "list", label: tr().optFlat, show: true, get: () => this.flat, set: (v) => (this.flat = v) },
-          { icon: "zap", label: tr().optProgressLine, show: true, get: () => this.progressLine, set: (v) => (this.progressLine = v) },
-          { icon: "eye-off", label: tr().optHideLabels, show: true, get: () => this.hideLabels, set: (v) => (this.hideLabels = v) },
+          { icon: "zap", label: tr().optProgressLine, show: this.activeType() !== "table", get: () => this.progressLine, set: (v) => (this.progressLine = v) },
+          { icon: "eye-off", label: tr().optHideLabels, show: this.activeType() !== "table", get: () => this.hideLabels, set: (v) => (this.hideLabels = v) },
           { icon: "alarm-clock", label: tr().optOverdue, show: true, get: () => this.markOverdue, set: (v) => (this.markOverdue = v) },
         ];
         for (const it of toggles.filter((x) => x.show)) {
@@ -1742,8 +1744,8 @@ export class GanttView extends ItemView {
       [["folder", tr().optGroupFolder], ["status", tr().fieldStatus], ["assignee", tr().fieldAssignee], ["tag", tr().fieldTags]],
       (v) => { this.groupBy = v as typeof this.groupBy; this.collapsed.clear(); this.rerender(); }
     );
-    // 色分け / color by
-    makeSelect(
+    // 色分け（バーの色）はタイムラインのもの。テーブルでは出さない / colour-by is for the bars; the table view doesn't show it
+    if (this.activeType() !== "table") makeSelect(
       "palette",
       tr().optColorLabel,
       this.colorBy,
@@ -1764,7 +1766,9 @@ export class GanttView extends ItemView {
 
     // 凡例（色分けの基準を説明）/ legend explaining the current color basis
     const legend = host.createDiv({ cls: "ogantt-legend" });
-    if (this.colorBy === "status") {
+    if (this.activeType() === "table") {
+      // テーブルに色分けは無い / no colour basis in the table view
+    } else if (this.colorBy === "status") {
       for (const s of statuses) this.legendChip(legend, s.color, s.label);
     } else {
       for (const a of assignees) this.legendChip(legend, hashColor(a), linkLabel(a));
@@ -2129,8 +2133,10 @@ export class GanttView extends ItemView {
     const bodyH = this.rows.length * ROW_H;
 
     const cols = this.visibleColumns();
-    const grid = main.createDiv({ cls: "ogantt-grid" });
-    grid.style.gridTemplateColumns = `${this.tableWidth()}px ${width}px`;
+    const isTable = this.activeType() === "table"; // テーブルビューは、タイムライン（日付軸と SVG）を作らない / the table view builds no timeline (date axis, SVG)
+    const gridCols = (): string => (isTable ? `${this.tableWidth()}px` : `${this.tableWidth()}px ${width}px`);
+    const grid = main.createDiv({ cls: "ogantt-grid" + (isTable ? " is-table-only" : "") });
+    grid.style.gridTemplateColumns = gridCols();
     grid.style.gridTemplateRows = `${HEAD_H}px ${bodyH}px`;
 
     // 行ループ内ではローカル変数 tr（行要素）が i18n の tr() を隠すため、先に文言を退避
@@ -2176,7 +2182,7 @@ export class GanttView extends ItemView {
           const w = Math.max(40, Math.round(startW + ev.clientX - startX));
           this.vs.columnWidths[id] = w;
           // ドラッグ中は再描画せず幅だけ反映 / live-apply widths without a full re-render
-          grid.style.gridTemplateColumns = `${this.tableWidth()}px ${width}px`;
+          grid.style.gridTemplateColumns = gridCols();
           if (id !== "name") {
             th.style.width = `${w}px`;
             this.tbodyEl
@@ -2199,11 +2205,13 @@ export class GanttView extends ItemView {
     // Fit は算出した ppd から目盛り粒度を選ぶ / in Fit, pick tick granularity from the computed ppd
     const tickZoom: ZoomMode =
       this.zoom !== "Fit" ? this.zoom : this.ppd >= 24 ? "Day" : this.ppd >= 10 ? "Week" : "Month";
-    const axis = grid.createDiv({ cls: "ogantt-axis" });
-    for (const tick of buildTicks(this.range, tickZoom, this.ppd, tr().weekdays)) {
-      const t = axis.createDiv({ cls: "ogantt-tick" + (tick.major ? " is-major" : "") });
-      t.style.left = `${tick.x}px`;
-      t.setText(tick.label);
+    if (!isTable) {
+      const axis = grid.createDiv({ cls: "ogantt-axis" });
+      for (const tick of buildTicks(this.range, tickZoom, this.ppd, tr().weekdays)) {
+        const t = axis.createDiv({ cls: "ogantt-tick" + (tick.major ? " is-major" : "") });
+        t.style.left = `${tick.x}px`;
+        t.setText(tick.label);
+      }
     }
 
     // (3) 表の本体 / table body
@@ -2323,6 +2331,7 @@ export class GanttView extends ItemView {
     }
 
     // (4) タイムライン SVG / timeline SVG
+    if (isTable) return; // テーブルビューはここまで / the table view stops here
     const svgWrap = grid.createDiv({ cls: "ogantt-svgwrap" });
     const svg = svgWrap.createSvg("svg", { cls: "ogantt-svg" });
     svg.setAttribute("width", String(width));

@@ -61,6 +61,7 @@ interface Strings {
   viewDeleteBody: (name: string) => string;
   viewCopyName: (name: string) => string;
   viewKanban: string;
+  viewTable: string;
   kanbanUnassigned: string;
   optCards: string;
   optColumnsLabel: string;
@@ -372,6 +373,7 @@ const STRINGS: Record<Lang, Strings> = {
     viewDeleteBody: (name) => `ビュー「${name}」を削除しますか。このビューの設定（フィルタ、列、グループなど）が消えます。タスクは消えません。`,
     viewCopyName: (name) => `${name} のコピー`,
     viewKanban: "カンバン",
+    viewTable: "テーブル",
     kanbanUnassigned: "未割当",
     optCards: "カードの項目",
     optColumnsLabel: "列表示",
@@ -664,6 +666,7 @@ const STRINGS: Record<Lang, Strings> = {
     viewDeleteBody: (name) => `Delete the view "${name}"? Its settings (filters, columns, grouping and so on) are lost. No tasks are deleted.`,
     viewCopyName: (name) => `${name} (copy)`,
     viewKanban: "Kanban",
+    viewTable: "Table",
     kanbanUnassigned: "Unassigned",
     optCards: "Card fields",
     optColumnsLabel: "Columns",
@@ -956,6 +959,7 @@ const STRINGS: Record<Lang, Strings> = {
     viewDeleteBody: (name) => `删除视图“${name}”？它的设置（筛选、列、分组等）将丢失，不会删除任何任务。`,
     viewCopyName: (name) => `${name}（副本）`,
     viewKanban: "看板",
+    viewTable: "表格",
     kanbanUnassigned: "未分配",
     optCards: "卡片字段",
     optColumnsLabel: "列",
@@ -1248,6 +1252,7 @@ const STRINGS: Record<Lang, Strings> = {
     viewDeleteBody: (name) => `刪除檢視「${name}」？它的設定（篩選、欄位、群組等）會遺失，不會刪除任何任務。`,
     viewCopyName: (name) => `${name}（副本）`,
     viewKanban: "看板",
+    viewTable: "表格",
     kanbanUnassigned: "未分配",
     optCards: "卡片欄位",
     optColumnsLabel: "欄位",
@@ -1540,6 +1545,7 @@ const STRINGS: Record<Lang, Strings> = {
     viewDeleteBody: (name) => `"${name}" 보기를 삭제할까요? 이 보기의 설정(필터, 열, 그룹 등)이 사라지며, 작업은 삭제되지 않습니다.`,
     viewCopyName: (name) => `${name} (복사본)`,
     viewKanban: "칸반",
+    viewTable: "테이블",
     kanbanUnassigned: "미할당",
     optCards: "카드 항목",
     optColumnsLabel: "열",
@@ -1832,6 +1838,7 @@ const STRINGS: Record<Lang, Strings> = {
     viewDeleteBody: (name) => `Supprimer la vue « ${name} » ? Ses réglages (filtres, colonnes, regroupement, etc.) seront perdus. Aucune tâche n'est supprimée.`,
     viewCopyName: (name) => `${name} (copie)`,
     viewKanban: "Kanban",
+    viewTable: "Tableau",
     kanbanUnassigned: "Non attribué",
     optCards: "Champs de la carte",
     optColumnsLabel: "Colonnes",
@@ -2124,6 +2131,7 @@ const STRINGS: Record<Lang, Strings> = {
     viewDeleteBody: (name) => `¿Eliminar la vista «${name}»? Se perderán sus ajustes (filtros, columnas, agrupación, etc.). No se elimina ninguna tarea.`,
     viewCopyName: (name) => `${name} (copia)`,
     viewKanban: "Kanban",
+    viewTable: "Tabla",
     kanbanUnassigned: "Sin asignar",
     optCards: "Campos de la tarjeta",
     optColumnsLabel: "Columnas",
@@ -2416,6 +2424,7 @@ const STRINGS: Record<Lang, Strings> = {
     viewDeleteBody: (name) => `Удалить вид «${name}»? Его настройки (фильтры, столбцы, группировка и т. д.) будут потеряны. Задачи не удаляются.`,
     viewCopyName: (name) => `${name} (копия)`,
     viewKanban: "Канбан",
+    viewTable: "Таблица",
     kanbanUnassigned: "Не назначено",
     optCards: "Поля карточки",
     optColumnsLabel: "Столбцы",

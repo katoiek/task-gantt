@@ -200,6 +200,11 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
     const one = renameOrderPaths(m, "other.md", "moved.md");
     return hit && o.todo.join() === "Q/a.md,Q/sub/b.md,P2/c.md,other.md".replace("other.md", "moved.md") && o.done.join() === "Q/a.md" && !miss && one;
   })());
+  check("repair: テーブルの種類も保たれる", (() => {
+    const r = repairBoardViews({ "folder:k": { active: "t", views: [{ id: "t", name: "T", type: "table", config: {} }, { id: "x", name: "X", type: "weird", config: {} }] } }, base);
+    const v = r["folder:k"].views;
+    return v[0].type === "table" && v[1].type === "gantt";
+  })());
   check("repair: 開いているビューが無ければ先頭", fixed["folder:partial"].active === "a");
   fixed["folder:ok"].views[0].config.visibleColumns.push("x");
   check("repair: base や元のデータと配列を共有しない", base.visibleColumns.length === 2 && raw["folder:ok"].views[0].config.visibleColumns.length === 2);

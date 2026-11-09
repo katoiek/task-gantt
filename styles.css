@@ -147,7 +147,8 @@
   margin-left: 2px;
 }
 /* カンバン：ステータスごとの列にカード。列の色はステータスの色（--ogantt-col）/ Kanban: a column per status, cards in it; a column's colour is its status's (--ogantt-col) */
-.is-kanban .ogantt-gantt-only {
+.is-kanban .ogantt-gantt-only,
+.is-table .ogantt-gantt-only {
   display: none;
 }
 .ogantt-kanban-only {
