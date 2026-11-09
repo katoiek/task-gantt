@@ -1607,18 +1607,18 @@ export class GanttView extends ItemView {
     // 現在のフォルダ内に実在する担当者一覧（凡例で使用）/ assignees present in the folder (used by the legend)
     const assignees = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort();
 
+    // グループ・色分け：カンバンのツールバーのボタンと同じ「アイコン＋ラベル」のボタン。押すとドロップダウン（現在の値にチェック）
+    // group / color by: the same "icon + label" button as the Kanban toolbar's; it opens a dropdown with the current value checked
     const makeSelect = (icon: string, label: string, value: string, opts: [string, string][], on: (v: string) => void): void => {
-      const wrap = host.createDiv({ cls: "ogantt-opt" });
-      const ic = wrap.createSpan({ cls: "ogantt-opt-ico" });
-      setIcon(ic, icon);
-      ic.setAttr("aria-label", label); // アイコンの意味をツールチップで補助 / tooltip explains the icon
-      wrap.createSpan({ cls: "ogantt-opt-label", text: label }); // アイコンの右に、何の選択かを文字でも出す / the label as text too, so it's clear what the select changes
-      const sel = wrap.createEl("select");
-      for (const [val, text] of opts) {
-        const o = sel.createEl("option", { text, value: val });
-        if (val === value) o.selected = true;
-      }
-      sel.addEventListener("change", () => on(sel.value));
+      const btn = host.createEl("button", { cls: "ogantt-opt-gear clickable-icon" });
+      setIcon(btn, icon);
+      btn.createSpan({ cls: "ogantt-opt-gear-label", text: label });
+      btn.setAttr("aria-label", label);
+      btn.onclick = (e) => {
+        const menu = new Menu();
+        for (const [val, text] of opts) menu.addItem((it) => it.setTitle(text).setChecked(val === value).onClick(() => on(val)));
+        menu.showAtMouseEvent(e);
+      };
     };
 
     // 列の表示/非表示（歯車）＝オプション行の一番左 / column visibility (gear) — leftmost of the options row
