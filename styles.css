@@ -113,6 +113,15 @@
   color: var(--text-muted);
   cursor: pointer;
 }
+.ogantt-viewtab.is-dragging {
+  opacity: 0.5;
+}
+.ogantt-viewtab.is-tab-before {
+  box-shadow: -3px 0 0 var(--interactive-accent);
+}
+.ogantt-viewtab.is-tab-after {
+  box-shadow: 3px 0 0 var(--interactive-accent);
+}
 .ogantt-viewtab:hover {
   background: var(--background-modifier-hover);
 }

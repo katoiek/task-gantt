@@ -71,6 +71,7 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 ![View tabs above the toolbar; the + menu copies the open view or adds a new Gantt view](docs/images/view-menu-en.png)
 
 - **＋** adds a view: **Copy this view** copies every setting and opens the copy next to the original, or **Gantt**, **Table** or **Kanban** adds a new view with the default settings and no filters; its columns start as the title, **Start**, **Due**, **Assignee** and **Status**.
+- **Drag a tab** to reorder the views (an accent line shows where it will go); the order is saved.
 - Double-click a tab, or use the **▾** on the open tab (or right-click any tab), to **rename**, **duplicate** or **delete** a view. The last view can't be deleted, and deleting a view never deletes tasks.
 - Changes are saved to the open view automatically. Saved filter **presets** stay shared by all views. The first time a board is opened, its first view takes over your current settings, so nothing changes at first.
 
@@ -434,6 +435,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 ![ツールバーの上のビューのタブ。＋のメニューで、今のビューをコピーするか、新しいガントを追加する](docs/images/view-menu-ja.png)
 
 - **＋** でビューを追加します。**今のビューをコピー**は、すべての設定を複製して、元の隣に開きます。**ガント**・**テーブル**・**カンバン**は、既定の設定でフィルタのない新しいビューを追加します。列は、タイトル・**開始**・**期限**・**担当者**・**ステータス**から始まります。
+- **タブをドラッグ**すると、ビューの順序を入れ替えられます（入る位置に線が出ます）。順序は保存されます。
 - タブをダブルクリックするか、開いているタブの **▾**（または任意のタブの右クリック）から、ビューの**名前の変更**・**複製**・**削除**ができます。最後の 1 つは削除できません。ビューを削除しても、タスクは消えません。
 - 変更は、開いているビューに自動で保存されます。保存済みのフィルタの**プリセット**は、全ビューで共有のままです。ボードを初めて開くときは、最初のビューが今の設定を引き継ぐので、最初は何も変わりません。
 

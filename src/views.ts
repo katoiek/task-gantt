@@ -188,3 +188,19 @@ export function renameOrderPaths(map: Record<string, BoardViews>, oldPath: strin
   });
   return changed;
 }
+
+// ビューの並べ替え：fromId のビューを、targetId の前（after なら後ろ）へ動かす。動かせなければ（同じ位置・無い ID）false
+// reorder the views: move fromId before targetId (after it when `after`); false when nothing would change (same place, unknown id)
+export function moveView(bv: BoardViews, fromId: string, targetId: string, after: boolean): boolean {
+  if (fromId === targetId) return false;
+  const from = bv.views.findIndex((v) => v.id === fromId);
+  const target = bv.views.findIndex((v) => v.id === targetId);
+  if (from < 0 || target < 0) return false;
+  const moving = bv.views[from];
+  const rest = bv.views.filter((v) => v.id !== fromId);
+  const at = rest.findIndex((v) => v.id === targetId) + (after ? 1 : 0);
+  const next = [...rest.slice(0, at), moving, ...rest.slice(at)];
+  if (next.every((v, i) => v === bv.views[i])) return false;
+  bv.views = next;
+  return true;
+}

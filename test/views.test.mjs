@@ -13,6 +13,7 @@ import {
   eachConfig,
   repairBoardViews,
   renameOrderPaths,
+  moveView,
 } from "./views.mjs";
 
 let pass = 0;
@@ -123,6 +124,29 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
   bv2.active = "v1";
   check("delete: 開いていないビューを消しても active は変わらない", deleteView(bv2, "v2") && bv2.active === "v1");
   check("delete: 無い ID は false", !deleteView(bv2, "nope") === true);
+}
+
+// ── moveView ──
+{
+  const mk = () => {
+    const bv = createBoardViews("A", cfg());
+    addView(bv, "B", cfg());
+    addView(bv, "C", cfg());
+    return bv;
+  };
+  const order = (bv) => bv.views.map((v) => v.name).join();
+  const bv1 = mk();
+  check("moveView: 前へ動かす", moveView(bv1, "v3", "v1", false) && order(bv1) === "C,A,B");
+  const bv2 = mk();
+  check("moveView: 後ろへ動かす", moveView(bv2, "v1", "v2", true) && order(bv2) === "B,A,C");
+  const bv3 = mk();
+  check("moveView: 末尾へ", moveView(bv3, "v1", "v3", true) && order(bv3) === "B,C,A");
+  const bv4 = mk();
+  check("moveView: 同じ位置・自分自身・無い ID は何もしない", !moveView(bv4, "v1", "v2", false) && !moveView(bv4, "v2", "v1", true) && !moveView(bv4, "v1", "v1", true) && !moveView(bv4, "v1", "nope", true) && !moveView(bv4, "nope", "v1", true) && order(bv4) === "A,B,C");
+  const bv5 = mk();
+  bv5.active = "v2";
+  moveView(bv5, "v2", "v1", false);
+  check("moveView: 開いているビューは変わらない", bv5.active === "v2" && order(bv5) === "B,A,C");
 }
 
 // ── moveBoardKeys ──

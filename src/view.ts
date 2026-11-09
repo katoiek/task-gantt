@@ -49,7 +49,7 @@ import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変�
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
 import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, applyManualOrder, buildKanbanColumns, cardZone, collapseColumns, columnKey, laneKeyOf, moveId, orderStatusIds, placeInOrder, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
-import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView, LaneBy } from "./views";
+import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, moveView, renameView, LaneBy } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
 import { applyFilters, regroup } from "./filter";
@@ -117,6 +117,7 @@ export class GanttView extends ItemView {
   // テーブルのセル選択（表のセルを、スプレッドシートのように選んで、コピー・貼り付け・フィルする）。パスと列 ID で持つので、描き直しても残る
   // the table's cell selection (pick cells like a spreadsheet to copy, paste and fill); held as path + column id, so it survives a redraw
   private cellSel: { anchor: CellRef; focus: CellRef } | null = null;
+  private dragTabId: string | null = null; // ドラッグ中のビューのタブ / the view tab being dragged
   private selBarEl: HTMLElement | null = null;
   private selDragging = false; // ドラッグで範囲を選んでいる最中 / dragging out a range
   private batchActive = false; // まとめて書いている最中（途中の再読込・取り消し記録を止める）/ writing in bulk (pauses reloads and undo records in between)
@@ -550,6 +551,45 @@ export class GanttView extends ItemView {
         continue;
       }
       tab.createSpan({ cls: "ogantt-viewtab-name", text: v.name });
+      // タブをドラッグして並べ替える：左半分に落とせばその前、右半分なら後ろ。順序は保存する
+      // drag a tab to reorder: dropping on its left half goes before it, the right half after it; the order is saved
+      tab.setAttr("draggable", "true");
+      tab.addEventListener("dragstart", (ev: DragEvent) => {
+        this.dragTabId = v.id;
+        ev.dataTransfer?.setData("text/plain", v.id);
+        if (ev.dataTransfer) ev.dataTransfer.effectAllowed = "move";
+        tab.addClass("is-dragging");
+      });
+      tab.addEventListener("dragend", () => {
+        this.dragTabId = null;
+        host.querySelectorAll(".is-dragging, .is-tab-before, .is-tab-after").forEach((el) => el.removeClasses(["is-dragging", "is-tab-before", "is-tab-after"]));
+      });
+      const dropAfter = (ev: DragEvent): boolean => {
+        const r = tab.getBoundingClientRect();
+        return ev.clientX > r.left + r.width / 2;
+      };
+      tab.addEventListener("dragover", (ev: DragEvent) => {
+        if (!this.dragTabId || this.dragTabId === v.id) return;
+        ev.preventDefault();
+        const after = dropAfter(ev);
+        tab.toggleClass("is-tab-after", after);
+        tab.toggleClass("is-tab-before", !after);
+      });
+      tab.addEventListener("dragleave", (ev: DragEvent) => {
+        if (tab.contains(ev.relatedTarget as Node | null)) return;
+        tab.removeClasses(["is-tab-before", "is-tab-after"]);
+      });
+      tab.addEventListener("drop", (ev: DragEvent) => {
+        if (!this.dragTabId) return;
+        ev.preventDefault();
+        const from = this.dragTabId;
+        this.dragTabId = null;
+        tab.removeClasses(["is-tab-before", "is-tab-after"]);
+        if (moveView(bv, from, v.id, dropAfter(ev))) {
+          void this.plugin.saveData(this.plugin.settings);
+          this.renderViewTabs();
+        }
+      });
       tab.onclick = () => this.switchView(v.id);
       tab.ondblclick = () => { this.renamingId = v.id; this.renderViewTabs(); };
       tab.addEventListener("contextmenu", (ev: MouseEvent) => { ev.preventDefault(); this.openViewMenu(ev, v); });
