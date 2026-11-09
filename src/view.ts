@@ -3723,7 +3723,9 @@ export class GanttView extends ItemView {
         if (c === rect.c1) td.addClass("is-sel-r");
       }
     }
-    const corner = this.cellEl(rows[rect.r1], cols[rect.c1]);
+    // フィルハンドルは、タイトル（名前）の列だけを選んでいるときは出さない（同じフォルダに同じ名前のノートは作れないため）/ no fill handle when only the title (name) column is selected: a folder can't hold two notes with one name
+    const onlyName = rect.c0 === rect.c1 && cols[rect.c0] === "name";
+    const corner = onlyName ? null : this.cellEl(rows[rect.r1], cols[rect.c1]);
     corner?.createDiv({ cls: "ogantt-fill-handle" }).addEventListener("mousedown", (e) => this.startFill(e));
     this.paintSelectionSummary(rect, rows, cols);
   }
@@ -4001,7 +4003,10 @@ export class GanttView extends ItemView {
     const items: { path: string; col: string; text: string }[] = [];
     for (let r = target.from; r <= target.to; r++) {
       const src = rect.r0 + fillSourceIndex(r - rect.r0, n);
-      for (let c = rect.c0; c <= rect.c1; c++) items.push({ path: rows[r], col: cols[c], text: this.cellCopyText(rows[src], cols[c]) });
+      for (let c = rect.c0; c <= rect.c1; c++) {
+        if (cols[c] === "name") continue; // タイトルはフィルしない（名前の貼り付けは、別の値を貼れば使える）/ the title isn't filled (pasting different titles still works)
+        items.push({ path: rows[r], col: cols[c], text: this.cellCopyText(rows[src], cols[c]) });
+      }
     }
     const res = await this.applyCellTexts(tr().cellsFill, items);
     if (res.skipped > 0) new Notice(tr().cellsPasted(res.done, res.skipped));
