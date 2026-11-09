@@ -250,6 +250,10 @@ The export is the board as it is shown now: its filters, grouping, collapsed gro
 
 ![PNG export, table and chart](docs/images/export-table.png)
 
+### Export as CSV
+
+The same menu (and the **Export: CSV** command) also writes a **CSV** of the table: the columns you have visible, as the header, and one line per row you can see now, in the order shown (filters, sorting, grouping and collapsed groups apply). Each value is written as it reads on screen: dates in your display format, the status by name, tags separated by commas. The file is UTF-8 with a BOM (so Excel opens Japanese and other text correctly) and goes to the attachment folder like the other exports. In a **Table view** the menu offers only CSV. There is no CSV import.
+
 ## Undo and redo
 
 Every change made on the board can be undone with **Ctrl/Cmd+Z** or the undo button, and redone with **Ctrl/Cmd+Shift+Z**, **Ctrl/Cmd+Y** or the redo button: cell edits, everything in the detail panel (including renames and body text), dragging bars, dependencies, moves and subtasks, tags, and creating or deleting a task. Undoing a delete re-creates the note in place. Successors that moved along with a task move back with it. While you are typing in a text field, the shortcuts undo your typing instead. Renaming or moving the board's tasks or folders from the file explorer joins the history too, so undo always walks back in the order things happened. The history lasts while the board is open.
@@ -608,6 +612,10 @@ after:
 ![PNG の書き出し例（チャートのみ）](docs/images/export-chart.png)
 
 ![PNG の書き出し例（表とチャート）](docs/images/export-table.png)
+
+### CSV の書き出し
+
+同じメニュー（と、コマンドの **書き出し: CSV**）から、表を **CSV** に書き出せます。今表示している列が見出しになり、今見えている行が、表示の順（絞り込み・並べ替え・グループ・折りたたみのまま）に 1 行ずつ並びます。値は、画面に表示されているとおりです（日付は表示形式、ステータスは名前、タグはカンマ区切り）。ファイルは、BOM 付きの UTF-8 です（Excel で日本語などが文字化けしません）。ほかの書き出しと同じく、添付ファイルの置き場所に保存します。**テーブルビュー**では、メニューに CSV だけが出ます。CSV の読み込み（インポート）はありません。
 
 ## 取り消し・やり直し
 

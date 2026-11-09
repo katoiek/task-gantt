@@ -151,6 +151,9 @@
 .is-table .ogantt-gantt-only {
   display: none;
 }
+.is-kanban .ogantt-nokanban {
+  display: none;
+}
 .ogantt-kanban-only {
   display: none;
 }

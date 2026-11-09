@@ -165,6 +165,7 @@ interface Strings {
   exportPngTable: string;
   exportPdfChart: string;
   exportPdfTable: string;
+  exportCsv: string;
   exportDone: (path: string) => string;
   exportOpen: string;
   exportFailed: string;
@@ -428,6 +429,7 @@ const STRINGS: Record<Lang, Strings> = {
     exportPngTable: "PNG：表とチャート",
     exportPdfChart: "PDF：チャートのみ",
     exportPdfTable: "PDF：表とチャート",
+    exportCsv: "CSV：表示中の列",
     exportDone: (path) => `「${path}」に保存しました。`,
     exportOpen: "開く",
     exportFailed: "書き出せませんでした。詳しくはコンソールを見てください。",
@@ -730,6 +732,7 @@ const STRINGS: Record<Lang, Strings> = {
     exportPngTable: "PNG: table and chart",
     exportPdfChart: "PDF: chart only",
     exportPdfTable: "PDF: table and chart",
+    exportCsv: "CSV: the columns shown",
     exportDone: (path) => `Saved to "${path}".`,
     exportOpen: "Open",
     exportFailed: "Couldn't export. See the console for details.",
@@ -1032,6 +1035,7 @@ const STRINGS: Record<Lang, Strings> = {
     exportPngTable: "PNG：表格和图表",
     exportPdfChart: "PDF：仅图表",
     exportPdfTable: "PDF：表格和图表",
+    exportCsv: "CSV：当前显示的列",
     exportDone: (path) => `已保存到“${path}”。`,
     exportOpen: "打开",
     exportFailed: "无法导出。详情请查看控制台。",
@@ -1334,6 +1338,7 @@ const STRINGS: Record<Lang, Strings> = {
     exportPngTable: "PNG：表格與圖表",
     exportPdfChart: "PDF：僅圖表",
     exportPdfTable: "PDF：表格與圖表",
+    exportCsv: "CSV：目前顯示的欄位",
     exportDone: (path) => `已儲存到「${path}」。`,
     exportOpen: "開啟",
     exportFailed: "無法匯出。詳情請看主控台。",
@@ -1636,6 +1641,7 @@ const STRINGS: Record<Lang, Strings> = {
     exportPngTable: "PNG: 표와 차트",
     exportPdfChart: "PDF: 차트만",
     exportPdfTable: "PDF: 표와 차트",
+    exportCsv: "CSV: 표시 중인 열",
     exportDone: (path) => `"${path}"에 저장했습니다.`,
     exportOpen: "열기",
     exportFailed: "내보내지 못했습니다. 자세한 내용은 콘솔을 확인하세요.",
@@ -1938,6 +1944,7 @@ const STRINGS: Record<Lang, Strings> = {
     exportPngTable: "PNG : tableau et graphique",
     exportPdfChart: "PDF : graphique seul",
     exportPdfTable: "PDF : tableau et graphique",
+    exportCsv: "CSV : colonnes affichées",
     exportDone: (path) => `Enregistré dans « ${path} ».`,
     exportOpen: "Ouvrir",
     exportFailed: "Échec de l'export. Voir la console pour les détails.",
@@ -2240,6 +2247,7 @@ const STRINGS: Record<Lang, Strings> = {
     exportPngTable: "PNG: tabla y gráfico",
     exportPdfChart: "PDF: solo el gráfico",
     exportPdfTable: "PDF: tabla y gráfico",
+    exportCsv: "CSV: columnas visibles",
     exportDone: (path) => `Guardado en «${path}».`,
     exportOpen: "Abrir",
     exportFailed: "No se pudo exportar. Consulta la consola para más detalles.",
@@ -2542,6 +2550,7 @@ const STRINGS: Record<Lang, Strings> = {
     exportPngTable: "PNG: таблица и диаграмма",
     exportPdfChart: "PDF: только диаграмма",
     exportPdfTable: "PDF: таблица и диаграмма",
+    exportCsv: "CSV: показанные столбцы",
     exportDone: (path) => `Сохранено: «${path}».`,
     exportOpen: "Открыть",
     exportFailed: "Не удалось экспортировать. Подробности в консоли.",

@@ -56,6 +56,18 @@ export default class GanttPlugin extends Plugin {
       });
     }
 
+    // CSV：今見えている行と列を書き出す（ガント・テーブル）/ CSV: the rows and columns as shown (Gantt and table views)
+    this.addCommand({
+      id: "export-csv",
+      name: `${t().exportAria}: ${t().exportCsv}`,
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(GanttView);
+        if (!view) return false;
+        if (!checking) void view.exportCsv();
+        return true;
+      },
+    });
+
     // フォルダ右クリック → このフォルダを Gantt 表示 / folder context menu
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu: Menu, file: TAbstractFile) => {

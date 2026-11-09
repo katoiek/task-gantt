@@ -1,5 +1,5 @@
 // テーブルのセル操作（TSV・日付・ステータス・タグ・進捗・フィル）の検証 / Tests for the table's cell operations (TSV, dates, status, tags, progress, fill)
-import { toTsv, parseTsv, parseDateTimeText, statusIdFromText, tagsFromText, progressFromText, fillSourceIndex, summarizeCells } from "./cells.mjs";
+import { toTsv, parseTsv, parseDateTimeText, statusIdFromText, tagsFromText, progressFromText, fillSourceIndex, summarizeCells, csvField, toCsv } from "./cells.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -61,6 +61,16 @@ check("fillSourceIndex: 上へ繰り返す（負）", [-1, -2, -3].map((k) => fi
   check("summarizeCells: 混ざっていれば、件数だけ", t.kind === "text" && t.count === 2 && t.min === undefined);
   check("summarizeCells: すべて空なら、件数 0", summarizeCells(["", " "], "YYYY/MM/DD").count === 0);
   check("summarizeCells: 負の数・日付形式（日/月/年）", summarizeCells(["-3", "4"], "YYYY/MM/DD").min === -3 && summarizeCells(["02/11/2026", "01/12/2026"], "DD/MM/YYYY").max === "2026-12-01");
+}
+
+// ── CSV ──
+{
+  check("csvField: ふつうの文字はそのまま", csvField("Task 1") === "Task 1" && csvField("") === "" && csvField("2026/11/02") === "2026/11/02");
+  check("csvField: カンマ・引用符・改行を含めば囲む", csvField("a,b") === '"a,b"' && csvField('say "hi"') === '"say ""hi"""' && csvField("l1\nl2") === '"l1\nl2"');
+  check("csvField: 数式になりうる先頭には ' を足す", csvField("=1+1") === "'=1+1" && csvField("+cmd") === "'+cmd" && csvField("@x") === "'@x" && csvField("-x") === "'-x");
+  check("csvField: 負の数は、そのまま", csvField("-3") === "-3" && csvField("-0.5") === "-0.5");
+  check("csvField: 数式の先頭に、カンマも含むとき", csvField("=a,b") === `"'=a,b"`);
+  check("toCsv: CRLF で、末尾にも改行", toCsv([["名前", "期限"], ["タスク,1", "2026/11/02"]]) === '名前,期限\r\n"タスク,1",2026/11/02\r\n');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

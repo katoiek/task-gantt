@@ -137,3 +137,17 @@ export function summarizeCells(values: string[], fmt: DateFormat): CellSummary {
   }
   return { count, kind: "text" };
 }
+
+// ── CSV ──
+// 1 つの欄を CSV 用に。カンマ・引用符・改行を含めば "" で囲む。Excel が数式として実行しうる先頭（= + @、- の後ろが数字でない）には ' を足す
+// one field for CSV: wrapped in "" when it has a comma, a quote or a newline; a leading = + @ (or a - not followed by a digit), which Excel could run as a formula, gets a ' in front
+export function csvField(value: string): string {
+  const safe = /^[=+@\t\r]/.test(value) || /^-[^\d.]/.test(value) ? `'${value}` : value;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+// 行×欄を CSV に。改行は CRLF（Excel の既定）。先頭の BOM は、書き込む側で付ける
+// rows × fields as CSV, with CRLF line ends (Excel's default); the BOM is added by whoever writes the file
+export function toCsv(rows: string[][]): string {
+  return rows.map((r) => r.map(csvField).join(",")).join("\r\n") + "\r\n";
+}

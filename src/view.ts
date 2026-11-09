@@ -53,7 +53,7 @@ import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createB
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
 import { applyFilters, regroup } from "./filter";
-import { fillSourceIndex, parseTsv, summarizeCells, toTsv } from "./cells";
+import { fillSourceIndex, parseTsv, summarizeCells, toCsv, toTsv } from "./cells";
 import { BoardContext, Move, MutateResult } from "./board";
 import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnWidth, customColumn, taskComparator, visibleColumns } from "./columns";
 
@@ -1715,7 +1715,7 @@ export class GanttView extends ItemView {
     this.updateUndoButton();
 
     // 書き出し（PNG / PDF × チャートのみ / 表とチャート）/ export (PNG or PDF × chart only or table and chart)
-    const exp = bar.createEl("button", { cls: "ogantt-gantt-only" }); // カンバンでは書き出せない / no export from Kanban yet
+    const exp = bar.createEl("button", { cls: "ogantt-nokanban" }); // カンバンでは書き出せない（テーブルでは CSV だけ）/ no export from Kanban (the table view offers CSV only)
     setIcon(exp, "download");
     exp.setAttr("aria-label", tr().exportAria);
     exp.onclick = (e) => this.openExportMenu(e);
@@ -2092,10 +2092,15 @@ export class GanttView extends ItemView {
       [tr().exportPdfChart, "pdf", "chart", "file-down"],
       [tr().exportPdfTable, "pdf", "table", "file-down"],
     ];
-    items.forEach(([title, format, scope, icon], i) => {
-      if (i === 2) menu.addSeparator();
-      menu.addItem((it) => it.setTitle(title).setIcon(icon).onClick(() => void this.exportBoard(format, scope)));
-    });
+    // 画像と PDF はチャートのためのもの。テーブルビューには CSV だけ / images and PDFs are about the chart; the table view offers CSV only
+    if (this.activeType() !== "table") {
+      items.forEach(([title, format, scope, icon], i) => {
+        if (i === 2) menu.addSeparator();
+        menu.addItem((it) => it.setTitle(title).setIcon(icon).onClick(() => void this.exportBoard(format, scope)));
+      });
+      menu.addSeparator();
+    }
+    menu.addItem((it) => it.setTitle(tr().exportCsv).setIcon("file-spreadsheet").onClick(() => void this.exportCsv()));
     menu.showAtMouseEvent(e);
   }
 
@@ -2139,6 +2144,33 @@ export class GanttView extends ItemView {
       new Notice(tr().exportFailed);
     } finally {
       this.exporting = false;
+    }
+  }
+
+  // 今見えている行と列（絞り込み・並べ替え・グループ・折りたたみのまま）を、CSV として書き出す。値は画面の表示どおり（コピーと同じ文字）
+  // export the rows and columns as shown (filters, sort, grouping, collapsing) as CSV, with each value as it reads on screen (the same text as a copy)
+  async exportCsv(): Promise<void> {
+    const paths = this.selRows();
+    if (!paths.length) return void new Notice(tr().exportNothing);
+    const cols = this.visibleColumns();
+    const rows: string[][] = [cols.map((c) => c.label())];
+    for (const p of paths) rows.push(cols.map((c) => this.cellCopyText(p, c.id)));
+    const base = this.folder.split("/").pop() || "vault";
+    const name = `${this.activeType() === "table" ? "Table" : "Gantt"} ${base} ${dayToStr(todayIndex())}.csv`;
+    try {
+      // 先頭の BOM で、Excel が UTF-8（日本語など）として開く / the leading BOM makes Excel open it as UTF-8 (Japanese and the like)
+      const path = await this.app.fileManager.getAvailablePathForAttachment(name, "/");
+      const file = await this.app.vault.create(path, "\uFEFF" + toCsv(rows));
+      new Notice(
+        createFragment((f) => {
+          f.createSpan({ text: tr().exportDone(file.path) + " " });
+          f.createEl("button", { text: tr().exportOpen }).onclick = () => void this.app.workspace.getLeaf("tab").openFile(file);
+        }),
+        8000
+      );
+    } catch (e) {
+      console.error("Task Gantt Board: CSV export failed", e);
+      new Notice(tr().exportFailed);
     }
   }
 
