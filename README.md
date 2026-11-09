@@ -79,6 +79,8 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 
 **＋ → Table** adds a Table view: the Gantt's table without the timeline, for planning and bulk editing like a spreadsheet. It has the same columns, grouping, subtasks, filters and sorting as the Gantt, and everything below works in the Gantt's table too.
 
+![The + menu: Copy this view, Gantt, Table or Kanban, and a new Table view](docs/images/table-add-view-en.png)
+
 - **Select cells**: click a cell, **Shift**+click or drag for a range, **arrow keys** and **Tab** to move. **Enter**, **F2** or a double-click edits the cell, and **Esc** clears the selection.
 - **Copy and paste**: **Ctrl/Cmd+C**, **X** and **V** work on the selected cells as tab-separated text, so you can paste to and from Excel, Google Sheets or Wrike. One value pasted onto a range fills the whole range; several values land from the top-left cell. Each column reads text its own way: dates in your display format (or ISO, with an optional time such as `2026/11/02 09:30`), status by name, tags separated by commas, progress as `60` or `60%`, custom fields by their type. Rows past the end of the table aren't pasted (you're told how many), and read-only cells and the name column are skipped.
 - **Fill**: drag the small square at the bottom-right of the selection up or down to copy the selected values into the rows you pass.
@@ -254,6 +256,8 @@ The export is the board as it is shown now: its filters, grouping, collapsed gro
 ### Export as CSV
 
 The same menu (and the **Export: CSV** command) also writes a **CSV** of the table: the columns you have visible, as the header, and one line per row you can see now, in the order shown (filters, sorting, grouping and collapsed groups apply). Each value is written as it reads on screen: dates in your display format, the status by name, tags separated by commas. The file is UTF-8 with a BOM (so Excel opens Japanese and other text correctly) and goes to the attachment folder like the other exports. In a **Table view** the menu offers only CSV. There is no CSV import.
+
+![The export menu with CSV: the columns shown](docs/images/csv-export-menu-en.png)
 
 ## Undo and redo
 
@@ -443,6 +447,8 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 **＋ → テーブル**で、テーブルのビューを追加できます。ガントの表から、タイムラインを外したもので、スプレッドシートのように、まとめて入力・編集できます。列、グループ、サブタスク、フィルタ、並べ替えは、ガントと同じです。以下の操作は、ガントの表でも使えます。
 
+![＋のメニュー（今のビューをコピー・ガント・テーブル・カンバン）と、追加したテーブルビュー](docs/images/table-add-view-ja.png)
+
 - **セルの選択**: セルをクリック、**Shift**+クリックやドラッグで範囲、**矢印キー**と **Tab** で移動します。**Enter**、**F2**、ダブルクリックで、セルを編集します。**Esc** で、選択を解除します。
 - **コピー＆貼り付け**: 選んだセルを、**Ctrl/Cmd+C**、**X**、**V** で、タブ区切りのテキストとして扱います。Excel、Google スプレッドシート、Wrike との間で、貼り合えます。1 つの値を範囲に貼ると、範囲全体に入ります。複数の値は、左上のセルから入ります。列ごとに、文字の読み方が決まっています。日付は表示形式（または ISO。`2026/11/02 09:30` のように時刻も付けられます）、ステータスは名前、タグはカンマ区切り、進捗は `60` か `60%`、カスタムフィールドは種類どおりです。表の下端を超える行は貼られず、何行かを知らせます。読み取り専用のセルと、名前の列は、飛ばします。
 - **フィル**: 選んだ範囲の右下の小さな四角を、上か下にドラッグすると、選んだ値を、通った行にコピーします。
@@ -618,6 +624,8 @@ after:
 ### CSV の書き出し
 
 同じメニュー（と、コマンドの **書き出し: CSV**）から、表を **CSV** に書き出せます。今表示している列が見出しになり、今見えている行が、表示の順（絞り込み・並べ替え・グループ・折りたたみのまま）に 1 行ずつ並びます。値は、画面に表示されているとおりです（日付は表示形式、ステータスは名前、タグはカンマ区切り）。ファイルは、BOM 付きの UTF-8 です（Excel で日本語などが文字化けしません）。ほかの書き出しと同じく、添付ファイルの置き場所に保存します。**テーブルビュー**では、メニューに CSV だけが出ます。CSV の読み込み（インポート）はありません。
+
+![書き出しメニューの CSV：表示中の列](docs/images/csv-export-menu-ja.png)
 
 ## 取り消し・やり直し
 
