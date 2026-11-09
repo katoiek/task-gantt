@@ -92,6 +92,8 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 
   ![Swimlanes by assignee: the column headers on top, one lane per assignee](docs/images/kanban-swimlanes-en.png)
 - **Order the cards**: drag a card up or down in its column (a line shows where it will land), or into another column at the spot you want, which also changes its status (and its assignee in an assignee lane). Dragging switches the view to **Manual** order, which is saved in that view. The toolbar's **Sort** button switches between **Manual** and any column in ascending or descending order, and the manual order is kept while you use another sort. Cards not in the manual order yet go to the end of their column, and renaming or moving a note keeps its place. Changes of order aren't covered by undo.
+
+  ![Dragging a card into another column: a line shows where it will land](docs/images/kanban-reorder-en.png)
 - **Click a card** to open its detail panel.
 - **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **Cards** button (the list icon at the left of the toolbar, before the folder name) lists every other column, including custom fields, as checkboxes.
 
@@ -434,6 +436,8 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
 
   ![担当者ごとのスイムレーン。列の見出しは上に、レーンは担当者ごと](docs/images/kanban-swimlanes-ja.png)
 - **カードの並べ替え**: 列の中でカードを上下にドラッグすると、入る位置に線が出ます。別の列の好きな位置にドラッグすることもでき、その場合はステータス（担当者のレーンなら担当者も）も変わります。ドラッグすると、そのビューが**手動**の並びになり、そのビューに保存されます。ツールバーの**並べ替え**ボタンで、**手動**と、列を選んだ昇順・降順を切り替えられ、ほかの並べ替えにしても手動の順序は残ります。手動の順序にまだ入っていないカードは、その列の末尾に入ります。ノートの名前変更や移動があっても、位置は保たれます。順序の変更は、取り消しの対象ではありません。
+
+  ![カードを別の列へドラッグ中。入る位置に線が出る](docs/images/kanban-reorder-ja.png)
 - **カードをクリック**すると、詳細パネルが開きます。
 - **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カード**ボタン（ツールバーの左端、フォルダ名の左にある一覧のアイコン）から、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます。
 
