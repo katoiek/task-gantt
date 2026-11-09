@@ -78,6 +78,7 @@ interface Strings {
   kanbanLaneRoot: string;
   kanbanSort: string;
   kanbanSortManual: string;
+  kanbanSortTitle: string;
   kanbanSortAsc: string;
   kanbanSortDesc: string;
   optHideLabels: string; // バーの名前・担当を隠す / hide the names and assignees on the bars
@@ -387,6 +388,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanLaneRoot: "（直下）",
     kanbanSort: "並べ替え",
     kanbanSortManual: "手動",
+    kanbanSortTitle: "タスク名",
     kanbanSortAsc: "昇順",
     kanbanSortDesc: "降順",
     optHideLabels: "バーの名前・担当を隠す",
@@ -677,6 +679,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanLaneRoot: "(top level)",
     kanbanSort: "Sort",
     kanbanSortManual: "Manual",
+    kanbanSortTitle: "Task title",
     kanbanSortAsc: "Ascending",
     kanbanSortDesc: "Descending",
     optHideLabels: "Hide bar labels",
@@ -967,6 +970,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanLaneRoot: "（顶层）",
     kanbanSort: "排序",
     kanbanSortManual: "手动",
+    kanbanSortTitle: "任务标题",
     kanbanSortAsc: "升序",
     kanbanSortDesc: "降序",
     optHideLabels: "隐藏条上的标签",
@@ -1257,6 +1261,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanLaneRoot: "（頂層）",
     kanbanSort: "排序",
     kanbanSortManual: "手動",
+    kanbanSortTitle: "任務標題",
     kanbanSortAsc: "升冪",
     kanbanSortDesc: "降冪",
     optHideLabels: "隱藏長條標籤",
@@ -1547,6 +1552,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanLaneRoot: "(최상위)",
     kanbanSort: "정렬",
     kanbanSortManual: "수동",
+    kanbanSortTitle: "작업 제목",
     kanbanSortAsc: "오름차순",
     kanbanSortDesc: "내림차순",
     optHideLabels: "막대 라벨 숨기기",
@@ -1837,6 +1843,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanLaneRoot: "(racine)",
     kanbanSort: "Trier",
     kanbanSortManual: "Manuel",
+    kanbanSortTitle: "Titre de la tâche",
     kanbanSortAsc: "Croissant",
     kanbanSortDesc: "Décroissant",
     optHideLabels: "Masquer les libellés des barres",
@@ -2127,6 +2134,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanLaneRoot: "(raíz)",
     kanbanSort: "Ordenar",
     kanbanSortManual: "Manual",
+    kanbanSortTitle: "Título de la tarea",
     kanbanSortAsc: "Ascendente",
     kanbanSortDesc: "Descendente",
     optHideLabels: "Ocultar etiquetas de las barras",
@@ -2417,6 +2425,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanLaneRoot: "(корень)",
     kanbanSort: "Сортировка",
     kanbanSortManual: "Вручную",
+    kanbanSortTitle: "Название задачи",
     kanbanSortAsc: "По возрастанию",
     kanbanSortDesc: "По убыванию",
     optHideLabels: "Скрыть подписи на полосах",

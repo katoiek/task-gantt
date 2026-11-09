@@ -972,7 +972,7 @@ export class GanttView extends ItemView {
     menu.addSeparator();
     for (const def of this.columns()) {
       menu.addItem((it) =>
-        it.setTitle(def.label()).setChecked(!this.cfg.manualOrder && this.cfg.sortBy === def.id).onClick(() =>
+        it.setTitle(def.id === "name" ? tr().kanbanSortTitle : def.label()).setChecked(!this.cfg.manualOrder && this.cfg.sortBy === def.id).onClick(() =>
           set(() => {
             this.cfg.manualOrder = false;
             this.cfg.sortBy = def.id;
