@@ -12,8 +12,10 @@ import {
   removeTag,
   customValueText,
   parseCustomInput,
+  setTags,
 } from "./model";
-import { formatDate, dayIndex, dayToStr, todayIndex } from "./timeline";
+import { formatDate, parseDate, dayIndex, dayToStr, todayIndex } from "./timeline";
+import { parseDateTimeText, progressFromText, statusIdFromText, tagsFromText } from "./cells";
 import { endForDuration, parseDuration, scheduleOptions, taskDuration, workdaysBetween } from "./schedule";
 import { linkLabel } from "./links";
 import { attachLinkSuggest, handleLinkClick, renderLinkValue } from "./linkui";
@@ -48,6 +50,11 @@ export interface CellColumn extends ColumnBase {
   // ダブルクリックで開くエディタ / the editor opened by a double-click
   edit: (ctx: BoardContext, cell: HTMLElement, row: Row) => void;
   editAria: () => string; // 編集可能セルの読み上げラベル / aria label of an editable cell
+  // コピーするときの文字。画面での見え方に合わせる（日付は設定の表示形式）/ the text copied out of the cell, the way it reads on screen (dates in the display format)
+  copyText: (ctx: BoardContext, t: Task, row: Row) => string;
+  // 貼り付け・フィルで、文字をセルに書く。読めない値などで書けなければ false。無ければ、貼り付けできない列
+  // write a text into the cell for paste and fill; false when it can't (an unreadable value, say). Absent = a column that can't be pasted into
+  applyText?: (ctx: BoardContext, t: Task, text: string) => Promise<boolean>;
 }
 
 export type ColumnDef = NameColumn | CellColumn;
@@ -93,6 +100,8 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
     },
     edit: (ctx, cell, row) => openCellDatePicker(ctx, cell, row.task!, "start"),
     editAria: () => tr().pickDate,
+    copyText: (ctx, t, row) => dateCopyText(ctx, t, row, "start"),
+    applyText: (ctx, t, text) => applyDateText(ctx, t, "start", text),
   },
   {
     kind: "cell",
@@ -114,6 +123,8 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
     },
     edit: (ctx, cell, row) => openCellDatePicker(ctx, cell, row.task!, "end"),
     editAria: () => tr().pickDate,
+    copyText: (ctx, t, row) => dateCopyText(ctx, t, row, "end"),
+    applyText: (ctx, t, text) => applyDateText(ctx, t, "end", text),
   },
   {
     kind: "cell",
@@ -165,6 +176,25 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
       );
     },
     editAria: () => tr().editDuration,
+    copyText: (ctx, t, row) => {
+      const cal = scheduleOptions(ctx.settings).cal;
+      const rolled = ctx.rollup && row.span ? row.span : null;
+      if (rolled) return String(workdaysBetween(dayIndex(rolled.start), dayIndex(rolled.end), cal));
+      if (t.milestone) return "";
+      const d = taskDuration(t, cal);
+      return d != null ? String(d) : "";
+    },
+    applyText: async (ctx, t, text) => {
+      const n = parseDuration(text);
+      if (n == null) return false; // 1 以上の整数だけ（空にはできない）/ only a whole number ≥ 1 (it can't be blanked)
+      const cal = scheduleOptions(ctx.settings).cal;
+      if (n === taskDuration(t, cal)) return true;
+      // 編集と同じ：開始日は保ち期限日を動かす（開始日が無ければ今日から）/ as in the editor: keep the start, move the due date (from today when unset)
+      const start = t.start ?? dayToStr(todayIndex());
+      const end = dayToStr(endForDuration(dayIndex(start), n, cal));
+      await ctx.reschedule(t.path, { start, end }, { start: t.startTime, end: t.endTime });
+      return true;
+    },
   },
   {
     kind: "cell",
@@ -192,6 +222,13 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
       );
     },
     editAria: () => tr().editProgress,
+    copyText: (_ctx, t) => (t.progress != null ? String(Math.round(t.progress)) : ""),
+    applyText: async (ctx, t, text) => {
+      const p = progressFromText(text);
+      if (p === null) return false;
+      await commitProgress(ctx, t, p === "" ? "" : String(p));
+      return true;
+    },
   },
   {
     kind: "cell",
@@ -218,6 +255,13 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
       );
     },
     editAria: () => tr().editAssignee,
+    copyText: (_ctx, t) => t.assignee ?? "",
+    applyText: async (ctx, t, text) => {
+      const v = text.trim();
+      if (v === (t.assignee ?? "")) return true;
+      await ctx.mutate(tr().undoEdit(t.name), [t.path], () => writeField(ctx.app, t.path, ctx.settings.keys.assignee, v || undefined));
+      return true;
+    },
   },
   {
     kind: "cell",
@@ -234,6 +278,14 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
     paint: (ctx, td, row) => paintStatus(ctx, td, row.task!),
     edit: (ctx, cell, row) => editStatus(ctx, cell, row.task!),
     editAria: () => tr().editStatus,
+    copyText: (ctx, t) => ctx.settings.statuses.find((s) => s.id === t.status)?.label ?? "",
+    applyText: async (ctx, t, text) => {
+      const id = statusIdFromText(text, ctx.settings.statuses);
+      if (id === null) return false; // 知らないステータス名 / an unknown status name
+      if (id === (t.status ?? "")) return true;
+      await ctx.mutate(tr().undoEdit(t.name), [t.path], () => writeField(ctx.app, t.path, ctx.settings.keys.status, id || undefined));
+      return true;
+    },
   },
   {
     kind: "cell",
@@ -247,6 +299,13 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
     // tags are multi-valued, so the cell opens the panel's chips + add field in a popover
     edit: (ctx, cell, row) => openTagEditor(ctx, cell, row.task!),
     editAria: () => tr().editTags,
+    copyText: (_ctx, t) => t.tags.join(", "),
+    applyText: async (ctx, t, text) => {
+      const tags = tagsFromText(text);
+      if (tags.join("\n") === t.tags.join("\n")) return true;
+      await ctx.mutate(tr().undoEdit(t.name), [t.path], () => setTags(ctx.app, t.path, tags));
+      return true;
+    },
   },
 ];
 
@@ -317,6 +376,27 @@ export function customColumn(f: CustomField): CellColumn {
       );
     },
     editAria: () => tr().editCustomField(name()),
+    copyText: (ctx, t) => {
+      const v = t.custom[f.id];
+      return f.type === "date" && typeof v === "string" ? formatDate(v, ctx.settings.dateFormat) : customValueText(v);
+    },
+    applyText: async (ctx, t, text) => {
+      const v = t.custom[f.id];
+      let next: CustomValue | undefined;
+      if (f.type === "date") {
+        const iso = parseDate(text, ctx.settings.dateFormat);
+        if (iso === null) return false;
+        next = iso || undefined;
+        if ((next ?? "") === (typeof v === "string" ? v : "")) return true;
+      } else {
+        const parsed = parseCustomInput(text, f.type, Array.isArray(v));
+        if (parsed === null) return false; // 数値にならない入力は書き込まない / a non-number isn't written
+        next = parsed;
+        if (customValueText(next) === customValueText(v)) return true;
+      }
+      await ctx.mutate(tr().undoEdit(t.name), [t.path], () => writeField(ctx.app, t.path, f.key.trim(), next));
+      return true;
+    },
   };
 }
 
@@ -347,6 +427,37 @@ export function taskComparator(defs: ColumnDef[], settings: GanttSettings): (a: 
 }
 
 // ----- セルの描画・編集 / cell painting and editing -----
+
+// 開始・期限セルのコピー用の文字（表示と同じ。ロールアップ中の親は集約値、マイルストーンの開始は空）/ the copy text of a start / due cell (as shown; a rolled-up parent gives its span, a milestone has no start)
+function dateCopyText(ctx: BoardContext, t: Task, row: Row, which: "start" | "end"): string {
+  const fmt = ctx.settings.dateFormat;
+  const rolled = ctx.rollup && row.span ? row.span : null;
+  if (rolled) return formatDate(rolled[which], fmt);
+  if (which === "start" && t.milestone) return "";
+  const date = which === "start" ? t.start : t.end;
+  const time = which === "start" ? t.startTime : t.endTime;
+  return formatDate(date, fmt) + (time ? ` ${time}` : "");
+}
+
+// 貼り付け・フィルで日付を書く。ピッカーと同じ規則：開始のみは期限=開始、時刻は引き継ぎ（同日で逆転したら期限=開始）、後続へ連動
+// write a date from paste / fill with the picker's rules: start-only fills due = start, the time of day carries over (clamped if inverted on one day), successors follow
+async function applyDateText(ctx: BoardContext, t: Task, which: "start" | "end", text: string): Promise<boolean> {
+  const p = parseDateTimeText(text, ctx.settings.dateFormat);
+  if (!p) return false;
+  const state = { start: t.start ?? "", end: t.end ?? "" };
+  state[which] = p.date;
+  if (state.start && !state.end) state.end = state.start;
+  let ts = t.startTime;
+  let te = t.endTime;
+  // 日付を入れたときだけ時刻を決める（書かれていなければ今の時刻のまま）。空にするときは、その側の時刻も外す
+  // set the time only when a date is given (keep the current one if the text has none); blanking a side drops its time too
+  if (which === "start") ts = p.date ? p.time ?? ts : undefined;
+  else te = p.date ? p.time ?? te : undefined;
+  if (state.start && state.start === state.end && ts && te && te < ts) te = ts;
+  if (state.start === (t.start ?? "") && state.end === (t.end ?? "") && ts === t.startTime && te === t.endTime) return true;
+  await ctx.reschedule(t.path, state, { start: ts, end: te });
+  return true;
+}
 
 // テーブルのセルから範囲カレンダーを開いて日付を直接編集 / open the range calendar from a table cell
 function openCellDatePicker(ctx: BoardContext, anchor: HTMLElement, t: Task, which: "start" | "end"): void {

@@ -1819,3 +1819,66 @@ button.ogantt-cal-title:hover {
   flex: none;
   width: max-content;
 }
+
+/* テーブルのセル選択：範囲の外枠（セルごとに辺を描く）と、右下のフィルハンドル / table cell selection: the range's outline (each cell draws its own edges) and the fill handle at the bottom-right */
+.ogantt-tbody .ogantt-td {
+  position: relative;
+  user-select: none;
+}
+.ogantt-td.is-cell-sel {
+  background: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+}
+.ogantt-td.is-cell-sel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 0 solid var(--interactive-accent);
+  pointer-events: none;
+}
+.ogantt-td.is-sel-t::after {
+  border-top-width: 2px;
+}
+.ogantt-td.is-sel-b::after {
+  border-bottom-width: 2px;
+}
+.ogantt-td.is-sel-l::after {
+  border-left-width: 2px;
+}
+.ogantt-td.is-sel-r::after {
+  border-right-width: 2px;
+}
+.ogantt-fill-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 8px;
+  height: 8px;
+  background: var(--interactive-accent);
+  cursor: crosshair;
+}
+.ogantt-td.is-fill-target {
+  background: color-mix(in srgb, var(--interactive-accent) 24%, transparent);
+}
+
+/* 選んだ範囲の集計（ペインの下）/ the selected range's summary (the bottom of the pane) */
+.ogantt-selbar {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+.ogantt-selbar.is-hidden {
+  display: none;
+}
+.ogantt-selbar-item {
+  display: inline-flex;
+  gap: 6px;
+}
+.ogantt-selbar-label {
+  color: var(--text-faint);
+}

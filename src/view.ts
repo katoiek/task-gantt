@@ -53,6 +53,7 @@ import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createB
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
 import { applyFilters, regroup } from "./filter";
+import { fillSourceIndex, parseTsv, summarizeCells, toTsv } from "./cells";
 import { BoardContext, Move, MutateResult } from "./board";
 import { BUILTIN_COLUMNS, CellColumn, ColumnDef, columnWidth, customColumn, taskComparator, visibleColumns } from "./columns";
 
@@ -84,6 +85,12 @@ function movesUnder(a: Move, b: Move): boolean {
   return b.from.startsWith(a.from + "/") && b.to === a.to + b.from.slice(a.from.length);
 }
 
+// テーブルのセル 1 つ（行＝タスクのパス、列＝列 ID）/ one table cell (row = the task's path, column = the column id)
+interface CellRef {
+  path: string;
+  col: string;
+}
+
 export class GanttView extends ItemView {
   plugin: GanttPlugin;
   private tasks: Task[] = [];
@@ -107,6 +114,12 @@ export class GanttView extends ItemView {
   private zoomBtns = new Map<ZoomMode, HTMLButtonElement>();
   private kanbanExpanded = new Set<string>(); // サブタスクを開いているカード（パス）/ cards whose subtasks are open (paths)
   private dragPath: string | null = null; // ドラッグ中のカード / the card being dragged
+  // テーブルのセル選択（表のセルを、スプレッドシートのように選んで、コピー・貼り付け・フィルする）。パスと列 ID で持つので、描き直しても残る
+  // the table's cell selection (pick cells like a spreadsheet to copy, paste and fill); held as path + column id, so it survives a redraw
+  private cellSel: { anchor: CellRef; focus: CellRef } | null = null;
+  private selBarEl: HTMLElement | null = null;
+  private selDragging = false; // ドラッグで範囲を選んでいる最中 / dragging out a range
+  private batchActive = false; // まとめて書いている最中（途中の再読込・取り消し記録を止める）/ writing in bulk (pauses reloads and undo records in between)
   private kanbanCols: KanbanColumn[] = []; // 今描いている列（レーンに分ける前・手動の順序を反映済み）/ the columns being drawn (before the lanes, manual order applied)
   private dragColumn: string | null = null; // ドラッグ中の列（ステータスの id）/ the column (status id) being dragged
 
@@ -244,6 +257,14 @@ export class GanttView extends ItemView {
       e.preventDefault();
       void (isUndo ? this.undo() : this.redo());
     });
+    // テーブルのセル操作：キー移動・コピー・切り取り・貼り付け・ドラッグ選択の終わり / table cells: arrow keys, copy, cut, paste, the end of a drag selection
+    this.registerDomEvent(window, "keydown", (e: KeyboardEvent) => this.onCellKey(e));
+    this.registerDomEvent(activeDocument, "copy", (e: ClipboardEvent) => this.onCellCopy(e, false));
+    this.registerDomEvent(activeDocument, "cut", (e: ClipboardEvent) => this.onCellCopy(e, true));
+    this.registerDomEvent(activeDocument, "paste", (e: ClipboardEvent) => this.onCellPaste(e));
+    this.registerDomEvent(window, "mouseup", () => {
+      this.selDragging = false;
+    });
   }
 
   // Obsidian がペイン/ウィンドウのリサイズ時に呼ぶフック。Fit のみ再描画（デバウンス）
@@ -266,6 +287,10 @@ export class GanttView extends ItemView {
     this.optionsHost = pane.createDiv({ cls: "ogantt-options" }); // 中身は rerender で差し替え / repopulated on rerender
     this.filterHost = pane.createDiv({ cls: "ogantt-filterbar" }); // 統合フィルタ行（オプション行の下）/ filter row below options
     this.gridHost = pane.createDiv({ cls: "ogantt-host" });
+    this.gridHost.addEventListener("mousedown", (e) => {
+      if (!(e.target as HTMLElement).closest(".ogantt-td, .ogantt-fill-handle")) this.clearSelection();
+    });
+    this.selBarEl = pane.createDiv({ cls: "ogantt-selbar is-hidden" }); // 選んだ範囲の集計（件数・最小・最大・合計）/ the selected range's summary (count, min, max, sum)
     this.detailEl = root.createDiv({ cls: "ogantt-detail" });
     // 詳細パネルの外側（ビュー内のどこか）をクリックしたら閉じる。キャプチャ段階で閉じることで、
     // 行クリック等の「開く」ハンドラ（バブリング段階で実行）が後から開き直せる＝詳細の切り替えになる。
@@ -307,6 +332,7 @@ export class GanttView extends ItemView {
 
   // ディスクから集計し直して再描画 / re-collect from disk, then render
   async refresh(): Promise<void> {
+    if (this.batchActive) return; // まとめて書いている間は、終わってから 1 回だけ / while writing in bulk, once at the end
     if (!this.gridHost) this.buildSkeleton();
     this.tasks = collectTasks(this.app, this.plugin.settings, this.folder);
     this.allFolders = collectFolders(this.app, this.plugin.settings, this.folder);
@@ -316,6 +342,7 @@ export class GanttView extends ItemView {
   // メモリ上の this.tasks から描画（ディスクは読まない）/ render from in-memory tasks (no disk read)
   // ドラッグや整列の直後、metadataCache 更新前に正しい位置を即表示するため / shows correct positions before metadataCache updates
   rerender(): void {
+    if (this.batchActive) return;
     if (!this.gridHost) this.buildSkeleton();
     this.bindBoardViews(); // このボードのビューを使う / use this board's views
     this.schedulePersist(); // 変えた設定を保存する / save what changed
@@ -1863,6 +1890,8 @@ export class GanttView extends ItemView {
   // every write goes through here: snapshot only the affected files, run fn, record the entry.
   // fn returns false for "nothing changed" (not recorded); report new files via `created` (trashed on undo)
   private async mutate(label: string, paths: string[], fn: () => Promise<MutateResult>): Promise<boolean> {
+    // まとめて書いている最中の個々の書き込みは、外側の 1 回の取り消しにまとめる（ここでは記録しない）/ writes inside a bulk write fold into the outer single undo step (not recorded here)
+    if (this.batchActive) return (await fn()) !== false;
     const files = await this.snapshot(paths);
     let res: MutateResult;
     this.historyBusy++;
@@ -2269,6 +2298,9 @@ export class GanttView extends ItemView {
         for (const col of cols) {
           if (col.kind === "name") {
             const nameTd = tr.createDiv({ cls: "ogantt-td ogantt-td-name" });
+            nameTd.dataset.col = "name";
+            nameTd.dataset.ro = "1"; // 名前は貼り付け・フィルの対象外（コピーはできる）/ the name can be copied but not pasted or filled into
+            this.wireCellSelect(nameTd, t.path, "name");
             nameTd.style.paddingLeft = `${indent}px`;
             // シェブロン枠は常に確保＝親でも単独タスクでも名前位置を揃える
             // always reserve the chevron slot so parents and standalone tasks align
@@ -2330,6 +2362,7 @@ export class GanttView extends ItemView {
       }
     }
 
+    this.paintSelection();
     // (4) タイムライン SVG / timeline SVG
     if (isTable) return; // テーブルビューはここまで / the table view stops here
     const svgWrap = grid.createDiv({ cls: "ogantt-svgwrap" });
@@ -2918,7 +2951,10 @@ export class GanttView extends ItemView {
   // ----- drag & drop (onto a folder = detach + move; onto a task = make subtask) -----
   // タスク行をドラッグ可能にする / make a task row draggable
   private makeDraggableTask(row: HTMLElement, path: string): void {
-    row.setAttr("draggable", "true");
+    // 行のドラッグは、名前のセルを押したときだけ。ほかのセルのドラッグは、範囲の選択に使う
+    // a row drags only when pressed on its name cell; a drag from any other cell selects a range
+    row.setAttr("draggable", "false");
+    row.addEventListener("mousedown", (e: MouseEvent) => row.setAttr("draggable", (e.target as HTMLElement).closest(".ogantt-td-name") ? "true" : "false"));
     row.addEventListener("dragstart", (e: DragEvent) => {
       e.dataTransfer?.setData("text/plain", path);
       if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
@@ -3479,7 +3515,12 @@ export class GanttView extends ItemView {
   // 非 name 列のセルを描き、読み取り専用でなければダブルクリックの編集を付ける
   // paint a non-name cell and, unless it's read-only, attach the double-click editor
   private renderCell(td: HTMLElement, row: Row, col: CellColumn): void {
-    if (col.paint(this.board, td, row) === false) return;
+    td.dataset.col = col.id;
+    this.wireCellSelect(td, row.task!.path, col.id);
+    if (col.paint(this.board, td, row) === false) {
+      td.dataset.ro = "1"; // 読み取り専用のセル（貼り付け・フィルの対象外）/ a read-only cell (skipped by paste and fill)
+      return;
+    }
     this.makeEditableCell(td, col.editAria(), (cell) => col.edit(this.board, cell, row));
   }
 
@@ -3509,6 +3550,339 @@ export class GanttView extends ItemView {
       };
     }
     return this.boardCtx;
+  }
+
+  // ----- テーブルのセル選択・コピー・貼り付け・フィル / table cell selection, copy, paste and fill -----
+
+  private selRows(): string[] {
+    return this.rows.filter((r) => r.kind === "task").map((r) => r.task!.path);
+  }
+
+  private selCols(): string[] {
+    return this.visibleColumns().map((c) => c.id);
+  }
+
+  // 選択範囲（行・列の番号）。選んだセルが今の表に無ければ null / the selected range as row and column indexes; null when a selected cell isn't in the table now
+  private selRect(): { r0: number; r1: number; c0: number; c1: number } | null {
+    const s = this.cellSel;
+    if (!s) return null;
+    const rows = this.selRows();
+    const cols = this.selCols();
+    const ra = rows.indexOf(s.anchor.path);
+    const rb = rows.indexOf(s.focus.path);
+    const ca = cols.indexOf(s.anchor.col);
+    const cb = cols.indexOf(s.focus.col);
+    if (ra < 0 || rb < 0 || ca < 0 || cb < 0) return null;
+    return { r0: Math.min(ra, rb), r1: Math.max(ra, rb), c0: Math.min(ca, cb), c1: Math.max(ca, cb) };
+  }
+
+  private cellEl(path: string, col: string): HTMLElement | null {
+    const tr = this.tbodyEl?.querySelector<HTMLElement>(`.ogantt-tr[data-path="${CSS.escape(path)}"]`);
+    return tr?.querySelector<HTMLElement>(`[data-col="${CSS.escape(col)}"]`) ?? null;
+  }
+
+  // セルを押して選ぶ（Shift で範囲を広げる）。押したままドラッグで範囲を選ぶ / press to select (Shift extends); drag while pressed to select a range
+  private wireCellSelect(td: HTMLElement, path: string, col: string): void {
+    const ref: CellRef = { path, col };
+    td.addEventListener("mousedown", (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      if ((e.target as HTMLElement).closest("input, select, textarea, a, .internal-link, .ogantt-task-chevron")) return; // 編集中・リンク・開閉 / editing, links, the fold chevron
+      if (e.shiftKey && this.cellSel) this.cellSel.focus = ref;
+      else this.cellSel = { anchor: ref, focus: ref };
+      this.selDragging = true;
+      this.paintSelection();
+    });
+    td.addEventListener("mouseenter", () => {
+      if (!this.selDragging || !this.cellSel) return;
+      this.cellSel.focus = ref;
+      this.paintSelection();
+    });
+  }
+
+  private clearSelection(): void {
+    if (!this.cellSel) return;
+    this.cellSel = null;
+    this.paintSelection();
+  }
+
+  // 選択の見た目：範囲の外枠と、右下のフィルハンドル / the selection's look: the outline of the range and the fill handle at its bottom-right
+  private paintSelection(): void {
+    const body = this.tbodyEl;
+    if (!body) return;
+    body.querySelectorAll(".is-cell-sel").forEach((el) => el.removeClasses(["is-cell-sel", "is-sel-t", "is-sel-b", "is-sel-l", "is-sel-r"]));
+    body.querySelectorAll(".ogantt-fill-handle").forEach((el) => el.remove());
+    const rect = this.selRect();
+    if (!rect) {
+      this.selBarEl?.addClass("is-hidden");
+      return;
+    }
+    const rows = this.selRows();
+    const cols = this.selCols();
+    for (let r = rect.r0; r <= rect.r1; r++) {
+      for (let c = rect.c0; c <= rect.c1; c++) {
+        const td = this.cellEl(rows[r], cols[c]);
+        if (!td) continue;
+        td.addClass("is-cell-sel");
+        if (r === rect.r0) td.addClass("is-sel-t");
+        if (r === rect.r1) td.addClass("is-sel-b");
+        if (c === rect.c0) td.addClass("is-sel-l");
+        if (c === rect.c1) td.addClass("is-sel-r");
+      }
+    }
+    const corner = this.cellEl(rows[rect.r1], cols[rect.c1]);
+    corner?.createDiv({ cls: "ogantt-fill-handle" }).addEventListener("mousedown", (e) => this.startFill(e));
+    this.paintSelectionSummary(rect, rows, cols);
+  }
+
+  // 範囲が 2 セル以上のとき、画面の下に、件数と、数値なら合計・平均・最小・最大、日付なら最小・最大を出す
+  // with two or more cells selected, show the count at the bottom, and for numbers the sum, average, min and max, for dates the min and max
+  private paintSelectionSummary(rect: { r0: number; r1: number; c0: number; c1: number }, rows: string[], cols: string[]): void {
+    const bar = this.selBarEl;
+    if (!bar) return;
+    bar.empty();
+    if (rect.r0 === rect.r1 && rect.c0 === rect.c1) {
+      bar.addClass("is-hidden");
+      return;
+    }
+    const values: string[] = [];
+    for (let r = rect.r0; r <= rect.r1; r++) for (let c = rect.c0; c <= rect.c1; c++) values.push(this.cellCopyText(rows[r], cols[c]));
+    const sm = summarizeCells(values, this.plugin.settings.dateFormat);
+    const fmt = this.plugin.settings.dateFormat;
+    const num = (n: number): string => String(Math.round(n * 100) / 100);
+    const part = (label: string, value: string): void => {
+      const el = bar.createSpan({ cls: "ogantt-selbar-item" });
+      el.createSpan({ cls: "ogantt-selbar-label", text: label });
+      el.createSpan({ text: value });
+    };
+    const t = tr();
+    part(t.selCount, String(sm.count));
+    if (sm.kind === "number" && typeof sm.min === "number" && typeof sm.max === "number" && sm.sum !== undefined) {
+      part(t.selSum, num(sm.sum));
+      part(t.selAvg, num(sm.sum / sm.count));
+      part(t.selMin, num(sm.min));
+      part(t.selMax, num(sm.max));
+    } else if (sm.kind === "date" && typeof sm.min === "string" && typeof sm.max === "string") {
+      part(t.selMin, formatDate(sm.min, fmt));
+      part(t.selMax, formatDate(sm.max, fmt));
+    }
+    bar.removeClass("is-hidden");
+  }
+
+  // 矢印キーでの移動（Shift で範囲を広げる）/ move with the arrow keys (Shift extends the range)
+  private moveSelection(dr: number, dc: number, extend: boolean): void {
+    const s = this.cellSel;
+    if (!s) return;
+    const rows = this.selRows();
+    const cols = this.selCols();
+    const r = rows.indexOf(s.focus.path);
+    const c = cols.indexOf(s.focus.col);
+    if (r < 0 || c < 0) return;
+    const ref: CellRef = { path: rows[Math.max(0, Math.min(rows.length - 1, r + dr))], col: cols[Math.max(0, Math.min(cols.length - 1, c + dc))] };
+    if (extend) s.focus = ref;
+    else this.cellSel = { anchor: ref, focus: ref };
+    this.paintSelection();
+    this.cellEl(ref.path, ref.col)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  // セル操作のキーを受けてよい状況か：このビューが前面で、セルが選ばれていて、文字入力中ではない
+  // whether cell keys apply now: this view is in front, cells are selected, and no text is being typed
+  private cellKeysActive(): boolean {
+    if (!this.cellSel || this.activeType() === "kanban") return false;
+    if (this.app.workspace.getActiveViewOfType(GanttView) !== this) return false;
+    const ae = activeDocument.activeElement as HTMLElement | null;
+    if (!ae || ae === activeDocument.body) return true;
+    // ビューの中で、入力欄・ボタン・詳細パネルにフォーカスがあるときは、セルのキーを奪わない / inside the view, never take keys from an input, a button or the detail panel
+    return this.contentEl.contains(ae) && !ae.closest("input, select, textarea, button, [contenteditable], .ogantt-detail");
+  }
+
+  private onCellKey(e: KeyboardEvent): void {
+    if (!this.cellKeysActive() || e.ctrlKey || e.metaKey || e.altKey) return;
+    const arrows: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+    const step = arrows[e.key] ?? (e.key === "Tab" ? [0, e.shiftKey ? -1 : 1] : undefined);
+    if (step) {
+      e.preventDefault();
+      this.moveSelection(step[0], step[1], e.shiftKey && e.key !== "Tab");
+    } else if (e.key === "Escape") {
+      this.clearSelection();
+    } else if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      void this.clearCells();
+    } else if (e.key === "Enter" || e.key === "F2") {
+      e.preventDefault();
+      this.editFocusedCell();
+    }
+  }
+
+  // Enter / F2：ダブルクリックと同じ編集（名前の列は詳細パネルを開く）/ Enter / F2 edits like a double-click (the name column opens the detail panel)
+  private editFocusedCell(): void {
+    const f = this.cellSel?.focus;
+    if (!f) return;
+    if (f.col === "name") {
+      void this.openDetail(f.path);
+      return;
+    }
+    this.cellEl(f.path, f.col)?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+  }
+
+  // セルのコピー用の文字（名前はタスク名、それ以外は列の copyText）/ the text copied out of a cell (the name column: the task name; the rest: the column's copyText)
+  private cellCopyText(path: string, colId: string): string {
+    const t = this.tasks.find((x) => x.path === path);
+    if (!t) return "";
+    if (colId === "name") return t.name;
+    const def = this.columns().find((c) => c.id === colId);
+    const row = this.rows.find((r) => r.task?.path === path);
+    return def && def.kind === "cell" && row ? def.copyText(this.board, t, row) : "";
+  }
+
+  private onCellCopy(e: ClipboardEvent, cut: boolean): void {
+    if (!this.cellKeysActive() || !e.clipboardData) return;
+    const rect = this.selRect();
+    if (!rect) return;
+    const rows = this.selRows();
+    const cols = this.selCols();
+    const matrix: string[][] = [];
+    for (let r = rect.r0; r <= rect.r1; r++) {
+      const line: string[] = [];
+      for (let c = rect.c0; c <= rect.c1; c++) line.push(this.cellCopyText(rows[r], cols[c]));
+      matrix.push(line);
+    }
+    e.clipboardData.setData("text/plain", toTsv(matrix));
+    e.preventDefault();
+    if (cut) void this.clearCells();
+  }
+
+  private onCellPaste(e: ClipboardEvent): void {
+    if (!this.cellKeysActive()) return;
+    const text = e.clipboardData?.getData("text/plain") ?? "";
+    const rect = this.selRect();
+    if (!rect || text === "") return;
+    e.preventDefault();
+    void this.pasteCells(parseTsv(text), rect);
+  }
+
+  // 貼り付け：1 つの値は選んだ範囲すべてに、複数は左上から。表の下端・右端を超えた分は貼らない
+  // paste: a single value fills the whole selection; several land from the top-left; whatever runs past the table's last row or column is not pasted
+  private async pasteCells(matrix: string[][], rect: { r0: number; r1: number; c0: number; c1: number }): Promise<void> {
+    if (!matrix.length) return;
+    const rows = this.selRows();
+    const cols = this.selCols();
+    const single = matrix.length === 1 && matrix[0].length === 1;
+    const items: { path: string; col: string; text: string }[] = [];
+    let skipped = 0;
+    const h = single ? rect.r1 - rect.r0 + 1 : matrix.length;
+    const w = single ? rect.c1 - rect.c0 + 1 : Math.max(...matrix.map((l) => l.length));
+    for (let i = 0; i < h; i++) {
+      for (let j = 0; j < w; j++) {
+        const text = single ? matrix[0][0] : matrix[i][j];
+        if (text === undefined) continue; // 欄が足りない行 / a short row
+        const r = rect.r0 + i;
+        const c = rect.c0 + j;
+        if (r >= rows.length || c >= cols.length) {
+          skipped++;
+          continue;
+        }
+        items.push({ path: rows[r], col: cols[c], text });
+      }
+    }
+    const res = await this.applyCellTexts(tr().cellsPaste, items);
+    skipped += res.skipped;
+    if (skipped > 0) new Notice(tr().cellsPasted(res.done, skipped));
+    // 貼り付けた範囲を選び直す / select what was pasted
+    const r1 = Math.min(rows.length - 1, rect.r0 + h - 1);
+    const c1 = Math.min(cols.length - 1, rect.c0 + w - 1);
+    this.cellSel = { anchor: { path: rows[rect.r0], col: cols[rect.c0] }, focus: { path: rows[r1], col: cols[c1] } };
+    this.paintSelection();
+  }
+
+  // Delete・切り取り：選んだセルを空にする（空にできないセル・読み取り専用は、そのまま）/ Delete and cut: blank the selected cells (cells that can't be blanked and read-only ones stay)
+  private async clearCells(): Promise<void> {
+    const rect = this.selRect();
+    if (!rect) return;
+    const rows = this.selRows();
+    const cols = this.selCols();
+    const items: { path: string; col: string; text: string }[] = [];
+    for (let r = rect.r0; r <= rect.r1; r++) for (let c = rect.c0; c <= rect.c1; c++) items.push({ path: rows[r], col: cols[c], text: "" });
+    await this.applyCellTexts(tr().cellsClear, items);
+  }
+
+  // 文字をセルに書く（貼り付け・フィル・消去の共通）。全部まとめて 1 回の取り消しにする。書けた数と、書けなかった数を返す
+  // write texts into cells (shared by paste, fill and clear), all as one undo step; returns how many were written and how many couldn't be
+  private async applyCellTexts(label: string, items: { path: string; col: string; text: string }[]): Promise<{ done: number; skipped: number }> {
+    const defs = new Map(this.columns().map((c) => [c.id, c]));
+    const todo: { path: string; def: CellColumn; text: string }[] = [];
+    let skipped = 0;
+    for (const it of items) {
+      const def = defs.get(it.col);
+      if (!def || def.kind !== "cell" || !def.applyText || this.cellEl(it.path, it.col)?.dataset.ro === "1") {
+        skipped++;
+        continue;
+      }
+      todo.push({ path: it.path, def, text: it.text });
+    }
+    if (!todo.length) return { done: 0, skipped };
+    const paths = [...new Set(todo.map((x) => x.path))];
+    let done = 0;
+    await this.mutate(label, [...new Set([...paths, ...paths.flatMap((p) => this.cascadePaths(p))])], async () => {
+      this.batchActive = true;
+      try {
+        for (const x of todo) {
+          const t = this.tasks.find((y) => y.path === x.path);
+          if (t && (await x.def.applyText!(this.board, t, x.text))) done++;
+          else skipped++;
+        }
+      } finally {
+        this.batchActive = false;
+      }
+    });
+    await this.refresh();
+    return { done, skipped };
+  }
+
+  // フィルハンドルのドラッグ：選んだ範囲の値を、ドラッグした行まで（上にも下にも）繰り返しコピーする
+  // dragging the fill handle: repeat the selected range's values down or up to the row it is dragged to
+  private startFill(e: MouseEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = this.selRect();
+    if (!rect) return;
+    const rows = this.selRows();
+    const cols = this.selCols();
+    let target: { from: number; to: number } | null = null; // 埋める行の範囲（元の範囲は含まない）/ the rows to fill (not the source range)
+    const clearMarks = (): void => this.tbodyEl?.querySelectorAll(".is-fill-target").forEach((el) => el.removeClass("is-fill-target"));
+    const onMove = (ev: MouseEvent): void => {
+      const path = activeDocument.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>(".ogantt-tr[data-path]")?.dataset.path;
+      const ri = path ? rows.indexOf(path) : -1;
+      clearMarks();
+      target = ri > rect.r1 ? { from: rect.r1 + 1, to: ri } : ri >= 0 && ri < rect.r0 ? { from: ri, to: rect.r0 - 1 } : null;
+      if (!target) return;
+      for (let r = target.from; r <= target.to; r++) for (let c = rect.c0; c <= rect.c1; c++) this.cellEl(rows[r], cols[c])?.addClass("is-fill-target");
+    };
+    const onUp = (): void => {
+      activeDocument.removeEventListener("mousemove", onMove);
+      activeDocument.removeEventListener("mouseup", onUp);
+      clearMarks();
+      if (target) void this.applyFill(rect, target);
+    };
+    activeDocument.addEventListener("mousemove", onMove);
+    activeDocument.addEventListener("mouseup", onUp);
+  }
+
+  private async applyFill(rect: { r0: number; r1: number; c0: number; c1: number }, target: { from: number; to: number }): Promise<void> {
+    const rows = this.selRows();
+    const cols = this.selCols();
+    const n = rect.r1 - rect.r0 + 1;
+    // 元の値は、書き換える前にすべて読む / read every source value before anything is written
+    const items: { path: string; col: string; text: string }[] = [];
+    for (let r = target.from; r <= target.to; r++) {
+      const src = rect.r0 + fillSourceIndex(r - rect.r0, n);
+      for (let c = rect.c0; c <= rect.c1; c++) items.push({ path: rows[r], col: cols[c], text: this.cellCopyText(rows[src], cols[c]) });
+    }
+    await this.applyCellTexts(tr().cellsFill, items);
+    // 埋めた分まで、選択を広げる / grow the selection over what was filled
+    const r0 = Math.min(rect.r0, target.from);
+    const r1 = Math.max(rect.r1, target.to);
+    this.cellSel = { anchor: { path: rows[r0], col: cols[rect.c0] }, focus: { path: rows[r1], col: cols[rect.c1] } };
+    this.paintSelection();
   }
 
   // ----- セルの直接編集 / in-cell editing -----

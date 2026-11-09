@@ -628,6 +628,16 @@ export async function addTag(app: App, path: string, tag: string): Promise<boole
   return changed;
 }
 
+// タグをまとめて置き換える（フロントマター tags のみ。空にすると tags キーごと消す）/ replace the tags wholesale (frontmatter `tags` only; an empty list removes the key)
+export async function setTags(app: App, path: string, tags: string[]): Promise<void> {
+  const file = app.vault.getAbstractFileByPath(path);
+  if (!(file instanceof TFile)) return;
+  await app.fileManager.processFrontMatter(file, (fm: Record<string, unknown>) => {
+    if (tags.length) fm.tags = tags;
+    else delete fm.tags;
+  });
+}
+
 // タグを削除（フロントマター tags のみ・本文 #tag は対象外）/ remove a tag from frontmatter `tags` (inline #tags are not touched)
 export async function removeTag(app: App, path: string, tag: string): Promise<void> {
   const file = app.vault.getAbstractFileByPath(path);

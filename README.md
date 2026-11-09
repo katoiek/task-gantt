@@ -70,9 +70,21 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 
 ![View tabs above the toolbar; the + menu copies the open view or adds a new Gantt view](docs/images/view-menu-en.png)
 
-- **＋** adds a view: **Copy this view** copies every setting and opens the copy next to the original, or **Gantt** adds a new view with the default settings and no filters.
+- **＋** adds a view: **Copy this view** copies every setting and opens the copy next to the original, or **Gantt**, **Table** or **Kanban** adds a new view with the default settings and no filters.
 - Double-click a tab, or use the **▾** on the open tab (or right-click any tab), to **rename**, **duplicate** or **delete** a view. The last view can't be deleted, and deleting a view never deletes tasks.
 - Changes are saved to the open view automatically. Saved filter **presets** stay shared by all views. The first time a board is opened, its first view takes over your current settings, so nothing changes at first.
+
+## Table view
+
+**＋ → Table** adds a Table view: the Gantt's table without the timeline, for planning and bulk editing like a spreadsheet. It has the same columns, grouping, subtasks, filters and sorting as the Gantt, and everything below works in the Gantt's table too.
+
+- **Select cells**: click a cell, **Shift**+click or drag for a range, **arrow keys** and **Tab** to move. **Enter**, **F2** or a double-click edits the cell, and **Esc** clears the selection.
+- **Copy and paste**: **Ctrl/Cmd+C**, **X** and **V** work on the selected cells as tab-separated text, so you can paste to and from Excel, Google Sheets or Wrike. One value pasted onto a range fills the whole range; several values land from the top-left cell. Each column reads text its own way: dates in your display format (or ISO, with an optional time such as `2026/11/02 09:30`), status by name, tags separated by commas, progress as `60` or `60%`, custom fields by their type. Rows past the end of the table aren't pasted (you're told how many), and read-only cells and the name column are skipped.
+- **Fill**: drag the small square at the bottom-right of the selection up or down to copy the selected values into the rows you pass.
+- **Clear**: **Delete** or **Backspace** empties the selected cells (a column that can't be blank, like duration, is left as it is).
+- **Summary**: with two or more cells selected, the bottom of the board shows the count, and the sum, average, minimum and maximum for numbers, or the minimum and maximum for dates.
+- Pasting, filling and clearing are each **one undo step** (Ctrl/Cmd+Z). Dates follow the same rules as editing a cell: a start-only date fills the due date, and successors move.
+- A row is dragged to move it or make it a subtask from its **name** cell; dragging from any other cell selects a range.
 
 ## Kanban view
 
@@ -417,9 +429,21 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![ツールバーの上のビューのタブ。＋のメニューで、今のビューをコピーするか、新しいガントを追加する](docs/images/view-menu-ja.png)
 
-- **＋** でビューを追加します。**今のビューをコピー**は、すべての設定を複製して、元の隣に開きます。**ガント**は、既定の設定でフィルタのない新しいビューを追加します。
+- **＋** でビューを追加します。**今のビューをコピー**は、すべての設定を複製して、元の隣に開きます。**ガント**・**テーブル**・**カンバン**は、既定の設定でフィルタのない新しいビューを追加します。
 - タブをダブルクリックするか、開いているタブの **▾**（または任意のタブの右クリック）から、ビューの**名前の変更**・**複製**・**削除**ができます。最後の 1 つは削除できません。ビューを削除しても、タスクは消えません。
 - 変更は、開いているビューに自動で保存されます。保存済みのフィルタの**プリセット**は、全ビューで共有のままです。ボードを初めて開くときは、最初のビューが今の設定を引き継ぐので、最初は何も変わりません。
+
+## テーブルビュー
+
+**＋ → テーブル**で、テーブルのビューを追加できます。ガントの表から、タイムラインを外したもので、スプレッドシートのように、まとめて入力・編集できます。列、グループ、サブタスク、フィルタ、並べ替えは、ガントと同じです。以下の操作は、ガントの表でも使えます。
+
+- **セルの選択**: セルをクリック、**Shift**+クリックやドラッグで範囲、**矢印キー**と **Tab** で移動します。**Enter**、**F2**、ダブルクリックで、セルを編集します。**Esc** で、選択を解除します。
+- **コピー＆貼り付け**: 選んだセルを、**Ctrl/Cmd+C**、**X**、**V** で、タブ区切りのテキストとして扱います。Excel、Google スプレッドシート、Wrike との間で、貼り合えます。1 つの値を範囲に貼ると、範囲全体に入ります。複数の値は、左上のセルから入ります。列ごとに、文字の読み方が決まっています。日付は表示形式（または ISO。`2026/11/02 09:30` のように時刻も付けられます）、ステータスは名前、タグはカンマ区切り、進捗は `60` か `60%`、カスタムフィールドは種類どおりです。表の下端を超える行は貼られず、何行かを知らせます。読み取り専用のセルと、名前の列は、飛ばします。
+- **フィル**: 選んだ範囲の右下の小さな四角を、上か下にドラッグすると、選んだ値を、通った行にコピーします。
+- **消去**: **Delete** か **Backspace** で、選んだセルを空にします（期間のように、空にできない列は、そのままです）。
+- **集計**: 2 セル以上を選ぶと、ボードの下に、件数と、数値なら合計・平均・最小・最大、日付なら最小・最大が出ます。
+- 貼り付け・フィル・消去は、それぞれ**まとめて 1 回の取り消し**（Ctrl/Cmd+Z）です。日付は、セルの編集と同じ規則で、開始日だけなら期限も入り、後続タスクも動きます。
+- 行のドラッグ（移動・サブタスク化）は、**名前**のセルから始めます。ほかのセルからのドラッグは、範囲の選択になります。
 
 ## カンバンビュー
 
