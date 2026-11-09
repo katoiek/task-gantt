@@ -102,3 +102,29 @@ export function splitLanes(cols: KanbanColumn[], keyOf: (t: Task) => string): Ka
     return { key, count: columns.reduce((n, c) => n + c.cards.length, 0), columns };
   });
 }
+
+// ── 手動の並び順 / manual order ──
+// 手動の順序（パスの一覧）に入っているカードを、その順で先に。入っていないカードは、渡された順のまま後ろに
+// the cards in the manual order (a list of paths) first, in that order; cards not in it keep the order given and follow
+export function applyManualOrder(cards: Task[], order: string[]): Task[] {
+  const byPath = new Map(cards.map((t) => [t.path, t]));
+  const listed: Task[] = [];
+  for (const p of order) {
+    const t = byPath.get(p);
+    if (t && !listed.includes(t)) listed.push(t);
+  }
+  return [...listed, ...cards.filter((t) => !listed.includes(t))];
+}
+
+// カードを refPath の前（after なら後ろ）に入れた、新しい手動の順序。shown は今その列に出ているカードの順（表示の順がそのまま土台）。
+// ref が無ければ末尾。今は出ていない（フィルタで外れた）カードのパスは、末尾に残す。動かすカード自身は、元の位置から外す
+// the new manual order with `path` placed before refPath (after it when `after`). `shown` is the column's cards as displayed (the base).
+// No ref = the end. Paths not shown now (filtered out) stay at the tail; the moved card is lifted out of its old place
+export function placeInOrder(order: string[], shown: string[], path: string, refPath: string | null, after: boolean): string[] {
+  const list = shown.filter((p) => p !== path);
+  const at = refPath ? list.indexOf(refPath) : -1;
+  if (at < 0) list.push(path);
+  else list.splice(at + (after ? 1 : 0), 0, path);
+  const hidden = order.filter((p) => p !== path && !shown.includes(p));
+  return [...list, ...hidden];
+}

@@ -48,7 +48,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, buildKanbanColumns, collapseColumns, columnKey, laneKeyOf, moveId, orderStatusIds, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
+import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, applyManualOrder, buildKanbanColumns, collapseColumns, columnKey, laneKeyOf, moveId, orderStatusIds, placeInOrder, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
 import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, renameView, LaneBy } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
@@ -107,6 +107,7 @@ export class GanttView extends ItemView {
   private zoomBtns = new Map<ZoomMode, HTMLButtonElement>();
   private kanbanExpanded = new Set<string>(); // サブタスクを開いているカード（パス）/ cards whose subtasks are open (paths)
   private dragPath: string | null = null; // ドラッグ中のカード / the card being dragged
+  private kanbanCols: KanbanColumn[] = []; // 今描いている列（レーンに分ける前・手動の順序を反映済み）/ the columns being drawn (before the lanes, manual order applied)
   private dragColumn: string | null = null; // ドラッグ中の列（ステータスの id）/ the column (status id) being dragged
 
   // 全体の設定の上に、ビューごとに違う 6 項目（フィルタ・一致条件・列・列幅・並べ替え）だけを重ねたもの。それ以外は全体の設定をそのまま読む。保存には使わない（保存は plugin.settings）
@@ -565,6 +566,9 @@ export class GanttView extends ItemView {
     // ステータスの列は、カードが 0 件でも残す（空の列にもカードを落とせるように）。未割当だけは、カードがあるときだけ出す
     // a status column stays even with no cards (so a card can still be dropped there); only Unassigned shows just when it has cards
     const cols = buildKanbanColumns(list, statuses, order).filter((c) => c.status !== null || c.cards.length > 0);
+    // 手動の並び順：保存した順序のカードを先に、ないカードはビューの並べ替えの順で後ろに / manual order: cards in the saved order first, the rest after in the view's sort
+    if (this.cfg.manualOrder) for (const c of cols) c.cards = applyManualOrder(c.cards, this.cfg.cardOrder[columnKey(c.status)] ?? []);
+    this.kanbanCols = cols;
     const by = this.cfg.laneBy;
     if (by === "none") {
       for (const col of cols) this.renderKanbanColumn(board, col, cols);
@@ -758,8 +762,8 @@ export class GanttView extends ItemView {
     });
   }
 
-  // カードのドロップ先：この列のステータスになる。レーンの中なら、担当者のレーンは担当者も書き換わる。フォルダのレーンへは、ファイルの移動になるので落とせない
-  // the drop target of a card: it takes this column's status; inside an assignee lane it takes that assignee too; a card can't be dropped into another folder's lane (that would move the file)
+  // カードのドロップ先：この列のステータスになり、落とした位置に入る。レーンの中なら、担当者のレーンは担当者も書き換わる。フォルダのレーンへは、ファイルの移動になるので落とせない
+  // the drop target of a card: it takes this column's status and goes in where it was dropped; inside an assignee lane it takes that assignee too; a card can't be dropped into another folder's lane (that would move the file)
   private attachCardDrop(el: HTMLElement, col: KanbanColumn, laneKey: string | null): void {
     const allowed = (): boolean => {
       if (!this.dragPath) return false;
@@ -767,23 +771,40 @@ export class GanttView extends ItemView {
       const t = this.tasks.find((x) => x.path === this.dragPath);
       return !!t && laneKeyOf(t, "folder") === laneKey;
     };
+    // 落とす位置：ポインタより下で最初のカードの前。無ければ最後のカードの後ろ（カードが無ければ末尾）。ドラッグ中のカード自身は数えない
+    // the drop slot: before the first card below the pointer, else after the last card (the end when there are none); the dragged card itself doesn't count
+    const slotAt = (e: DragEvent): { ref: HTMLElement | null; after: boolean } => {
+      const cards = Array.from(el.querySelectorAll<HTMLElement>(".ogantt-kcol-body > .ogantt-kcard")).filter((c) => c.dataset.path !== this.dragPath);
+      for (const c of cards) {
+        const r = c.getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) return { ref: c, after: false };
+      }
+      return { ref: cards[cards.length - 1] ?? null, after: true };
+    };
+    const clearMarks = (): void => el.querySelectorAll(".is-drop-before, .is-drop-after").forEach((c) => c.removeClasses(["is-drop-before", "is-drop-after"]));
     el.addEventListener("dragover", (e) => {
       if (this.dragColumn || !allowed()) return;
       e.preventDefault();
       el.addClass("is-drop");
+      clearMarks();
+      const slot = slotAt(e);
+      slot.ref?.addClass(slot.after ? "is-drop-after" : "is-drop-before");
     });
     el.addEventListener("dragleave", (e) => {
       if (el.contains(e.relatedTarget as Node | null)) return;
       el.removeClass("is-drop");
+      clearMarks();
     });
     el.addEventListener("drop", (e) => {
       el.removeClass("is-drop");
       if (this.dragColumn) return;
       e.preventDefault();
       const ok = allowed();
+      const slot = slotAt(e);
+      clearMarks();
       const path = this.dragPath;
       this.dragPath = null;
-      if (path && ok) void this.moveTaskToCell(path, col.status, laneKey);
+      if (path && ok) void this.moveTaskToCell(path, col.status, laneKey, { ref: slot.ref?.dataset.path ?? null, after: slot.after });
     });
   }
 
@@ -875,6 +896,7 @@ export class GanttView extends ItemView {
       this.dragPath = null;
       card.removeClass("is-dragging");
       body.ownerDocument.querySelectorAll(".ogantt-kcol.is-drop").forEach((el) => el.removeClass("is-drop"));
+      body.ownerDocument.querySelectorAll(".is-drop-before, .is-drop-after").forEach((el) => el.removeClasses(["is-drop-before", "is-drop-after"]));
     });
   }
 
@@ -899,22 +921,77 @@ export class GanttView extends ItemView {
     await this.refresh();
   }
 
-  // カードを列（とレーン）へ動かす：ステータスを書き換え、担当者のレーンなら担当者も書き換える（1 回の取り消しで両方戻る）
-  // move a card to a column (and lane): rewrites the status, and the assignee for an assignee lane (one undo restores both)
-  private async moveTaskToCell(path: string, status: string | null, laneKey: string | null): Promise<void> {
+  // カードを列（とレーン）の、落とした位置へ動かす：ステータスを書き換え、担当者のレーンなら担当者も書き換える（1 回の取り消しで両方戻る）。
+  // 位置は、このビューの手動の順序として保存し、ビューを「手動」にする（順序の変更は、取り消しの対象ではない）
+  // move a card to the dropped place in a column (and lane): rewrites the status, and the assignee for an assignee lane (one undo restores both).
+  // The place is saved as the view's manual order and the view switches to "Manual" (an order change isn't undoable)
+  private async moveTaskToCell(path: string, status: string | null, laneKey: string | null, slot: { ref: string | null; after: boolean }): Promise<void> {
     const t = this.tasks.find((x) => x.path === path);
     if (!t) return;
     const known = this.plugin.settings.statuses.some((s) => s.id === t.status);
-    const statusChanged = (known ? (t.status ?? null) : null) !== status;
+    const from = known ? (t.status ?? null) : null;
+    const statusChanged = from !== status;
     const byAssignee = laneKey !== null && this.cfg.laneBy === "assignee";
     const assigneeChanged = byAssignee && laneKeyOf(t, "assignee") !== laneKey;
-    if (!statusChanged && !assigneeChanged) return;
+    const moved = statusChanged || assigneeChanged;
+    // 手動の順序：落とした列の今の並びを土台に、位置を決める / the manual order: the dropped column's current order is the base for the new place
+    const key = columnKey(status);
+    const shown = (this.kanbanCols.find((c) => columnKey(c.status) === key)?.cards ?? []).map((c) => c.path);
+    const prev = this.cfg.cardOrder[key] ?? [];
+    const next = placeInOrder(prev, shown, path, slot.ref, slot.after).filter((p) => this.app.vault.getAbstractFileByPath(p) !== null); // 消えたノートは捨てる / drop notes that are gone
+    const sameSpot = next.filter((p) => shown.includes(p)).join("\n") === shown.join("\n");
+    if (!moved && sameSpot) return;
+    this.cfg.cardOrder[key] = next;
+    if (statusChanged) {
+      const old = columnKey(from);
+      const left = (this.cfg.cardOrder[old] ?? []).filter((p) => p !== path);
+      if (left.length) this.cfg.cardOrder[old] = left;
+      else delete this.cfg.cardOrder[old];
+    }
+    this.cfg.manualOrder = true;
+    if (!moved) {
+      this.rerender(); // 描き直しのときに、ビューへ保存される / saved with the view on the redraw
+      return;
+    }
     const keys = this.plugin.settings.keys;
     await this.mutate(tr().undoEdit(t.name), [path], async () => {
       if (statusChanged) await writeField(this.app, path, keys.status, status ?? undefined);
       if (assigneeChanged) await writeField(this.app, path, keys.assignee, laneKey === UNASSIGNED_KEY ? undefined : laneKey);
     });
     await this.refresh();
+  }
+
+  // 並べ替えのメニュー（ツールバーの「並べ替え」）：手動、または列を選んで昇順・降順 / the sort menu (the toolbar's "Sort"): manual, or a column in ascending or descending order
+  private openSortMenu(e: MouseEvent): void {
+    const menu = new Menu();
+    const set = (fn: () => void): void => {
+      fn();
+      this.rerender();
+    };
+    menu.addItem((it) => it.setTitle(tr().kanbanSortManual).setChecked(this.cfg.manualOrder).onClick(() => set(() => (this.cfg.manualOrder = true))));
+    menu.addSeparator();
+    for (const def of this.columns()) {
+      menu.addItem((it) =>
+        it.setTitle(def.label()).setChecked(!this.cfg.manualOrder && this.cfg.sortBy === def.id).onClick(() =>
+          set(() => {
+            this.cfg.manualOrder = false;
+            this.cfg.sortBy = def.id;
+          })
+        )
+      );
+    }
+    menu.addSeparator();
+    for (const dir of ["asc", "desc"] as const) {
+      menu.addItem((it) =>
+        it.setTitle(dir === "asc" ? tr().kanbanSortAsc : tr().kanbanSortDesc).setChecked(!this.cfg.manualOrder && this.cfg.sortDir === dir).onClick(() =>
+          set(() => {
+            this.cfg.manualOrder = false;
+            this.cfg.sortDir = dir;
+          })
+        )
+      );
+    }
+    menu.showAtMouseEvent(e);
   }
 
   // カードに出す項目：表の「列の表示」と同じ形（チェックボックス）。ステータスは列そのものなので除く
@@ -1543,6 +1620,11 @@ export class GanttView extends ItemView {
     groupBtn.createSpan({ cls: "ogantt-opt-gear-label", text: tr().optGroupLabel });
     groupBtn.setAttr("aria-label", tr().optGroupLabel);
     groupBtn.onclick = (e) => this.openLaneMenu(e);
+    const sortBtn = bar.createEl("button", { cls: "ogantt-kanban-only clickable-icon" });
+    setIcon(sortBtn, "arrow-up-down");
+    sortBtn.createSpan({ cls: "ogantt-opt-gear-label", text: tr().kanbanSort });
+    sortBtn.setAttr("aria-label", tr().kanbanSort);
+    sortBtn.onclick = (e) => this.openSortMenu(e);
     bar.createSpan({ cls: "ogantt-kanban-only ogantt-toolbar-sep" }); // カンバン専用ボタンとタイトルの区切り線 / a divider between the Kanban-only buttons and the title
     bar.createSpan({ cls: "ogantt-title", text: this.plugin.settings.rootFolder || "(vault root)" });
     // 新規タスク追加（アイコン＋ラベル）/ add a new task (icon + label)

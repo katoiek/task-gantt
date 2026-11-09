@@ -1,5 +1,5 @@
 // カンバンの振り分け（列の並び・未割当・サブタスク）の検証 / Tests for the Kanban sorting (column order, unassigned, subtasks)
-import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes } from "./kanban.mjs";
+import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes, applyManualOrder, placeInOrder } from "./kanban.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -113,6 +113,29 @@ check("列: タスクが無くても全部の列が出る", buildKanbanColumns([
   const subLanes = splitLanes(sub, (t) => laneKeyOf(t, "assignee"));
   check("splitLanes: 親の中のサブタスクは、レーンを作らない（親のレーンに残る）", subLanes.length === 1 && subLanes[0].key === "Kei");
   check("splitLanes: カードが無ければレーンも無い", splitLanes(buildKanbanColumns([], ST, []), (t) => laneKeyOf(t, "assignee")).length === 0);
+}
+
+// ── 手動の並び順 ──
+{
+  const cs = [T("a", "todo"), T("b", "todo"), T("c", "todo"), T("d", "todo")];
+  const paths = (list) => list.map((t) => t.path).join();
+  check("applyManualOrder: 順序に入っているカードを、その順で先に", paths(applyManualOrder(cs, ["c", "a"])) === "c,a,b,d");
+  check("applyManualOrder: 入っていないカードは、渡された順のまま後ろに", paths(applyManualOrder(cs, ["d"])) === "d,a,b,c");
+  check("applyManualOrder: 知らないパス・重複は無視", paths(applyManualOrder(cs, ["ghost", "b", "b"])) === "b,a,c,d");
+  check("applyManualOrder: 順序が空なら、そのまま", paths(applyManualOrder(cs, [])) === "a,b,c,d");
+
+  const shown = ["a", "b", "c", "d"];
+  check("placeInOrder: 前に入れる", placeInOrder([], shown, "d", "b", false).join() === "a,d,b,c");
+  check("placeInOrder: 後ろに入れる", placeInOrder([], shown, "a", "c", true).join() === "b,c,a,d");
+  check("placeInOrder: 参照が無ければ末尾", placeInOrder([], shown, "a", null, true).join() === "b,c,d,a");
+  check("placeInOrder: 別の列から来たカードは、その位置に入る", placeInOrder([], shown, "x", "c", false).join() === "a,b,x,c,d");
+  check("placeInOrder: 自分自身を参照にしても、位置は変わらず壊れない", placeInOrder([], shown, "b", "b", false).join() === "a,c,d,b");
+  check("placeInOrder: フィルタで外れたカードのパスは、末尾に残す", placeInOrder(["z", "a", "b"], ["a", "b"], "b", "a", false).join() === "b,a,z");
+  check("placeInOrder: 元の配列は変えない", (() => {
+    const o = ["a", "b"];
+    placeInOrder(o, ["a", "b"], "b", "a", false);
+    return o.join() === "a,b";
+  })());
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

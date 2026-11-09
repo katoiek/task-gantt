@@ -244,6 +244,8 @@ export function defaultViewConfig(s: GanttSettings): ViewConfig {
     collapsedColumns: [],
     laneBy: "none",
     collapsedLanes: [],
+    manualOrder: false,
+    cardOrder: {},
   };
 }
 

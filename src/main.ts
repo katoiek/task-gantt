@@ -1,6 +1,6 @@
 import { Plugin, WorkspaceLeaf, TFolder, TFile, Menu, TAbstractFile } from "obsidian";
 import { GanttSettings, DEFAULT_SETTINGS, defaultViewConfig, GanttSettingTab } from "./settings";
-import { moveBoardKeys, repairBoardViews } from "./views";
+import { moveBoardKeys, repairBoardViews, renameOrderPaths } from "./views";
 import { GanttView } from "./view";
 import { VIEW_TYPE_GANTT, GanttViewState } from "./types";
 import { t } from "./i18n";
@@ -93,6 +93,8 @@ export default class GanttPlugin extends Plugin {
         if (file instanceof TFile) migrateRenamedPath(this, oldPath, file.path);
         // フォルダの名前変更・移動に、そのボードのビューを追従させる / the folder's views follow its rename or move
         else if (file instanceof TFolder && moveBoardKeys(this.settings.boardViews, oldPath, file.path)) void this.saveData(this.settings);
+        // カンバンの手動の順序に入っているパスも追従させる / the paths in the Kanban manual orders follow too
+        if (renameOrderPaths(this.settings.boardViews, oldPath, file.path)) void this.saveData(this.settings);
       })
     );
     // 削除はイベントの孤児掃除を予約 / deletions schedule the orphan cleanup

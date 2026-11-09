@@ -229,6 +229,13 @@
   box-shadow: none;
   color: var(--text-muted);
 }
+/* ドロップの位置：入る場所に、アクセント色の線 / the drop slot: an accent line where the card will go */
+.ogantt-kcard.is-drop-before {
+  box-shadow: 0 -4px 0 var(--interactive-accent);
+}
+.ogantt-kcard.is-drop-after {
+  box-shadow: 0 4px 0 var(--interactive-accent);
+}
 .ogantt-kcard-more {
   position: absolute;
   top: 6px;

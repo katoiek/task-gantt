@@ -29,6 +29,8 @@ export interface ViewConfig {
   collapsed: string[]; // 折りたたんだグループのキー / keys of the collapsed groups
   // カンバン用（ガントでは使わない）/ for Kanban (unused by Gantt)
   cardFields: string[]; // カードに出す列の id（担当・開始・期限が既定）/ ids of the columns shown on a card (assignee, start, due by default)
+  manualOrder: boolean; // カードの並びに手動の順序を使う（false ならビューの並べ替え）/ order the cards by hand (false = the view's sort)
+  cardOrder: Record<string, string[]>; // 列のキー → カード（ノートのパス）の手動の順序 / column key → the cards' manual order (note paths)
   laneBy: LaneBy; // スイムレーンの分け方（none = レーンなし）/ what the swimlanes split by (none = no lanes)
   collapsedLanes: string[]; // 折りたたんだレーンのキー（"<分け方>:<値>"）/ keys of the collapsed lanes ("<by>:<value>")
   collapsedColumns: string[]; // 折りたたんだ列のキー（ステータスの ID。未割当は UNASSIGNED_KEY）/ keys of the collapsed columns (a status id; UNASSIGNED_KEY for Unassigned)
@@ -154,6 +156,9 @@ export function repairBoardViews(raw: unknown, base: ViewConfig): Record<string,
       const config = cloneConfig({ ...base, ...(v.config ?? {}) });
       if (config.laneBy !== "assignee" && config.laneBy !== "folder") config.laneBy = "none";
       if (!Array.isArray(config.collapsedLanes)) config.collapsedLanes = [];
+      config.manualOrder = config.manualOrder === true;
+      if (!config.cardOrder || typeof config.cardOrder !== "object" || Array.isArray(config.cardOrder)) config.cardOrder = {};
+      for (const k of Object.keys(config.cardOrder)) if (!Array.isArray(config.cardOrder[k])) delete config.cardOrder[k];
       views.push({ id: v.id, name: v.name, type: v.type === "kanban" ? "kanban" : "gantt", config });
     }
     if (!views.length) continue;
@@ -165,4 +170,21 @@ export function repairBoardViews(raw: unknown, base: ViewConfig): Record<string,
 // 全ビューの設定に同じ変更を加える（カスタムフィールドの列の追加・削除など、設定画面から）/ apply one change to every view's config (e.g. a custom field's column added or removed from the settings)
 export function eachConfig(map: Record<string, BoardViews>, fn: (c: ViewConfig) => void): void {
   for (const bv of Object.values(map)) for (const v of bv.views) fn(v.config);
+}
+
+// ノートの名前変更・移動に、手動の順序のパスを追従させる（フォルダなら配下も）。変えたら true
+// make the manual orders' paths follow a note's rename or move (and everything under a renamed folder); true when something changed
+export function renameOrderPaths(map: Record<string, BoardViews>, oldPath: string, newPath: string): boolean {
+  let changed = false;
+  const prefix = oldPath + "/";
+  eachConfig(map, (c) => {
+    for (const [key, list] of Object.entries(c.cardOrder ?? {})) {
+      const next = list.map((p) => (p === oldPath ? newPath : p.startsWith(prefix) ? newPath + "/" + p.slice(prefix.length) : p));
+      if (next.some((p, i) => p !== list[i])) {
+        c.cardOrder[key] = next;
+        changed = true;
+      }
+    }
+  });
+  return changed;
 }

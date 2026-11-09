@@ -12,6 +12,7 @@ import {
   moveBoardKeys,
   eachConfig,
   repairBoardViews,
+  renameOrderPaths,
 } from "./views.mjs";
 
 let pass = 0;
@@ -48,6 +49,8 @@ const cfg = (over = {}) => ({
   collapsedColumns: [],
   laneBy: "none",
   collapsedLanes: [],
+  manualOrder: false,
+  cardOrder: {},
   ...over,
 });
 
@@ -183,6 +186,19 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
     const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "kanban", config: { laneBy: "assignee", collapsedLanes: ["assignee:Kei"] } }, { id: "b", name: "B", type: "kanban", config: { laneBy: "weird", collapsedLanes: "x" } }, { id: "c", name: "C", type: "kanban", config: {} }] } }, base);
     const v = r["folder:k"].views;
     return v[0].config.laneBy === "assignee" && v[0].config.collapsedLanes.join() === "assignee:Kei" && v[1].config.laneBy === "none" && v[1].config.collapsedLanes.length === 0 && v[2].config.laneBy === "none";
+  })());
+  check("repair: 手動の並び順は、正しい形だけ保たれ、不正なら捨てる", (() => {
+    const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "kanban", config: { manualOrder: true, cardOrder: { todo: ["x", "y"], bad: "z" } } }, { id: "b", name: "B", type: "kanban", config: { manualOrder: "yes", cardOrder: [1] } }, { id: "c", name: "C", type: "kanban", config: {} }] } }, base);
+    const v = r["folder:k"].views;
+    return v[0].config.manualOrder === true && v[0].config.cardOrder.todo.join() === "x,y" && !("bad" in v[0].config.cardOrder) && v[1].config.manualOrder === false && Object.keys(v[1].config.cardOrder).length === 0 && v[2].config.manualOrder === false;
+  })());
+  check("renameOrderPaths: ノートの名前変更に追従（フォルダなら配下も、似た名前は動かさない）", (() => {
+    const m = { "folder:A": createBoardViews("G", cfg({ cardOrder: { todo: ["P/a.md", "P/sub/b.md", "P2/c.md", "other.md"], done: ["P/a.md"] } })) };
+    const hit = renameOrderPaths(m, "P", "Q");
+    const o = m["folder:A"].views[0].config.cardOrder;
+    const miss = renameOrderPaths(m, "nope", "x");
+    const one = renameOrderPaths(m, "other.md", "moved.md");
+    return hit && o.todo.join() === "Q/a.md,Q/sub/b.md,P2/c.md,other.md".replace("other.md", "moved.md") && o.done.join() === "Q/a.md" && !miss && one;
   })());
   check("repair: 開いているビューが無ければ先頭", fixed["folder:partial"].active === "a");
   fixed["folder:ok"].views[0].config.visibleColumns.push("x");
