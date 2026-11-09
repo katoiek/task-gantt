@@ -3935,8 +3935,8 @@ export class GanttView extends ItemView {
           if (t && (await x.def.applyText!(this.board, t, x.text))) done++;
           else skipped++;
         }
-        // 名前の変更は最後に：ファイルのパスが変わるので、ほかの列の書き込みが終わってから。同じ名前は「名前 2」…にする
-        // renames come last: they change file paths, so the other columns are written first; a repeated name becomes "name 2", …
+        // 名前の変更は最後に：ファイルのパスが変わるので、ほかの列の書き込みが終わってから。同じフォルダに同じ名前があれば、変えずに飛ばす（名前を作り変えない）
+        // renames come last: they change file paths, so the other columns are written first; a name already in the folder is skipped (no invented name)
         for (const r of renames) {
           const t = this.tasks.find((y) => y.path === r.path);
           if (t && t.name === r.name) {
@@ -4004,6 +4004,7 @@ export class GanttView extends ItemView {
       for (let c = rect.c0; c <= rect.c1; c++) items.push({ path: rows[r], col: cols[c], text: this.cellCopyText(rows[src], cols[c]) });
     }
     const res = await this.applyCellTexts(tr().cellsFill, items);
+    if (res.skipped > 0) new Notice(tr().cellsPasted(res.done, res.skipped));
     // 埋めた分まで、選択を広げる（名前を変えたファイルは、新しいパスで）/ grow the selection over what was filled (a renamed file under its new path)
     const r0 = Math.min(rect.r0, target.from);
     const r1 = Math.max(rect.r1, target.to);

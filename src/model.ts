@@ -572,20 +572,17 @@ export function newTaskDates(mode: string, today: string): { start: string; end:
 }
 
 // タスク（ファイル）をリネーム。リンクも更新される / rename the task file (updates links)
-export async function renameTask(app: App, path: string, newName: string, unique = false): Promise<string | null> {
+export async function renameTask(app: App, path: string, newName: string, skipIfExists = false): Promise<string | null> {
   const file = app.vault.getAbstractFileByPath(path);
   if (!(file instanceof TFile)) return null;
   const safe = newName.replace(/[\\/:*?"<>|]/g, "").trim();
   if (!safe) return null;
   const dir = file.parent && file.parent.path !== "/" ? file.parent.path + "/" : "";
-  let newPath = `${dir}${safe}.md`;
+  const newPath = `${dir}${safe}.md`;
   if (newPath === path) return path;
-  // unique：同じ名前のノートが既にあれば、「名前 2」「名前 3」…と、空いている名前にする（フィルで同じタイトルを並べるときのため）
-  // unique: when a note of that name exists, take the next free "name 2", "name 3"… (for fill, which repeats one title)
-  if (unique) {
-    let i = 1;
-    while (app.vault.getAbstractFileByPath(newPath)) newPath = `${dir}${safe} ${++i}.md`;
-  }
+  // skipIfExists：同じフォルダに同じ名前のノートがあれば、名前を変えない（同じフォルダに同じ名前のノートは作れないため。貼り付け・フィルは、名前を作り変えずに、飛ばす）
+  // skipIfExists: leave the name alone when a note of that name is already in the folder (a folder can't hold two notes with one name; paste and fill skip instead of inventing a name)
+  if (skipIfExists && app.vault.getAbstractFileByPath(newPath)) return null;
   await app.fileManager.renameFile(file, newPath);
   return newPath;
 }
