@@ -120,6 +120,7 @@ export class GanttView extends ItemView {
   private dragTabId: string | null = null; // ドラッグ中のビューのタブ / the view tab being dragged
   private selBarEl: HTMLElement | null = null;
   private selDragging = false; // ドラッグで範囲を選んでいる最中 / dragging out a range
+  private selDragged = false; // 範囲選択・フィルのドラッグの直後（そのあとに来るクリックで、詳細パネルを開かない）/ just after a range-select or fill drag (the click that follows must not open the detail panel)
   private batchActive = false; // まとめて書いている最中（途中の再読込・取り消し記録を止める）/ writing in bulk (pauses reloads and undo records in between)
   private kanbanCols: KanbanColumn[] = []; // 今描いている列（レーンに分ける前・手動の順序を反映済み）/ the columns being drawn (before the lanes, manual order applied)
   private dragColumn: string | null = null; // ドラッグ中の列（ステータスの id）/ the column (status id) being dragged
@@ -265,6 +266,8 @@ export class GanttView extends ItemView {
     this.registerDomEvent(activeDocument, "paste", (e: ClipboardEvent) => this.onCellPaste(e));
     this.registerDomEvent(window, "mouseup", () => {
       this.selDragging = false;
+      // ドラッグのあとに来るクリックは、行のクリックとして届く。それが済んでから、印を戻す / the click after a drag reaches the row as a row click; clear the mark once it has passed
+      if (this.selDragged) window.setTimeout(() => (this.selDragged = false), 0);
     });
   }
 
@@ -2420,7 +2423,12 @@ export class GanttView extends ItemView {
             this.renderCell(td, row, col);
           }
         }
-        tr.onclick = () => void this.openDetail(t.path);
+        // 範囲選択・フィルのドラッグの直後や、Shift / Ctrl 付きのクリック（選択を広げる操作）では、詳細パネルを開かない
+        // no detail panel right after a range-select or fill drag, nor on a Shift / Ctrl click (those extend the selection)
+        tr.onclick = (e) => {
+          if (this.selDragged || e.shiftKey || e.ctrlKey || e.metaKey) return;
+          void this.openDetail(t.path);
+        };
         if (this.groupBy === "folder") {
           this.makeDraggableTask(tr, t.path);
           // タスク行へドロップ＝そのタスクのサブタスクにする（親フォルダへ同居）/ drop onto a task = make it that task's subtask
@@ -3688,6 +3696,7 @@ export class GanttView extends ItemView {
     });
     td.addEventListener("mouseenter", () => {
       if (!this.selDragging || !this.cellSel) return;
+      this.selDragged = true;
       this.cellSel.focus = ref;
       this.paintSelection();
     });
@@ -3971,6 +3980,7 @@ export class GanttView extends ItemView {
   private startFill(e: MouseEvent): void {
     e.preventDefault();
     e.stopPropagation();
+    this.selDragged = true;
     const rect = this.selRect();
     if (!rect) return;
     const rows = this.selRows();
