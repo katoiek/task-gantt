@@ -874,6 +874,7 @@
   overflow: auto;
 }
 .ogantt-grid {
+  position: relative; /* 列のドラッグの縦線の基準 / the reference for the column-drag guide line */
   display: grid;
   /* columns/rows are set inline from JS */
 }
@@ -1935,9 +1936,14 @@ button.ogantt-cal-title:hover {
 .ogantt-th.is-dragging {
   opacity: 0.5;
 }
-.ogantt-th.is-col-before {
-  box-shadow: inset 3px 0 0 var(--interactive-accent);
+.ogantt-colguide {
+  position: absolute;
+  top: 0;
+  z-index: 6;
+  width: 3px;
+  background: var(--interactive-accent);
+  pointer-events: none;
 }
-.ogantt-th.is-col-after {
-  box-shadow: inset -3px 0 0 var(--interactive-accent);
+.ogantt-colguide.is-hidden {
+  display: none;
 }

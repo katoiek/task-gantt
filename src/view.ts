@@ -2335,6 +2335,8 @@ export class GanttView extends ItemView {
 
     // (1) 左上の角＝表ヘッダー（表示中の列を並べる・クリックでソート）/ top-left corner = header (click to sort)
     const corner = grid.createDiv({ cls: "ogantt-corner" });
+    // 列をドラッグしているときの、入る位置の縦線。表の上端から下端までいっぱいに引く / the vertical line showing where a dragged column will go, drawn from the top of the table to its bottom
+    const colGuide = grid.createDiv({ cls: "ogantt-colguide is-hidden" });
     for (const col of cols) {
       const id = col.id;
       const th = corner.createDiv({ cls: "ogantt-th ogantt-th-sortable" + (id === "name" ? " ogantt-th-name" : "") });
@@ -2356,7 +2358,8 @@ export class GanttView extends ItemView {
       });
       th.addEventListener("dragend", () => {
         this.dragTableCol = null;
-        corner.querySelectorAll(".is-dragging, .is-col-before, .is-col-after").forEach((el) => el.removeClasses(["is-dragging", "is-col-before", "is-col-after"]));
+        corner.querySelectorAll(".is-dragging").forEach((el) => el.removeClass("is-dragging"));
+        colGuide.addClass("is-hidden");
       });
       const dropAfter = (ev: DragEvent): boolean => {
         const r = th.getBoundingClientRect();
@@ -2365,20 +2368,22 @@ export class GanttView extends ItemView {
       th.addEventListener("dragover", (ev: DragEvent) => {
         if (!this.dragTableCol || this.dragTableCol === id) return;
         ev.preventDefault();
-        const after = dropAfter(ev);
-        th.toggleClass("is-col-after", after);
-        th.toggleClass("is-col-before", !after);
+        const r = th.getBoundingClientRect();
+        const x = (dropAfter(ev) ? r.right : r.left) - grid.getBoundingClientRect().left;
+        colGuide.style.left = `${x - 1}px`;
+        colGuide.style.height = `${grid.offsetHeight}px`;
+        colGuide.removeClass("is-hidden");
       });
       th.addEventListener("dragleave", (ev: DragEvent) => {
         if (th.contains(ev.relatedTarget as Node | null)) return;
-        th.removeClasses(["is-col-before", "is-col-after"]);
+        colGuide.addClass("is-hidden");
       });
       th.addEventListener("drop", (ev: DragEvent) => {
         if (!this.dragTableCol) return;
         ev.preventDefault();
         const from = this.dragTableCol;
         this.dragTableCol = null;
-        th.removeClasses(["is-col-before", "is-col-after"]);
+        colGuide.addClass("is-hidden");
         const next = moveId(this.visibleColumns().map((c) => c.id), from, id, dropAfter(ev));
         if (!next) return;
         this.cfg.tableColumnOrder = next;
