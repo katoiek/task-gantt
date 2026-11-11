@@ -86,6 +86,21 @@ check("status grouping uses labels, raw id for unknown, none for unset",
 check("assignee grouping", groupsOf(regroup(ALL, "assignee", false, STATUSES, "(none)")) === "Alpha Plan:kei,Beta:(none),gamma:(none),Delta:(none)");
 check("regroup doesn't mutate the input", A.groups[0] === "Proj");
 
+// ── フォルダ / folder ──
+{
+  const f = (name, folder) => task({ name, folder });
+  const R = f("R", ""), A1 = f("A1", "A"), AB = f("AB", "A/B"), A2 = f("A2", "A2"), C = f("C", "C");
+  const cat = (op, values) => ({ kind: "category", field: "folder", op, values });
+  const m = (t, flt) => matchFilter(t, flt, STATUSES, TODAY);
+  const all = [R, A1, AB, A2, C];
+  check("folder: 選んだフォルダと、その下のフォルダが一致（似た名前 A2 は含めない）", names(applyFilters(all, [cat("is", ["A"])], "all", STATUSES, TODAY)) === "A1,AB");
+  check("folder: 下のフォルダだけを選ぶ", names(applyFilters(all, [cat("is", ["A/B"])], "all", STATUSES, TODAY)) === "AB");
+  check("folder: '' は、スコープ直下のタスク", names(applyFilters(all, [cat("is", [""])], "all", STATUSES, TODAY)) === "R");
+  check("folder: 複数選べば OR", names(applyFilters(all, [cat("is", ["A", "C"])], "all", STATUSES, TODAY)) === "A1,AB,C");
+  check("folder: 以外", names(applyFilters(all, [cat("isNot", ["A"])], "all", STATUSES, TODAY)) === "R,A2,C");
+  check("folder: 未設定・設定あり（直下かどうか）", m(R, cat("empty", [])) && !m(A1, cat("empty", [])) && m(A1, cat("notEmpty", [])) && !m(R, cat("notEmpty", [])));
+}
+
 // ── カスタムフィールド（文字・数値・日付）/ custom fields (text, number, date) ──
 {
   const cf = (name, custom) => task({ name, custom });

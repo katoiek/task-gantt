@@ -304,6 +304,7 @@ export function collectTasks(app: App, settings: GanttSettings, folderPath: stri
       path: file.path,
       name: file.basename,
       groups,
+      folder: groups.join("/"),
       start,
       end,
       startTime: ps?.time,

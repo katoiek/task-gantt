@@ -307,6 +307,23 @@ export const BUILTIN_COLUMNS: ColumnDef[] = [
       return true;
     },
   },
+  {
+    // フォルダ（スコープからの相対パス）。フラット表示でも、どのフォルダのタスクか分かる。読み取り専用 / the folder (relative to the board), so flat view still shows where a task lives; read-only
+    kind: "cell",
+    id: "folder",
+    label: () => tr().optGroupFolder,
+    width: 120,
+    optional: true,
+    sortKey: (t) => t.folder.toLowerCase(),
+    paint: (_ctx, td, row) => {
+      td.empty();
+      if (row.task!.folder) td.createSpan({ cls: "ogantt-td-text", text: row.task!.folder });
+      return false;
+    },
+    edit: () => {},
+    editAria: () => tr().optGroupFolder,
+    copyText: (_ctx, t) => t.folder,
+  },
 ];
 
 // ----- Custom field の列 / custom field columns -----
@@ -539,42 +556,29 @@ function paintStatus(ctx: BoardContext, td: HTMLElement, t: Task): void {
   td.createSpan({ cls: "ogantt-td-text", text: s.label });
 }
 
-// ステータスは選択肢が決まっているのでセレクトで編集する / status has a fixed set, so it edits as a select
+// ステータスは選択肢が決まっているので、色の点つきの一覧から選ぶ（ネイティブのセレクトは、選択肢に色を付けられない）
+// status has a fixed set, so it is picked from a list with each status's colour dot (a native select can't colour its options)
 function editStatus(ctx: BoardContext, cell: HTMLElement, t: Task): void {
-  if (cell.querySelector("input, select")) return;
-  cell.empty();
-  const sel = cell.createEl("select", { cls: "ogantt-cell-input" });
-  sel.createEl("option", { text: "—", value: "" }); // 未設定に戻す / clear the status
-  for (const s of ctx.settings.statuses) {
-    const o = sel.createEl("option", { text: s.label, value: s.id });
-    if (s.id === t.status) o.selected = true;
-  }
-  sel.focus();
-  // ダブルクリックで一覧まで開く（未対応環境ではフォーカスのみで、クリックすれば開く）
-  // open the dropdown right away; where showPicker is unavailable, focus is enough and a click opens it
-  try {
-    sel.showPicker();
-  } catch {
-    /* フォーカス済みなので何もしない / already focused, nothing to do */
-  }
-  let settled = false;
-  const finish = (save: boolean): void => {
-    if (settled) return;
-    settled = true;
-    if (!save || sel.value === (t.status ?? "")) {
-      paintStatus(ctx, cell, t);
-      return;
-    }
-    void (async () => {
-      await ctx.mutate(tr().undoEdit(t.name), [t.path], () =>
-        writeField(ctx.app, t.path, ctx.settings.keys.status, sel.value || undefined)
-      );
-      await ctx.refresh();
-    })();
-  };
-  sel.addEventListener("change", () => finish(true));
-  sel.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); finish(false); } });
-  sel.addEventListener("blur", () => finish(true));
+  ctx.openPopover(cell, "ogantt-colmenu", (menu, close) => {
+    const pick = (id: string, label: string, color?: string): void => {
+      const current = id === (t.status ?? "");
+      const item = menu.createDiv({ cls: "ogantt-colmenu-item ogantt-status-pick" + (current ? " is-current" : "") });
+      const dot = item.createSpan({ cls: "ogantt-status-dot" });
+      if (color) dot.style.background = color;
+      else dot.addClass("is-none");
+      item.createSpan({ text: label });
+      item.onclick = () => {
+        close();
+        if (current) return;
+        void (async () => {
+          await ctx.mutate(tr().undoEdit(t.name), [t.path], () => writeField(ctx.app, t.path, ctx.settings.keys.status, id || undefined));
+          await ctx.refresh();
+        })();
+      };
+    };
+    pick("", "—"); // 未設定に戻す / clear the status
+    for (const s of ctx.settings.statuses) pick(s.id, s.label, s.color);
+  });
 }
 
 // タグセル（多値・チップ表示）/ tags cell (multi-valued chips)

@@ -46,7 +46,7 @@ An options row above the table shapes how the board is displayed. The on/off dis
 
 ![Click a column header to sort, with an ↑/↓ indicator](docs/images/sort-en.png)
 
-**Choose columns** with the gear button — show or hide Start, Due, Duration, Progress, Assignee, Status, and Tags. Any column shown here can be edited by double-clicking its cell. The column layout and sort are remembered across sessions:
+**Choose columns** with the gear button — show or hide Start, Due, Duration, Progress, Assignee, Status, Tags, and **Folder** (the task's folder relative to the board, handy in the flat view). Any column shown here can be edited by double-clicking its cell. The Status cell opens a list with each status's color dot. The column layout and sort are remembered across sessions:
 
 ![Show or hide table columns from the gear menu](docs/images/column_en.png)
 
@@ -143,10 +143,11 @@ A new field's column is shown right away; hide or show it from the gear menu lik
 
 ## Filters
 
-A **filter row** below the options narrows the board. Click **Add filter** and pick a field — **Name**, **Status**, **Status group**, **Assignee**, **Tag**, **Start date**, or **Due date** — then set its condition. Each filter shows as a chip you can click to edit or remove with **×**.
+A **filter row** below the options narrows the board. Click **Add filter** and pick a field — **Name**, **Status**, **Status group**, **Assignee**, **Tag**, **Folder**, **Start date**, or **Due date** — then set its condition. Each filter shows as a chip you can click to edit or remove with **×**.
 
 - **Name** matches with *is / is not / contains / does not contain / starts with / ends with*.
 - **Status / Status group / Assignee / Tag** let you tick several values — including **(none)** for unset — with *is / is not / is empty / is not empty*.
+- **Folder** (offered when the board has subfolders) lists the folders that hold tasks, relative to the board; ticking a folder includes the folders below it, and **(top level)** is the tasks directly in the board's folder. It works in every view, so a Kanban board can be narrowed to one folder.
 - **Start date / Due date** compare against a preset (yesterday/today/tomorrow), a specific date, a relative date (e.g. *1 week from now*, recomputed each day), or a date range, with *is / before / after / on or before / on or after / empty / not empty*.
 
 - **Custom fields** you made in the settings appear at the end of the **Add filter** list, and filter by their type. **Text**: *is / is not / contains / does not contain / starts with / ends with / empty / not empty* (case-insensitive; a list value matches when any one of its items does, and *is not* / *does not contain* when none does). **Number**: *= / ≠ / > / < / ≥ / ≤ / empty / not empty*. **Date**: the same choices as Start and Due. A task without a value drops out of every comparison except *empty*. Deleting a custom field removes its filters.
@@ -417,7 +418,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![列ヘッダのクリックでソート（↑/↓ 表示）](docs/images/sort-ja.png)
 
-**列の表示**は歯車ボタンから、開始・期限・期間・進捗・担当者・ステータス・タグを出し分け。ここに出せる列はすべてセルのダブルクリックで編集できます。列レイアウトとソートはセッションをまたいで保存されます：
+**列の表示**は歯車ボタンから、開始・期限・期間・進捗・担当者・ステータス・タグ・**フォルダ**（ボードからの相対パス。フラット表示で便利）を出し分け。ここに出せる列はすべてセルのダブルクリックで編集できます。ステータスのセルは、ステータスの色の点つきの一覧が開きます。列レイアウトとソートはセッションをまたいで保存されます：
 
 ![歯車メニューから列を表示／非表示](docs/images/column_ja.png)
 
@@ -514,11 +515,12 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
 
 ## フィルタ
 
-オプション行の下の**フィルタ行**でボードを絞り込めます。**フィルタを追加**から項目（**名前**／**ステータス**／**ステータスグループ**／**担当者**／**タグ**／**開始日**／**期限日**）を選び、条件を設定します。各フィルタはチップで表示され、クリックで編集、**×**で削除できます。
+オプション行の下の**フィルタ行**でボードを絞り込めます。**フィルタを追加**から項目（**名前**／**ステータス**／**ステータスグループ**／**担当者**／**タグ**／**フォルダ**／**開始日**／**期限日**）を選び、条件を設定します。各フィルタはチップで表示され、クリックで編集、**×**で削除できます。
 
 - **名前**：と一致／以外／を含む／を含まない／で始まる／で終わる
 - **ステータス／ステータスグループ／担当者／タグ**：複数値をチェックで選択（**（なし）＝未設定**も選べます）。と一致／以外／未設定／設定あり
 - **開始日／期限日**：プリセット（昨日・今日・明日）／具体的な日付／相対的な日付（例：*1 週間後*・毎日再計算）／期間と比較。と一致／より前／より後／以前／以後／未設定／設定あり
+- **フォルダ**（ボードにサブフォルダがあるときに出ます）：タスクのあるフォルダを、ボードからの相対パスで一覧にします。フォルダを選ぶと、その下のフォルダも含み、**（直下）**は、ボードのフォルダ直下のタスクです。どのビューでも使えるので、カンバンも、1 つのフォルダに絞り込めます。
 - **カスタムフィールド**：設定で作ったフィールドが、**フィルタを追加**の一覧の最後に並び、種類ごとに絞り込めます。**文字**：と一致／以外／を含む／を含まない／で始まる／で終わる／未設定／設定あり（大文字小文字は区別しません。リストの値は、どれか 1 つでも当てはまれば一致し、「以外」「を含まない」は、どれも当てはまらないときに一致します）。**数値**：＝／≠／＞／＜／以上／以下／未設定／設定あり。**日付**：開始日・期限日と同じ選択肢。値のないタスクは、「未設定」以外の比較から外れます。カスタムフィールドを削除すると、そのフィールドのフィルタも消えます。
 
 ![チップと一致条件トグルを備えたフィルタ行](docs/images/filter-ja.png)

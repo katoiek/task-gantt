@@ -1342,6 +1342,7 @@ export class GanttView extends ItemView {
       case "statusGroup": return tr().fieldStatusGroup;
       case "assignee": return tr().fieldAssignee;
       case "tag": return tr().fieldTags;
+      case "folder": return tr().optGroupFolder;
     }
   }
   private customFieldName(field: string): string {
@@ -1358,11 +1359,12 @@ export class GanttView extends ItemView {
       case "statusGroup": return "flag";
       case "assignee": return "user";
       case "tag": return "tag";
+      case "folder": return "folder";
     }
   }
   // カテゴリ値のラベル（""＝未設定、ステータスは id→ラベル）/ a category value's label ("" = unset; status maps id→label)
   private catValueLabel(field: CategoryField, value: string): string {
-    if (value === "") return tr().noneLabel; // 未設定 / unset
+    if (value === "") return field === "folder" ? tr().kanbanLaneRoot : tr().noneLabel; // 未設定（フォルダでは、スコープ直下）/ unset (for folders: directly in the board)
     if (field === "status") return this.plugin.settings.statuses.find((s) => s.id === value)?.label ?? value;
     if (field === "statusGroup") return statusGroupLabel(value as StatusGroup);
     return value;
@@ -1374,9 +1376,17 @@ export class GanttView extends ItemView {
     // グループは 4 固定なので、そのグループを使っているステータスが 1 つも無くても全部出す
     // the four groups are fixed, so list them all even when no status currently uses one
     else if (field === "statusGroup") base = STATUS_GROUPS.map((g) => [g, statusGroupLabel(g)] as [string, string]);
-    else if (field === "assignee") base = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort().map((a) => [a, linkLabel(a)] as [string, string]);
+    else if (field === "folder") {
+      // タスクのあるフォルダと、その親（親を選べば、下のフォルダも含む）/ the folders that hold tasks, plus their parents (choosing a parent includes the folders below it)
+      const set = new Set<string>();
+      for (const t of this.tasks) {
+        const parts = t.folder ? t.folder.split("/") : [];
+        for (let i = 1; i <= parts.length; i++) set.add(parts.slice(0, i).join("/"));
+      }
+      base = [...set].sort((a, b) => a.localeCompare(b)).map((p) => [p, p] as [string, string]);
+    } else if (field === "assignee") base = [...new Set(this.tasks.map((t) => t.assignee).filter((a): a is string => !!a))].sort().map((a) => [a, linkLabel(a)] as [string, string]);
     else base = [...new Set(this.tasks.flatMap((t) => t.tags))].sort().map((tg) => [tg, tg] as [string, string]);
-    return [...base, ["", tr().noneLabel]]; // 「未設定」を選べるように / allow filtering by "unset"
+    return [...base, ["", field === "folder" ? tr().kanbanLaneRoot : tr().noneLabel]]; // 「未設定」（フォルダでは、直下）を選べるように / allow filtering by "unset" (for folders: directly in the board)
   }
 
   // チップに出す 1 行サマリー / one-line chip summary
@@ -1474,6 +1484,7 @@ export class GanttView extends ItemView {
     addCat("statusGroup", tr().fieldStatusGroup, "flag");
     addCat("assignee", tr().fieldAssignee, "user");
     if (this.tasks.some((t) => t.tags.length > 0)) addCat("tag", tr().fieldTags, "tag");
+    if (this.tasks.some((t) => t.folder)) addCat("folder", tr().optGroupFolder, "folder"); // サブフォルダがあるときだけ / only when there are subfolders
     const addDate = (field: DateField, label: string) => {
       m.addItem((i) => i.setTitle(label).setIcon("calendar").onClick(() => {
         this.vs.filters.push({ kind: "date", field, op: "onOrAfter", value: { kind: "preset", preset: "today" } });

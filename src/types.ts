@@ -29,6 +29,7 @@ export interface Task {
   path: string; // ファイルパス（一意キー）/ file path (unique key)
   name: string; // ファイル名（拡張子なし）/ basename without extension
   groups: string[]; // スコープから見たフォルダ階層 / folder chain relative to the scope
+  folder: string; // 同じ階層を "/" でつないだもの（"" = スコープ直下）。グループ化で groups が差し替わっても、これは変わらない / the same chain joined with "/" ("" = directly in the scope); unchanged when grouping swaps `groups`
   start?: string; // YYYY-MM-DD
   end?: string; // YYYY-MM-DD
   // 時刻（任意）。frontmatter が "YYYY-MM-DDTHH:mm" のとき設定される。レイアウトは日単位のまま
@@ -95,7 +96,7 @@ export interface DateFilterItem {
 }
 
 // ── カテゴリ系フィルタ（ステータス/ステータスグループ/担当者/タグ）/ category filter ──
-export type CategoryField = "status" | "statusGroup" | "assignee" | "tag";
+export type CategoryField = "status" | "statusGroup" | "assignee" | "tag" | "folder";
 // と一致 / 以外 / 未設定 / 設定あり / is / is not / is empty / is not empty
 export type CategoryOp = "is" | "isNot" | "empty" | "notEmpty";
 export interface CategoryFilter {

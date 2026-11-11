@@ -1918,3 +1918,15 @@ button.ogantt-cal-title:hover {
   background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
+
+/* ステータスの選択（色の点つき）/ the status picker (with colour dots) */
+.ogantt-status-pick {
+  cursor: pointer;
+}
+.ogantt-status-pick.is-current {
+  font-weight: 600;
+}
+.ogantt-status-dot.is-none {
+  background: transparent;
+  border: 1px solid var(--text-faint);
+}

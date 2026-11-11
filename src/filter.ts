@@ -56,6 +56,14 @@ export function matchFilter(t: Task, f: Filter, statuses: StatusDef[], today: nu
       case "endsWith": return low.some((x) => x.endsWith(q));
     }
   }
+  // フォルダ：選んだフォルダと、その下のフォルダのタスクが一致（"" ＝ スコープ直下のタスク）/ folder: a task matches the chosen folders and everything under them ("" = tasks directly in the scope)
+  if (f.field === "folder") {
+    const folder = t.folder ?? "";
+    if (f.op === "empty") return folder === "";
+    if (f.op === "notEmpty") return folder !== "";
+    const hit = f.values.some((v) => (v === "" ? folder === "" : folder === v || folder.startsWith(v + "/")));
+    return f.op === "isNot" ? !hit : hit;
+  }
   // カテゴリ（ステータス/グループ/担当者/タグ）：タスクの該当値集合を作って判定 / category: build the task's value set
   // グループは status から都度引く。設定に無い id やステータス未設定は空集合＝「未設定」扱いになり、
   // 「未完了（完了でもキャンセルでもない）」には含まれる
