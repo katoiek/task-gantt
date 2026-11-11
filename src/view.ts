@@ -149,6 +149,12 @@ export class GanttView extends ItemView {
     return this.vsCache;
   }
 
+  // 列名の行の高さ：ガントは日付の軸があるので固定。テーブルビューは、軸が無いので、ほかの行と同じ高さにする
+  // the header row's height: fixed in the Gantt (the date axis needs it); in the table view there is no axis, so it matches the other rows
+  private get headH(): number {
+    return this.activeType() === "table" ? this.rowH : HEAD_H;
+  }
+
   // 行の高さ：表とタイムラインで共通。ビューの「コンパクト」で詰める / the row height, shared by the table and the timeline; the view's "Compact" packs it
   private get rowH(): number {
     return this.cfg.density === "compact" ? ROW_H_COMPACT : ROW_H;
@@ -2251,7 +2257,7 @@ export class GanttView extends ItemView {
         tableW: this.tableWidth(),
         rows: this.rows.length,
         rowH: this.rowH,
-        headH: HEAD_H,
+        headH: this.headH,
         title: `${this.folder || "(vault root)"} — ${formatDate(stamp, this.plugin.settings.dateFormat)}`,
         maxPixels: Platform.isMobile ? 16e6 : 3e7,
       };
@@ -2326,7 +2332,7 @@ export class GanttView extends ItemView {
     const gridCols = (): string => (isTable ? `${this.tableWidth()}px` : `${this.tableWidth()}px ${width}px`);
     const grid = main.createDiv({ cls: "ogantt-grid" + (isTable ? " is-table-only" : "") });
     grid.style.gridTemplateColumns = gridCols();
-    grid.style.gridTemplateRows = `${HEAD_H}px ${bodyH}px`;
+    grid.style.gridTemplateRows = `${this.headH}px ${bodyH}px`;
 
     // 行ループ内ではローカル変数 tr（行要素）が i18n の tr() を隠すため、先に文言を退避
     // the row var `tr` shadows the i18n tr() inside the loop, so grab strings up front
@@ -2335,7 +2341,7 @@ export class GanttView extends ItemView {
 
     // (1) 左上の角＝表ヘッダー（表示中の列を並べる・クリックでソート）/ top-left corner = header (click to sort)
     const corner = grid.createDiv({ cls: "ogantt-corner" });
-    // 列をドラッグしているときの、入る位置の縦線。表の上端から下端までいっぱいに引く / the vertical line showing where a dragged column will go, drawn from the top of the table to its bottom
+    // 列をドラッグしているときの、入る位置の縦線。列名の行の上端から下端までいっぱいに引く / the vertical line showing where a dragged column will go, drawn across the full height of the header row
     const colGuide = grid.createDiv({ cls: "ogantt-colguide is-hidden" });
     for (const col of cols) {
       const id = col.id;
@@ -2371,7 +2377,7 @@ export class GanttView extends ItemView {
         const r = th.getBoundingClientRect();
         const x = (dropAfter(ev) ? r.right : r.left) - grid.getBoundingClientRect().left;
         colGuide.style.left = `${x - 1}px`;
-        colGuide.style.height = `${grid.offsetHeight}px`;
+        colGuide.style.height = `${corner.offsetHeight}px`;
         colGuide.removeClass("is-hidden");
       });
       th.addEventListener("dragleave", (ev: DragEvent) => {
