@@ -46,7 +46,7 @@ An options row above the table shapes how the board is displayed. The on/off dis
 
 ![Click a column header to sort, with an ↑/↓ indicator](docs/images/sort-en.png)
 
-**Choose columns** with the gear button — show or hide Start, Due, Duration, Progress, Assignee, Status, Tags, and **Folder** (the task's folder relative to the board, handy in the flat view). Any column shown here can be edited by double-clicking its cell. The Status cell opens a list with each status's color dot. The column layout and sort are remembered across sessions:
+**Choose columns** with the gear button — show or hide Start, Due, Duration, Progress, Assignee, Status, Tags, and **Folder** (the task's folder relative to the board, handy in the flat view). Any column shown here can be edited by double-clicking its cell. The Status cell opens a list with each status's color dot. **Drag a column header** to reorder the columns — the Task column included — and a line shows where it will go; the order is saved per view, and a column you show later joins at the end. The column layout and sort are remembered across sessions:
 
 ![Show or hide table columns from the gear menu](docs/images/column_en.png)
 
@@ -418,7 +418,7 @@ UI 表示は Obsidian の表示言語に追従します。対応言語：英語�
 
 ![列ヘッダのクリックでソート（↑/↓ 表示）](docs/images/sort-ja.png)
 
-**列の表示**は歯車ボタンから、開始・期限・期間・進捗・担当者・ステータス・タグ・**フォルダ**（ボードからの相対パス。フラット表示で便利）を出し分け。ここに出せる列はすべてセルのダブルクリックで編集できます。ステータスのセルは、ステータスの色の点つきの一覧が開きます。列レイアウトとソートはセッションをまたいで保存されます：
+**列の表示**は歯車ボタンから、開始・期限・期間・進捗・担当者・ステータス・タグ・**フォルダ**（ボードからの相対パス。フラット表示で便利）を出し分け。ここに出せる列はすべてセルのダブルクリックで編集できます。ステータスのセルは、ステータスの色の点つきの一覧が開きます。**列の見出しをドラッグ**すると、列の順序を入れ替えられます（タスク名の列も）。入る位置に線が出ます。順序はビューごとに保存され、あとから出した列は、末尾に入ります。列レイアウトとソートはセッションをまたいで保存されます：
 
 ![歯車メニューから列を表示／非表示](docs/images/column_ja.png)
 

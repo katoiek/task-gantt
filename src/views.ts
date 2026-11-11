@@ -29,6 +29,7 @@ export interface ViewConfig {
   collapsed: string[]; // 折りたたんだグループのキー / keys of the collapsed groups
   // カンバン用（ガントでは使わない）/ for Kanban (unused by Gantt)
   cardFields: string[]; // カードに出す列の id（担当・開始・期限が既定）/ ids of the columns shown on a card (assignee, start, due by default)
+  tableColumnOrder: string[]; // 表の列の並び（列 ID。タスク名の列 "name" も含む）。空なら定義順 / the table's column order (column ids, "name" included); empty = definition order
   density: "default" | "compact"; // 行の高さ（compact = 詰めて、一度により多くの行を出す）/ row height (compact packs in more rows at once)
   manualOrder: boolean; // カードの並びに手動の順序を使う（false ならビューの並べ替え）/ order the cards by hand (false = the view's sort)
   cardOrder: Record<string, string[]>; // 列のキー → カード（ノートのパス）の手動の順序 / column key → the cards' manual order (note paths)
@@ -159,6 +160,7 @@ export function repairBoardViews(raw: unknown, base: ViewConfig): Record<string,
       if (!Array.isArray(config.collapsedLanes)) config.collapsedLanes = [];
       config.manualOrder = config.manualOrder === true;
       if (config.density !== "compact") config.density = "default";
+      config.tableColumnOrder = Array.isArray(config.tableColumnOrder) ? config.tableColumnOrder.filter((x) => typeof x === "string") : [];
       if (!config.cardOrder || typeof config.cardOrder !== "object" || Array.isArray(config.cardOrder)) config.cardOrder = {};
       for (const k of Object.keys(config.cardOrder)) if (!Array.isArray(config.cardOrder[k])) delete config.cardOrder[k];
       views.push({ id: v.id, name: v.name, type: v.type === "kanban" || v.type === "table" ? v.type : "gantt", config });

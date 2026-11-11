@@ -27,6 +27,10 @@ check("name column is the only name kind", ids(BUILTIN_COLUMNS.filter((c) => c.k
 
 // ── visibleColumns ──
 check("name always visible", ids(visibleColumns(BUILTIN_COLUMNS, [])) === "name");
+check("saved order: the task-name column can move too", ids(visibleColumns(BUILTIN_COLUMNS, ["start", "end", "status"], ["status", "name", "end", "start"])) === "status,name,end,start");
+check("saved order: columns shown later follow in definition order", ids(visibleColumns(BUILTIN_COLUMNS, ["start", "end", "tags"], ["end", "name"])) === "end,name,start,tags");
+check("saved order: unknown or hidden ids are ignored", ids(visibleColumns(BUILTIN_COLUMNS, ["start"], ["ghost", "start", "tags", "name"])) === "start,name");
+check("empty saved order = definition order", ids(visibleColumns(BUILTIN_COLUMNS, ["end", "start"], [])) === "name,start,end");
 check("definition order, not settings order", ids(visibleColumns(BUILTIN_COLUMNS, ["tags", "start"])) === "name,start,tags");
 check("unknown ids are ignored", ids(visibleColumns(BUILTIN_COLUMNS, ["ghost", "end"])) === "name,end");
 

@@ -421,9 +421,15 @@ export function customColumn(f: CustomField): CellColumn {
 
 // 表示中の列（name は常時、その他は visibleColumns に含まれるもの・定義順）
 // visible columns: name always, the rest when listed in visibleColumns, in definition order
-export function visibleColumns(defs: ColumnDef[], visible: string[]): ColumnDef[] {
+// order：ビューに保存した列の並び（タスク名の列も含む）。そこに入っている列を、その順で先に。入っていない列（あとから出した列）は、定義順で後ろに。空なら定義順
+// order: the column order saved in the view (the task-name column included): the columns listed there come first, in that order; columns not in it (shown later) follow in definition order. Empty = definition order
+export function visibleColumns(defs: ColumnDef[], visible: string[], order: string[] = []): ColumnDef[] {
   const vis = new Set(visible);
-  return defs.filter((c) => !c.optional || vis.has(c.id));
+  const shown = defs.filter((c) => !c.optional || vis.has(c.id));
+  if (!order.length) return shown;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  const listed = shown.filter((c) => rank.has(c.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+  return [...listed, ...shown.filter((c) => !rank.has(c.id))];
 }
 
 // 列の実効幅（ユーザー上書き > 既定）/ effective column width (user override > default)

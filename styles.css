@@ -1930,3 +1930,14 @@ button.ogantt-cal-title:hover {
   background: transparent;
   border: 1px solid var(--text-faint);
 }
+
+/* 列の見出しのドラッグ：入る位置に線 / dragging a column header: a line where it will go */
+.ogantt-th.is-dragging {
+  opacity: 0.5;
+}
+.ogantt-th.is-col-before {
+  box-shadow: inset 3px 0 0 var(--interactive-accent);
+}
+.ogantt-th.is-col-after {
+  box-shadow: inset -3px 0 0 var(--interactive-accent);
+}

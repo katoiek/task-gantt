@@ -118,6 +118,7 @@ export class GanttView extends ItemView {
   // テーブルのセル選択（表のセルを、スプレッドシートのように選んで、コピー・貼り付け・フィルする）。パスと列 ID で持つので、描き直しても残る
   // the table's cell selection (pick cells like a spreadsheet to copy, paste and fill); held as path + column id, so it survives a redraw
   private cellSel: { anchor: CellRef; focus: CellRef } | null = null;
+  private dragTableCol: string | null = null; // ドラッグ中の表の列の見出し / the table column header being dragged
   private dragTabId: string | null = null; // ドラッグ中のビューのタブ / the view tab being dragged
   private selBarEl: HTMLElement | null = null;
   private selDragging = false; // ドラッグで範囲を選んでいる最中 / dragging out a range
@@ -1119,7 +1120,7 @@ export class GanttView extends ItemView {
   // ----- テーブル列 / table columns -----
   // 表示中の列（name は常時、その他は設定の visibleColumns に従う）/ visible columns (name always; rest per settings)
   private visibleColumns(): ColumnDef[] {
-    return visibleColumns(this.columns(), this.vs.visibleColumns ?? []);
+    return visibleColumns(this.columns(), this.vs.visibleColumns ?? [], this.cfg.tableColumnOrder);
   }
   // 全列の定義（組み込み→Custom field の順）。Custom field の構成が変わったときだけ作り直す
   // every column definition (built-ins, then custom fields); rebuilt only when the custom fields change
@@ -2344,6 +2345,45 @@ export class GanttView extends ItemView {
         th.createSpan({ cls: "ogantt-sort-arrow", text: this.vs.sortDir === "asc" ? "↑" : "↓" });
       }
       th.onclick = () => this.toggleSort(id);
+      // 見出しをドラッグして、列の順序を入れ替える（タスク名の列も）。左半分に落とせばその前、右半分なら後ろ。順序はこのビューに保存する
+      // drag a header to reorder the columns (the task-name column too): the left half of a target goes before it, the right half after it; the order is saved in this view
+      th.setAttr("draggable", "true");
+      th.addEventListener("dragstart", (ev: DragEvent) => {
+        this.dragTableCol = id;
+        ev.dataTransfer?.setData("text/plain", id);
+        if (ev.dataTransfer) ev.dataTransfer.effectAllowed = "move";
+        th.addClass("is-dragging");
+      });
+      th.addEventListener("dragend", () => {
+        this.dragTableCol = null;
+        corner.querySelectorAll(".is-dragging, .is-col-before, .is-col-after").forEach((el) => el.removeClasses(["is-dragging", "is-col-before", "is-col-after"]));
+      });
+      const dropAfter = (ev: DragEvent): boolean => {
+        const r = th.getBoundingClientRect();
+        return ev.clientX > r.left + r.width / 2;
+      };
+      th.addEventListener("dragover", (ev: DragEvent) => {
+        if (!this.dragTableCol || this.dragTableCol === id) return;
+        ev.preventDefault();
+        const after = dropAfter(ev);
+        th.toggleClass("is-col-after", after);
+        th.toggleClass("is-col-before", !after);
+      });
+      th.addEventListener("dragleave", (ev: DragEvent) => {
+        if (th.contains(ev.relatedTarget as Node | null)) return;
+        th.removeClasses(["is-col-before", "is-col-after"]);
+      });
+      th.addEventListener("drop", (ev: DragEvent) => {
+        if (!this.dragTableCol) return;
+        ev.preventDefault();
+        const from = this.dragTableCol;
+        this.dragTableCol = null;
+        th.removeClasses(["is-col-before", "is-col-after"]);
+        const next = moveId(this.visibleColumns().map((c) => c.id), from, id, dropAfter(ev));
+        if (!next) return;
+        this.cfg.tableColumnOrder = next;
+        this.rerender(); // 描き直しのときに、ビューへ保存される / saved with the view on the redraw
+      });
       // 右端グリップ：ドラッグ＝列幅変更（永続化）、素早い2回押し＝内容に合わせて自動フィット
       // right-edge grip: drag to resize the column (persisted), quick double-press auto-fits to content
       const grip = th.createDiv({ cls: "ogantt-col-grip" });

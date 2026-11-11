@@ -247,6 +247,7 @@ export function defaultViewConfig(s: GanttSettings): ViewConfig {
     manualOrder: false,
     cardOrder: {},
     density: "default",
+    tableColumnOrder: [],
   };
 }
 
@@ -558,8 +559,9 @@ export class GanttSettingTab extends PluginSettingTab {
           if (at >= 0) s.customFields.splice(at, 1);
           const col = `cf:${f.id}`;
           // 列の設定は全部のビューにある。どのビューからも片付ける / every view holds column settings; tidy them all
-          const tidy = (c: { visibleColumns: string[]; columnWidths: Record<string, number>; sortBy: string; sortDir: "asc" | "desc"; filters: Filter[] }): void => {
+          const tidy = (c: { visibleColumns: string[]; columnWidths: Record<string, number>; sortBy: string; sortDir: "asc" | "desc"; filters: Filter[]; tableColumnOrder?: string[] }): void => {
             c.visibleColumns = c.visibleColumns.filter((x) => x !== col);
+            if (c.tableColumnOrder) c.tableColumnOrder = c.tableColumnOrder.filter((x) => x !== col);
             c.filters = c.filters.filter((x) => x.field !== col); // そのフィールドのフィルタも外す / drop that field's filters too
             delete c.columnWidths[col];
             if (c.sortBy === col) {

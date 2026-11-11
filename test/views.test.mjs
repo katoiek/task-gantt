@@ -224,6 +224,11 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
     const one = renameOrderPaths(m, "other.md", "moved.md");
     return hit && o.todo.join() === "Q/a.md,Q/sub/b.md,P2/c.md,other.md".replace("other.md", "moved.md") && o.done.join() === "Q/a.md" && !miss && one;
   })());
+  check("repair: 表の列の並びは、文字列の配列だけ保たれる", (() => {
+    const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "table", config: { tableColumnOrder: ["status", "name", 5, "start"] } }, { id: "b", name: "B", type: "table", config: { tableColumnOrder: "x" } }, { id: "c", name: "C", type: "table", config: {} }] } }, base);
+    const v = r["folder:k"].views;
+    return v[0].config.tableColumnOrder.join() === "status,name,start" && v[1].config.tableColumnOrder.length === 0 && v[2].config.tableColumnOrder.length === 0;
+  })());
   check("repair: 行の高さは、compact だけ保たれ、それ以外は default", (() => {
     const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "table", config: { density: "compact" } }, { id: "b", name: "B", type: "table", config: { density: "huge" } }, { id: "c", name: "C", type: "table", config: {} }] } }, base);
     const v = r["folder:k"].views;
