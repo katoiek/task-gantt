@@ -137,3 +137,17 @@ export function cardZone(y: number, top: number, height: number): CardZone {
   const r = height > 0 ? (y - top) / height : 0.5;
   return r < 0.3 ? "before" : r > 0.7 ? "after" : "child";
 }
+
+// 行の手動の順序で比べる関数。順序（パスの一覧）に入っているタスクが先で、その並び順。入っていないタスクは、そのあとで、base の比べ方のまま
+// a comparator for the manual row order: tasks in the order list come first, in that order; tasks not in it follow, compared by `base`
+export function manualRowCompare(order: string[], base: (a: Task, b: Task) => number): (a: Task, b: Task) => number {
+  const rank = new Map(order.map((p, i) => [p, i]));
+  return (a, b) => {
+    const ra = rank.get(a.path);
+    const rb = rank.get(b.path);
+    if (ra !== undefined && rb !== undefined) return ra - rb;
+    if (ra !== undefined) return -1;
+    if (rb !== undefined) return 1;
+    return base(a, b);
+  };
+}

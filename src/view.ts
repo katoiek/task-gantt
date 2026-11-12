@@ -48,7 +48,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, applyManualOrder, buildKanbanColumns, cardZone, collapseColumns, columnKey, laneKeyOf, moveId, orderStatusIds, placeInOrder, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
+import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, applyManualOrder, buildKanbanColumns, cardZone, CardZone, collapseColumns, columnKey, laneKeyOf, moveId, manualRowCompare, orderStatusIds, placeInOrder, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
 import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, moveView, renameView, LaneBy } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
@@ -372,7 +372,10 @@ export class GanttView extends ItemView {
       return;
     }
     const view = this.processTasks(); // フィルタ＋グループ適用後 / after filter + group remap
-    const compare = taskComparator(this.columns(), this.vs);
+    // 手動の並び：順序に入っている行が先、その並び順。入っていない行は、ビューの並べ替えのまま後ろに
+    // manual order: rows in the saved order first; the rest follow in the view's sort
+    const byColumn = taskComparator(this.columns(), this.vs);
+    const compare = this.cfg.manualOrder ? manualRowCompare(this.cfg.rowOrder, byColumn) : byColumn;
     if (this.flat) {
       // フラット：フォルダも親子も無視して全タスクを1本のソート済みリストに / flat: one sorted list, no grouping/nesting
       this.rows = view.slice().sort(compare).map((task) => ({ kind: "task", group: "", depth: 0, task }));
@@ -1175,7 +1178,12 @@ export class GanttView extends ItemView {
   // 列ヘッダクリックでソート列/方向を切替えて永続化 / clicking a header toggles sort column/direction (persisted)
   private toggleSort(id: string): void {
     const s = this.vs;
-    if (s.sortBy === id) s.sortDir = s.sortDir === "asc" ? "desc" : "asc";
+    // 手動の並びから戻るときは、押した列の並べ替えにする（手動の順序は、保存したまま残る）/ leaving the manual order sorts by the clicked column (the saved manual order is kept)
+    if (this.cfg.manualOrder) {
+      this.cfg.manualOrder = false;
+      s.sortBy = id;
+      s.sortDir = "asc";
+    } else if (s.sortBy === id) s.sortDir = s.sortDir === "asc" ? "desc" : "asc";
     else {
       s.sortBy = id;
       s.sortDir = "asc";
@@ -1241,6 +1249,7 @@ export class GanttView extends ItemView {
           { icon: "zap", label: tr().optProgressLine, show: this.activeType() !== "table", get: () => this.progressLine, set: (v) => (this.progressLine = v) },
           { icon: "eye-off", label: tr().optHideLabels, show: this.activeType() !== "table", get: () => this.hideLabels, set: (v) => (this.hideLabels = v) },
           { icon: "alarm-clock", label: tr().optOverdue, show: true, get: () => this.markOverdue, set: (v) => (this.markOverdue = v) },
+          { icon: "list-ordered", label: tr().optManualOrder, show: true, get: () => this.cfg.manualOrder, set: (v) => (this.cfg.manualOrder = v) },
           { icon: "rows-3", label: tr().optCompact, show: true, get: () => this.cfg.density === "compact", set: (v) => (this.cfg.density = v ? "compact" : "default") },
         ];
         for (const it of toggles.filter((x) => x.show)) {
@@ -1922,7 +1931,7 @@ export class GanttView extends ItemView {
     displayBtn.createSpan({ text: tr().optDisplay });
     displayBtn.setAttr("aria-label", tr().optDisplay);
     // 既定から変えた表示があるときは色で知らせる（メニューの中は見えないため）/ tint the button when a display option differs from its default (the menu hides it)
-    if (this.flat || this.rollup || this.progressLine || this.hideLabels || this.markOverdue || !this.showEmptyFolders || this.cfg.density === "compact") displayBtn.addClass("is-on");
+    if (this.flat || this.rollup || this.progressLine || this.hideLabels || this.markOverdue || !this.showEmptyFolders || this.cfg.density === "compact" || this.cfg.manualOrder) displayBtn.addClass("is-on");
     displayBtn.onclick = () => this.openDisplayMenu(displayBtn);
 
     // 凡例（色分けの基準を説明）/ legend explaining the current color basis
@@ -2349,7 +2358,7 @@ export class GanttView extends ItemView {
       if (id !== "name") th.style.width = `${this.colW(id)}px`;
       th.createSpan({ text: col.label() });
       // アクティブなソート列に ↑/↓ を表示 / show ↑/↓ on the active sort column
-      if (this.vs.sortBy === id) {
+      if (this.vs.sortBy === id && !this.cfg.manualOrder) {
         th.createSpan({ cls: "ogantt-sort-arrow", text: this.vs.sortDir === "asc" ? "↑" : "↓" });
       }
       th.onclick = () => this.toggleSort(id);
@@ -2564,15 +2573,10 @@ export class GanttView extends ItemView {
           if (this.selDragged || e.shiftKey || e.ctrlKey || e.metaKey) return;
           void this.openDetail(t.path);
         };
-        if (this.groupBy === "folder") {
-          this.makeDraggableTask(tr, t.path);
-          // タスク行へドロップ＝そのタスクのサブタスクにする（親フォルダへ同居）/ drop onto a task = make it that task's subtask
-          this.makeDropTarget(tr, (src) => void this.reparentTo(src, this.taskFolder(t.path), t.path));
-        } else if (this.groupBy === "tag") {
-          // タグ表示ではタググループへドラッグしてタグ付け（タスクへのドロップ＝サブタスク化はしない）
-          // when grouping by tag, drag onto a tag group to tag (no subtask drop)
-          this.makeDraggableTask(tr, t.path);
-        }
+        // 行はどのグループ化でもドラッグできる。タスク行の真ん中へ落とすとサブタスク化（フォルダのグループ化のときだけ）、上端・下端へ落とすと、その前・後ろに並べる（フォルダのグループ化では、別のフォルダ・親の行なら、そこへ移動もする）
+        // rows drag under every grouping. Dropped on the middle of a task row it becomes that task's subtask (folder grouping only); on the top or bottom edge it goes before or after (under folder grouping a row of another folder or parent also moves there)
+        this.makeDraggableTask(tr, t.path);
+        this.makeTaskDropTarget(tr, t);
       }
     }
 
@@ -3217,6 +3221,65 @@ export class GanttView extends ItemView {
   // タスクパスの所属フォルダ（無ければ Vault ルート＝""）/ a task's folder dir ("" = vault root)
   private taskFolder(path: string): string {
     return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+  }
+
+  // タスク行のドロップ先。ポインタの縦の位置で、上端＝前、下端＝後ろ、真ん中＝サブタスク（フォルダのグループ化のときだけ。それ以外は、上半分＝前、下半分＝後ろ）
+  // a task row as a drop target: by the pointer's height, top edge = before, bottom edge = after, middle = subtask (folder grouping only; otherwise the top half is before, the bottom half after)
+  private makeTaskDropTarget(row: HTMLElement, t: Task): void {
+    const zoneOf = (e: DragEvent): CardZone => {
+      const r = row.getBoundingClientRect();
+      const z = cardZone(e.clientY, r.top, r.height);
+      if (z === "child" && this.groupBy !== "folder") return e.clientY < r.top + r.height / 2 ? "before" : "after";
+      return z;
+    };
+    const clear = (): void => row.removeClasses(["is-drop-before", "is-drop-after", "is-drop-target"]);
+    row.addEventListener("dragover", (e: DragEvent) => {
+      e.preventDefault(); // preventDefault でドロップを許可 / allow dropping
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      clear();
+      const z = zoneOf(e);
+      row.addClass(z === "before" ? "is-drop-before" : z === "after" ? "is-drop-after" : "is-drop-target");
+    });
+    row.addEventListener("dragleave", clear);
+    row.addEventListener("drop", (e: DragEvent) => {
+      e.preventDefault();
+      const z = zoneOf(e);
+      clear();
+      const src = e.dataTransfer?.getData("text/plain");
+      if (src && src !== t.path) void this.dropOnTaskRow(src, t, z);
+    });
+  }
+
+  // 行を、タスク行の前・後ろ・真ん中へ落とした。真ん中＝サブタスク化。前・後ろ＝手動の順序に入れる（フォルダのグループ化では、別のフォルダ・親の行なら、そこへ移動もする）
+  // a row was dropped before, after or on the middle of a task row. Middle = make a subtask. Before / after = place it in the manual order (under folder grouping, a row of another folder or parent also moves there)
+  private async dropOnTaskRow(srcPath: string, t: Task, zone: CardZone): Promise<void> {
+    if (zone === "child") {
+      await this.reparentTo(srcPath, this.taskFolder(t.path), t.path);
+      return;
+    }
+    const src = this.tasks.find((x) => x.path === srcPath);
+    if (!src) return;
+    // 自分の子孫の前後へは置けない（輪になる）/ it can't go next to its own descendant (that would loop)
+    if (subtreePaths(this.tasks, srcPath).includes(t.path)) {
+      new Notice(tr().cycleBlocked);
+      return;
+    }
+    // 手動の順序：今見えている並びを土台に、落とした位置へ。見えていないタスクは、そのあとに / the manual order: the rows as shown are the base, with the dropped one placed; tasks not shown follow
+    const shown = this.rows.filter((r) => r.kind === "task").map((r) => r.task!.path);
+    const rest = this.tasks.filter((x) => !shown.includes(x.path)).sort(taskComparator(this.columns(), this.vs)).map((x) => x.path);
+    this.cfg.rowOrder = placeInOrder(this.cfg.rowOrder, [...shown, ...rest], srcPath, t.path, zone === "after").filter((p) => this.app.vault.getAbstractFileByPath(p) !== null);
+    this.cfg.manualOrder = true;
+    // フォルダのグループ化（フラットでなく）：別のフォルダ・別の親の行の前後なら、そのフォルダ・親へ移動する。順序のパスは、移動の名前変更に追従する
+    // folder grouping (not flat): next to a row of another folder or parent, the task moves into that folder and parent; the order's paths follow the rename of the move
+    if (this.groupBy === "folder" && !this.flat) {
+      const destFolder = this.taskFolder(t.path);
+      const parent = t.parent && this.tasks.some((x) => x.path === t.parent && this.taskFolder(x.path) === destFolder) ? t.parent : null;
+      if ((src.parent ?? null) !== parent || this.taskFolder(srcPath) !== destFolder) {
+        await this.reparentTo(srcPath, destFolder, parent);
+        return;
+      }
+    }
+    this.rerender(); // 描き直しのときに、ビューへ保存される / saved with the view on the redraw
   }
 
   // 親の設定/解除＋サブツリー移動を実行して再描画（取り消し可）/ set/clear parent, move subtree, re-render (undoable)

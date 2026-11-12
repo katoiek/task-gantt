@@ -1,5 +1,5 @@
 // カンバンの振り分け（列の並び・未割当・サブタスク）の検証 / Tests for the Kanban sorting (column order, unassigned, subtasks)
-import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes, applyManualOrder, placeInOrder, cardZone } from "./kanban.mjs";
+import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes, applyManualOrder, placeInOrder, cardZone, manualRowCompare } from "./kanban.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -144,6 +144,17 @@ check("列: タスクが無くても全部の列が出る", buildKanbanColumns([
   check("cardZone: 真ん中はサブタスク", cardZone(130, 100, 100) === "child" && cardZone(150, 100, 100) === "child" && cardZone(170, 100, 100) === "child");
   check("cardZone: 下 30% は後ろ", cardZone(171, 100, 100) === "after" && cardZone(200, 100, 100) === "after");
   check("cardZone: 高さ 0 でも壊れない", cardZone(100, 100, 0) === "child");
+}
+
+// ── 行の手動の順序 ──
+{
+  const rows = [T("a", "todo"), T("b", "todo"), T("c", "todo"), T("d", "todo")];
+  const byName = (x, y) => x.path.localeCompare(y.path);
+  const sortBy = (order) => [...rows].sort(manualRowCompare(order, byName)).map((t) => t.path).join();
+  check("manualRowCompare: 順序に入っている行が、その順で先", sortBy(["c", "a"]) === "c,a,b,d");
+  check("manualRowCompare: 入っていない行は、base の比べ方で後ろに", sortBy(["d"]) === "d,a,b,c");
+  check("manualRowCompare: 順序が空なら、base のまま", sortBy([]) === "a,b,c,d");
+  check("manualRowCompare: 知らないパスは無視", sortBy(["ghost", "b"]) === "b,a,c,d");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

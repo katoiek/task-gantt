@@ -961,6 +961,13 @@
   background: var(--background-modifier-active-hover, var(--background-modifier-hover));
   box-shadow: inset 2px 0 0 var(--interactive-accent);
 }
+/* 行の前・後ろに落とすときの線 / the line when dropping before or after a row */
+.ogantt-tr.is-drop-before {
+  box-shadow: inset 0 2px 0 var(--interactive-accent);
+}
+.ogantt-tr.is-drop-after {
+  box-shadow: inset 0 -2px 0 var(--interactive-accent);
+}
 .ogantt-td {
   width: 84px;
   padding: 0 8px;

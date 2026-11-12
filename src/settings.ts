@@ -245,6 +245,7 @@ export function defaultViewConfig(s: GanttSettings): ViewConfig {
     laneBy: "none",
     collapsedLanes: [],
     manualOrder: false,
+    rowOrder: [],
     cardOrder: {},
     density: "default",
     tableColumnOrder: [],

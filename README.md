@@ -166,6 +166,10 @@ Open **Presets** for one-click filter sets. Built-in presets are **No dates (no 
 
 When grouped by folder, **drag a task row** onto a folder to move the task into it (or onto another task to drop it into that task's folder). Links are updated automatically, and the move is **undoable** with **Ctrl/Cmd+Z** or the undo button. Empty folders stay visible as rows so you always have a drop target; the **Show empty folders** toggle (on by default) controls this.
 
+### Manual order
+
+Drop a task row on the **top or bottom edge** of another row (a line shows where it will go) to place it before or after that row; the middle of a row still makes it a subtask. The view switches to **Manual order**, which is saved per view (**Display → Manual order** turns it on or off, and clicking a column header goes back to sorting by that column; the saved order is kept). Under folder grouping, dropping next to a row of **another folder or parent also moves the task there** (with its subtasks); in the flat view and under other groupings only the order changes. Rows are never ordered by hand unless you choose it: date order stays the default. Changes of order aren't covered by undo, but the move is.
+
 ## Subtasks
 
 Give a task a `parent` (a single wikilink to another task) and it nests under that parent in the table, with a chevron to collapse or expand. When grouped by folder, **drag a task onto another task** to make it a subtask — it moves into the parent's folder with its whole subtree; **drag it onto a folder** to detach it back to the top level. Cycles are blocked, and every move is undoable. The **Roll up** toggle draws a parent's bar (and its Start/Due cells) as the span of its descendants. Set or clear the parent from the detail panel.
@@ -536,6 +540,10 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
 ## フォルダ間のタスク移動
 
 フォルダでグループ化しているとき、**タスク行をドラッグ**してフォルダにドロップするとそのフォルダへ移動できます（別タスクへドロップすると、そのタスクと同じフォルダへ）。リンクは自動更新され、移動は **Ctrl/Cmd+Z** または取り消しボタンで**元に戻せます**。空のフォルダも行として表示されるので常にドロップ先になります（**空フォルダを表示**トグル＝既定ON で切替）。
+
+### 手動の並び順
+
+タスク行を、別の行の**上端か下端**にドロップすると（入る位置に線が出ます）、その行の前・後ろに並べられます。行の真ん中なら、これまでどおりサブタスクになります。ビューが**手動の並び順**になり、ビューごとに保存されます（**表示 → 手動の並び順**で入り切りでき、列の見出しをクリックすると、その列の並べ替えに戻ります。保存した順序は残ります）。フォルダでグループ化しているときは、**別のフォルダや別の親の行**の隣に落とすと、**そこへ移動もします**（サブタスクも一緒です）。フラット表示や、ほかのグループ化では、順序だけが変わります。選ばないかぎり、手動の並びにはならず、日付順が既定のままです。順序の変更は、取り消しの対象ではありませんが、移動は、取り消せます。
 
 ## サブタスク
 

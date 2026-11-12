@@ -31,7 +31,8 @@ export interface ViewConfig {
   cardFields: string[]; // カードに出す列の id（担当・開始・期限が既定）/ ids of the columns shown on a card (assignee, start, due by default)
   tableColumnOrder: string[]; // 表の列の並び（列 ID。タスク名の列 "name" も含む）。空なら定義順 / the table's column order (column ids, "name" included); empty = definition order
   density: "default" | "compact"; // 行の高さ（compact = 詰めて、一度により多くの行を出す）/ row height (compact packs in more rows at once)
-  manualOrder: boolean; // カードの並びに手動の順序を使う（false ならビューの並べ替え）/ order the cards by hand (false = the view's sort)
+  manualOrder: boolean; // カードや行の並びに手動の順序を使う（false ならビューの並べ替え）/ order the cards or rows by hand (false = the view's sort)
+  rowOrder: string[]; // ガント・テーブルの行の手動の順序（ノートのパス。全行を 1 本の並びで持つ）/ the manual order of the Gantt and table rows (note paths, one list for all rows)
   cardOrder: Record<string, string[]>; // 列のキー → カード（ノートのパス）の手動の順序 / column key → the cards' manual order (note paths)
   laneBy: LaneBy; // スイムレーンの分け方（none = レーンなし）/ what the swimlanes split by (none = no lanes)
   collapsedLanes: string[]; // 折りたたんだレーンのキー（"<分け方>:<値>"）/ keys of the collapsed lanes ("<by>:<value>")
@@ -159,6 +160,7 @@ export function repairBoardViews(raw: unknown, base: ViewConfig): Record<string,
       if (config.laneBy !== "assignee" && config.laneBy !== "folder") config.laneBy = "none";
       if (!Array.isArray(config.collapsedLanes)) config.collapsedLanes = [];
       config.manualOrder = config.manualOrder === true;
+      config.rowOrder = Array.isArray(config.rowOrder) ? config.rowOrder.filter((x) => typeof x === "string") : [];
       if (config.density !== "compact") config.density = "default";
       config.tableColumnOrder = Array.isArray(config.tableColumnOrder) ? config.tableColumnOrder.filter((x) => typeof x === "string") : [];
       if (!config.cardOrder || typeof config.cardOrder !== "object" || Array.isArray(config.cardOrder)) config.cardOrder = {};
@@ -182,6 +184,11 @@ export function renameOrderPaths(map: Record<string, BoardViews>, oldPath: strin
   let changed = false;
   const prefix = oldPath + "/";
   eachConfig(map, (c) => {
+    const follow = (p: string): string => (p === oldPath ? newPath : p.startsWith(prefix) ? newPath + "/" + p.slice(prefix.length) : p);
+    if (Array.isArray(c.rowOrder) && c.rowOrder.some((p) => follow(p) !== p)) {
+      c.rowOrder = c.rowOrder.map(follow);
+      changed = true;
+    }
     for (const [key, list] of Object.entries(c.cardOrder ?? {})) {
       const next = list.map((p) => (p === oldPath ? newPath : p.startsWith(prefix) ? newPath + "/" + p.slice(prefix.length) : p));
       if (next.some((p, i) => p !== list[i])) {

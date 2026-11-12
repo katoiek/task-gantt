@@ -51,6 +51,7 @@ const cfg = (over = {}) => ({
   laneBy: "none",
   collapsedLanes: [],
   manualOrder: false,
+  rowOrder: [],
   cardOrder: {},
   ...over,
 });
@@ -228,6 +229,17 @@ check("boardKey: Vault のルートは空", boardKey("") === "folder:");
     const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "table", config: { tableColumnOrder: ["status", "name", 5, "start"] } }, { id: "b", name: "B", type: "table", config: { tableColumnOrder: "x" } }, { id: "c", name: "C", type: "table", config: {} }] } }, base);
     const v = r["folder:k"].views;
     return v[0].config.tableColumnOrder.join() === "status,name,start" && v[1].config.tableColumnOrder.length === 0 && v[2].config.tableColumnOrder.length === 0;
+  })());
+  check("repair: 行の手動の順序は、文字列の配列だけ保たれる", (() => {
+    const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "gantt", config: { rowOrder: ["x.md", 5, "y.md"] } }, { id: "b", name: "B", type: "gantt", config: { rowOrder: "z" } }, { id: "c", name: "C", type: "gantt", config: {} }] } }, base);
+    const v = r["folder:k"].views;
+    return v[0].config.rowOrder.join() === "x.md,y.md" && v[1].config.rowOrder.length === 0 && v[2].config.rowOrder.length === 0;
+  })());
+  check("renameOrderPaths: 行の順序のパスも、名前の変更・フォルダの移動に追従する", (() => {
+    const m = { "folder:A": createBoardViews("G", cfg({ rowOrder: ["P/a.md", "P/sub/b.md", "P2/c.md", "d.md"] })) };
+    const hit = renameOrderPaths(m, "P", "Q");
+    const one = renameOrderPaths(m, "d.md", "moved.md");
+    return hit && one && m["folder:A"].views[0].config.rowOrder.join() === "Q/a.md,Q/sub/b.md,P2/c.md,moved.md";
   })());
   check("repair: 行の高さは、compact だけ保たれ、それ以外は default", (() => {
     const r = repairBoardViews({ "folder:k": { active: "a", views: [{ id: "a", name: "A", type: "table", config: { density: "compact" } }, { id: "b", name: "B", type: "table", config: { density: "huge" } }, { id: "c", name: "C", type: "table", config: {} }] } }, base);
