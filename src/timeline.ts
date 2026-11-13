@@ -204,3 +204,35 @@ export function buildTicks(range: DateRange, zoom: ZoomMode, ppd: number, weekda
   }
   return ticks;
 }
+
+// 折れ線の角を丸めた SVG のパス（ClickUp のような、なめらかな依存の線）。points を直線でつなぎ、内側の頂点では、頂点の手前 r から、頂点を制御点に、頂点の先 r まで、曲線にする。
+// 短い辺では、辺の半分までに r を縮める。同じ点の重なりは捨てる
+// an SVG path through the points with rounded corners (smooth dependency lines, like ClickUp's): straight lines, and at each inner vertex a curve from r before it to r after it, with the vertex as the control point.
+// On a short segment r shrinks to half of it; repeated points are dropped
+export function roundedPolyline(points: [number, number][], r: number): string {
+  const pts = points.filter((p, i) => i === 0 || p[0] !== points[i - 1][0] || p[1] !== points[i - 1][1]);
+  if (pts.length === 0) return "";
+  const f = (n: number): string => String(Math.round(n * 100) / 100);
+  let d = `M ${f(pts[0][0])} ${f(pts[0][1])}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [x0, y0] = pts[i - 1];
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[i + 1];
+    const len1 = Math.hypot(x1 - x0, y1 - y0);
+    const len2 = Math.hypot(x2 - x1, y2 - y1);
+    const rr = Math.min(r, len1 / 2, len2 / 2);
+    // まっすぐ続く点（同じ向き）は、曲げずに通す / a point where the line carries straight on isn't bent
+    const straight = (x1 - x0) * (y2 - y1) - (y1 - y0) * (x2 - x1) === 0;
+    if (rr <= 0 || straight) {
+      d += ` L ${f(x1)} ${f(y1)}`;
+      continue;
+    }
+    const ax = x1 - ((x1 - x0) / len1) * rr;
+    const ay = y1 - ((y1 - y0) / len1) * rr;
+    const bx = x1 + ((x2 - x1) / len2) * rr;
+    const by = y1 + ((y2 - y1) / len2) * rr;
+    d += ` L ${f(ax)} ${f(ay)} Q ${f(x1)} ${f(y1)} ${f(bx)} ${f(by)}`;
+  }
+  if (pts.length > 1) d += ` L ${f(pts[pts.length - 1][0])} ${f(pts[pts.length - 1][1])}`;
+  return d;
+}

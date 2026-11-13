@@ -40,6 +40,7 @@ import {
   formatDate,
   buildProgressLine,
   ProgressLineRow,
+  roundedPolyline,
 } from "./timeline";
 import { hashColor, resolveTagColor } from "./colors";
 import { ConfirmModal } from "./modals";
@@ -2927,6 +2928,7 @@ export class GanttView extends ItemView {
       if (r.kind === "task") rowOf.set(r.task!.path, i);
     });
     const GAP = 12;
+    const R = 6; // 依存の線の角の丸み / the corner radius of the dependency lines
     for (const t of this.tasks) {
       const si = rowOf.get(t.path);
       if (si == null) continue;
@@ -2963,12 +2965,12 @@ export class GanttView extends ItemView {
           violation = dayIndex(sStart) <= dayIndex(pEndD);
           if (tx - sx0 > GAP * 2) {
             const mx = sx0 + Math.max(GAP, (tx - sx0) / 2);
-            d = `M ${sx0} ${py} L ${mx} ${py} L ${mx} ${sy} L ${tx} ${sy}`;
+            d = roundedPolyline([[sx0, py], [mx, py], [mx, sy], [tx, sy]], R);
             mxX = mx;
           } else {
             const ax = sx0 + GAP;
             const bx = tx - GAP;
-            d = `M ${sx0} ${py} L ${ax} ${py} L ${ax} ${mid} L ${bx} ${mid} L ${bx} ${sy} L ${tx} ${sy}`;
+            d = roundedPolyline([[sx0, py], [ax, py], [ax, mid], [bx, mid], [bx, sy], [tx, sy]], R);
             mxX = (ax + bx) / 2;
           }
           arrowD = `M ${tx} ${sy} l -7 -4 l 0 8 z`; // 右向き / points right
@@ -2978,7 +2980,7 @@ export class GanttView extends ItemView {
           const tx = sLeft;
           violation = dayIndex(sStart) < dayIndex(pStartD);
           const leftMost = Math.min(sx0, tx) - GAP;
-          d = `M ${sx0} ${py} L ${leftMost} ${py} L ${leftMost} ${sy} L ${tx} ${sy}`;
+          d = roundedPolyline([[sx0, py], [leftMost, py], [leftMost, sy], [tx, sy]], R);
           mxX = leftMost;
           arrowD = `M ${tx} ${sy} l -7 -4 l 0 8 z`; // 右向き / points right
         } else {
@@ -2987,7 +2989,7 @@ export class GanttView extends ItemView {
           const tx = sRight;
           violation = dayIndex(sEnd) < dayIndex(pEndD);
           const rightMost = Math.max(sx0, tx) + GAP;
-          d = `M ${sx0} ${py} L ${rightMost} ${py} L ${rightMost} ${sy} L ${tx} ${sy}`;
+          d = roundedPolyline([[sx0, py], [rightMost, py], [rightMost, sy], [tx, sy]], R);
           mxX = rightMost;
           arrowD = `M ${tx} ${sy} l 7 -4 l 0 8 z`; // 左向き / points left
         }

@@ -1249,6 +1249,8 @@ input.ogantt-cell-input[type="number"] {
 }
 .ogantt-dep {
   fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   stroke: var(--text-normal);
   opacity: 0.55;
   stroke-width: 1.8;

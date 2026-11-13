@@ -1,6 +1,6 @@
 // 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
 // Tests for date-filter resolution/matching and progress-line geometry
-import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks } from "./timeline.mjs";
+import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks, roundedPolyline } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -113,6 +113,18 @@ check("1行目は行中央(y=15)で x=50", line[1].x === 50 && line[1].y === 15)
 check("2行目(バーなし)は基準日で y=45", line[2].x === BASIS && line[2].y === 45);
 check("3行目は開始日 x=40 で y=75", line[3].x === 40 && line[3].y === 75);
 check("行が空でも両端だけ返す", buildProgressLine([], BASIS, 30, 0).length === 2);
+
+// ── 依存の線の角丸（roundedPolyline）──
+{
+  const p4 = roundedPolyline([[0, 0], [20, 0], [20, 30], [50, 30]], 6);
+  check("roundedPolyline: 角ごとに、手前 r から、頂点を制御点にした曲線", p4 === "M 0 0 L 14 0 Q 20 0 20 6 L 20 24 Q 20 30 26 30 L 50 30");
+  check("roundedPolyline: 短い辺では、r を辺の半分に縮める", roundedPolyline([[0, 0], [4, 0], [4, 40]], 6) === "M 0 0 L 2 0 Q 4 0 4 2 L 4 40");
+  check("roundedPolyline: 重なった点は捨てる（行が同じで縦の辺が 0 のとき）", roundedPolyline([[0, 10], [20, 10], [20, 10], [50, 10]], 6) === "M 0 10 L 20 10 L 50 10");
+  check("roundedPolyline: まっすぐ続く点は、曲げない", roundedPolyline([[0, 0], [10, 0], [30, 0]], 6) === "M 0 0 L 10 0 L 30 0");
+  check("roundedPolyline: 点が 2 つなら、直線", roundedPolyline([[0, 0], [5, 5]], 6) === "M 0 0 L 5 5");
+  check("roundedPolyline: 点が無ければ空", roundedPolyline([], 6) === "");
+  check("roundedPolyline: 戻る向きの折れ線（左へ折れる）も、曲線になる", roundedPolyline([[100, 0], [112, 0], [112, 30], [90, 30]], 6) === "M 100 0 L 106 0 Q 112 0 112 6 L 112 24 Q 112 30 106 30 L 90 30");
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
