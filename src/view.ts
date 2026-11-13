@@ -2456,10 +2456,19 @@ export class GanttView extends ItemView {
       this.zoom !== "Fit" ? this.zoom : this.ppd >= 24 ? "Day" : this.ppd >= 10 ? "Week" : "Month";
     if (!isTable) {
       const axis = grid.createDiv({ cls: "ogantt-axis" });
+      // 今日の位置（範囲の中にあるときだけ）/ today's x (only when it is inside the range)
+      const todayX = (todayIndex() - this.range.min) * this.ppd;
+      const todayIn = todayX >= 0 && todayX <= width;
       for (const tick of buildTicks(this.range, tickZoom, this.ppd, tr().weekdays)) {
-        const t = axis.createDiv({ cls: "ogantt-tick" + (tick.major ? " is-major" : "") });
+        // 今日のバッジの下に来る目盛りの文字は、重ならないよう隠す / a tick label that would sit under today's badge is hidden
+        const t = axis.createDiv({ cls: "ogantt-tick" + (tick.major ? " is-major" : "") + (todayIn && Math.abs(tick.x - todayX) < 16 ? " is-under-today" : "") });
         t.style.left = `${tick.x}px`;
         t.setText(tick.label);
+      }
+      // 今日の日付（日）の赤いバッジ。日付の軸の上で、今日の線につながる（ClickUp のように）/ today's day of the month as a red badge on the axis, joined to the today line (like ClickUp)
+      if (todayIn) {
+        const badge = axis.createDiv({ cls: "ogantt-today-badge", text: String(new Date(todayIndex() * 86400000).getUTCDate()) });
+        badge.style.left = `${todayX}px`;
       }
     }
 
@@ -2758,6 +2767,11 @@ export class GanttView extends ItemView {
           const pw = (w * Math.min(100, t.progress)) / 100;
           g.appendChild(this.svgEl("rect", { x, y, width: pw, height: h, rx: 4, class: "ogantt-bar-progress" }));
         }
+        // 両端のつかみ：バーにカーソルを載せると、左右の端に縦の目印が出て、そこを掴んで期間を伸び縮みできると分かる（幅が狭いバーでは出さない）
+        // the edge grips: hovering a bar shows a vertical mark at each end, saying "grab here to stretch the dates" (not on very narrow bars)
+        if (w >= RESIZE_EDGE * 3) {
+          for (const gx of [x + 3, x + w - 7]) g.appendChild(this.svgEl("rect", { x: gx, y: y + h * 0.25, width: 4, height: h * 0.5, rx: 2, class: "ogantt-bar-grip" }));
+        }
         // ラベル（タスク名＋担当）/ label
         // 名前を隠していても、期限切れの ⚠ だけは出す / with the names hidden, the overdue ⚠ still shows
         // 期限切れは、⚠ を大きく、ラベル全体を赤く / overdue: a larger ⚠ and the whole label in red
@@ -2773,8 +2787,11 @@ export class GanttView extends ItemView {
         rect.addEventListener("mousemove", (e: MouseEvent) => {
           const box = rect.getBoundingClientRect();
           const off = e.clientX - box.left;
-          rect.style.cursor = off < RESIZE_EDGE || off > box.width - RESIZE_EDGE ? "ew-resize" : "grab";
+          const atEdge = off < RESIZE_EDGE || off > box.width - RESIZE_EDGE;
+          rect.style.cursor = atEdge ? "ew-resize" : "grab";
+          g.classList.toggle("is-edge", atEdge && w >= RESIZE_EDGE * 3); // 端に来たら、目印を強調 / emphasise the grips at an edge
         });
+        rect.addEventListener("mouseleave", () => g.classList.remove("is-edge"));
         rx = x + w;
       }
 

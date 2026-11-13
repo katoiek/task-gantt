@@ -27,7 +27,7 @@ Click a task to open the detail panel and edit its dates, status, assignee, prog
 3. Direct subfolders become **groups**, and the `.md` files inside them become **tasks**.
 4. **Drag a bar / resize its edges** to write the new dates back to that file's `start`/`end` frontmatter. **Every column the table can show is editable in place — just double-click the cell.** Start and Due open a calendar, Duration takes a number of workdays, Progress takes a percentage (0–100; blank or 0 clears it), Status opens a dropdown, Assignee is a text field that suggests names already used in the board (type `[[` to link a note instead), and Tags opens a small editor with a chip per tag (× to remove) and an add field that suggests the vault's existing tags. Enter or clicking away saves, Esc cancels.
 5. Click a task in the table — or **double-click its bar** — to open a **detail panel** (dates, status, assignee, progress, body) beside the board, on its right. Links in the body are clickable (internal links open the note, Ctrl/Cmd-click for a new tab, with Page preview on hover); click anywhere else in the body to edit it, and type `[[` to insert a link to a note.
-6. Use the **＋ New task** button to create a one-day task in the current folder and name it on the spot, and **Today** to scroll the timeline to the current date.
+6. Use the **＋ New task** button to create a one-day task in the current folder and name it on the spot, and **Today** to scroll the timeline to the current date. Hovering a bar shows a grip at each end, so you can see where to grab it to stretch the dates; today is marked by a solid red line with the day of the month in a red badge on the date axis.
 7. Use the **Day / Week / Month / Fit** buttons to change the timeline scale. **Fit** auto-scales to the pane width and re-fits when you resize.
 
 The UI follows Obsidian's display language. Supported: English, Japanese, Korean, Chinese (Simplified & Traditional), French, Spanish, and Russian; any other language falls back to English.
@@ -401,7 +401,7 @@ MIT — see [`LICENSE`](./LICENSE).
 3. 直下のサブフォルダが**グループ**、その中の `.md` が**タスク**になります。
 4. バーを**ドラッグ／端をリサイズ**すると、そのファイルの `start`/`end` に書き戻します。**テーブルに表示できる列はすべて、セルをダブルクリックすればその場で編集できます。** 開始・期限はカレンダー、期間は稼働日数の入力、進捗は % の直接入力（0–100。空欄または 0 で未設定）、ステータスはドロップダウン、担当者はボード内で既に使われている名前を候補に出すテキスト欄、タグは詳細パネルと同じエディタ（タグごとのチップと × による削除＋Vault 内の既存タグを候補に出す追加欄）が開きます。Enter またはフォーカスを外すと保存、Esc で取消します。
 5. 表のタスクをクリック、または**バーをダブルクリック**すると、ボードの右に**詳細パネル**（日付・ステータス・担当者・進捗・本文）が並んで開きます。
-6. **＋ 新規タスク**ボタンで現在のフォルダに1日タスクを作ってその場で命名、**今日**ボタンでタイムラインを今日へスクロールできます。
+6. **＋ 新規タスク**ボタンで現在のフォルダに1日タスクを作ってその場で命名、**今日**ボタンでタイムラインを今日へスクロールできます。バーにカーソルを載せると、両端につかみの目印が出て、期間を伸び縮みできる場所が分かります。今日は、赤い実線と、日付の軸の上の、日にちを入れた赤いバッジで示します。
 7. **Day / Week / Month / Fit** ボタンで時間軸の拡大率を変更。**Fit** はペイン幅に自動で収め、リサイズにも追従します。
 
 UI 表示は Obsidian の表示言語に追従します。対応言語：英語・日本語・韓国語・中国語（簡体／繁体）・フランス語・スペイン語・ロシア語（その他は英語にフォールバック）。

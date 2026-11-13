@@ -1194,9 +1194,46 @@ input.ogantt-cell-input[type="number"] {
 }
 .ogantt-today {
   stroke: var(--color-red);
+  stroke-width: 1.5; /* 実線 / solid */
+}
+/* 今日の日付のバッジ（日付の軸の上）/ today's badge on the date axis */
+.ogantt-today-badge {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background: var(--color-red);
+  color: #fff;
+  font-size: 0.78em;
+  font-weight: 700;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.ogantt-tick.is-under-today {
+  color: transparent;
+}
+/* バーの両端のつかみ（バーにカーソルを載せたとき）/ the bar's edge grips (shown when hovering the bar) */
+.ogantt-bar-grip {
+  fill: #fff;
+  stroke: rgba(0, 0, 0, 0.3);
+  stroke-width: 0.5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s;
+}
+.ogantt-bar-g:hover .ogantt-bar-grip {
+  opacity: 0.85;
+}
+.ogantt-bar-g.is-edge .ogantt-bar-grip {
+  opacity: 1;
+  stroke: var(--interactive-accent);
   stroke-width: 1;
-  stroke-dasharray: 3 2;
-  opacity: 0.7;
 }
 /* 稲妻線（今日基準の進捗折れ線）/ progress line against today */
 .ogantt-progress-line {
