@@ -3083,6 +3083,15 @@ export class GanttView extends ItemView {
         mode = offset < EDGE ? "l" : offset > box.width - EDGE ? "r" : "move";
       }
 
+      // 両端のつかみの目印を、バー（ドラッグ中の見た目）に合わせて動かす / keep the edge grips on the bar as it is dragged
+      const grips = g.querySelectorAll<SVGElement>(".ogantt-bar-grip");
+      const placeGrips = (): void => {
+        if (grips.length !== 2) return;
+        const gx = parseFloat(handle.getAttribute("x")!);
+        const gw = parseFloat(handle.getAttribute("width")!);
+        grips[0].setAttribute("x", String(gx + 3));
+        grips[1].setAttribute("x", String(gx + gw - 7));
+      };
       const onMove = (e: PointerEvent) => {
         const dx = e.clientX - startX;
         if (Math.abs(dx) > 3) this.dragged.set(g, true);
@@ -3096,6 +3105,7 @@ export class GanttView extends ItemView {
           handle.setAttribute("x", String(x0 + dx));
           handle.setAttribute("width", String(Math.max(this.ppd, w0 - dx)));
         }
+        placeGrips();
       };
       const onUp = (e: PointerEvent) => void (async () => {
         handle.releasePointerCapture(ev.pointerId);
@@ -3142,6 +3152,7 @@ export class GanttView extends ItemView {
           } else {
             handle.setAttribute("x", String(x0));
             handle.setAttribute("width", String(w0));
+            placeGrips();
           }
         }
       })();
