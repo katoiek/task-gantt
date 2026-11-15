@@ -1164,22 +1164,6 @@ input.ogantt-cell-input[type="number"] {
   grid-column: 2;
   grid-row: 2;
 }
-.ogantt-tick {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  padding-left: 3px;
-  font-size: 0.72em;
-  color: var(--text-muted);
-  border-left: 1px solid var(--background-modifier-border-hover);
-}
-.ogantt-tick.is-major {
-  color: var(--text-normal);
-  border-left-color: var(--background-modifier-border);
-  font-weight: 600;
-}
 
 .ogantt-svg {
   display: block;
@@ -1195,28 +1179,6 @@ input.ogantt-cell-input[type="number"] {
 .ogantt-today {
   stroke: var(--color-red);
   stroke-width: 1.5; /* 実線 / solid */
-}
-/* 今日の日付のバッジ（日付の軸の上）/ today's badge on the date axis */
-.ogantt-today-badge {
-  position: absolute;
-  top: 50%;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 4px;
-  border-radius: 10px;
-  background: var(--color-red);
-  color: #fff;
-  font-size: 0.78em;
-  font-weight: 700;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-.ogantt-tick.is-under-today {
-  color: transparent;
 }
 /* バーの両端のつかみ（バーにカーソルを載せたとき）/ the bar's edge grips (shown when hovering the bar) */
 .ogantt-bar-grip {
@@ -1992,4 +1954,66 @@ button.ogantt-cal-title:hover {
 }
 .ogantt-colguide.is-hidden {
   display: none;
+}
+
+/* 日付軸：2 段（上＝週／月／年、下＝日／週／月）。各セルは、左と幅を JS が決める / the date axis: two rows; each cell's left and width come from JS */
+.ogantt-hcell {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  height: 50%;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-left: 1px solid var(--background-modifier-border-hover);
+  font-size: 0.72em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ogantt-hcell.is-top {
+  top: 0;
+  border-bottom: 1px solid var(--background-modifier-border-hover);
+}
+.ogantt-hcell.is-bottom {
+  top: 50%;
+  justify-content: center;
+  padding: 0;
+}
+.ogantt-hcell-strong {
+  margin-right: 6px;
+  color: var(--text-normal);
+  font-weight: 700;
+}
+.ogantt-hcell.is-weekend {
+  color: var(--text-faint);
+}
+.ogantt-hcell.is-today {
+  color: var(--color-red);
+  font-weight: 700;
+}
+/* 今日の日：赤い丸のバッジ（ClickUp のように）/ today's day: a red round badge (like ClickUp) */
+.ogantt-today-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  border-radius: 9px;
+  background: var(--color-red);
+  color: #fff;
+  font-weight: 700;
+}
+/* 休日の斜線と縦の線 / the hatch over non-working days, and the vertical lines */
+.ogantt-hatch-line {
+  stroke: var(--background-modifier-border);
+  stroke-width: 1.5;
+}
+.ogantt-offday {
+  pointer-events: none;
+}
+.ogantt-vline {
+  stroke: var(--background-modifier-border-hover);
+  stroke-width: 1;
+  pointer-events: none;
 }

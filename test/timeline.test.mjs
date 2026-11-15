@@ -1,6 +1,6 @@
 // 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
 // Tests for date-filter resolution/matching and progress-line geometry
-import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks, roundedPolyline } from "./timeline.mjs";
+import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks, roundedPolyline, headerLevel, isoWeek, buildHeader, offRuns } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -124,6 +124,46 @@ check("行が空でも両端だけ返す", buildProgressLine([], BASIS, 30, 0).l
   check("roundedPolyline: 点が 2 つなら、直線", roundedPolyline([[0, 0], [5, 5]], 6) === "M 0 0 L 5 5");
   check("roundedPolyline: 点が無ければ空", roundedPolyline([], 6) === "");
   check("roundedPolyline: 戻る向きの折れ線（左へ折れる）も、曲線になる", roundedPolyline([[100, 0], [112, 0], [112, 30], [90, 30]], 6) === "M 100 0 L 106 0 Q 112 0 112 6 L 112 24 Q 112 30 106 30 L 90 30");
+}
+
+// ── ClickUp 風の日付軸（buildHeader など）──
+{
+  const d = (iso) => dayIndex(iso);
+  const text = {
+    weekdays: ["日", "月", "火", "水", "木", "金", "土"],
+    monthName: (m) => `${m}月`,
+    yearMonth: (y, m) => `${y}年${m}月`,
+  };
+  const off = (day) => { const w = new Date(day * 86400000).getUTCDay(); return !(w === 0 || w === 6); }; // 土日が休み / Saturday and Sunday off
+  const range = { min: d("2026-11-11"), max: d("2026-11-25") }; // 水 〜 水 / Wed to Wed
+
+  check("isoWeek: 2026-11-15（日）は W46、11-16（月）は W47", isoWeek(d("2026-11-15")) === 46 && isoWeek(d("2026-11-16")) === 47);
+  check("isoWeek: 年のはじめと終わり（2026-01-01 は W1、2026-12-31 は W53）", isoWeek(d("2026-01-01")) === 1 && isoWeek(d("2026-12-31")) === 53);
+
+  check("headerLevel: Day=1・Week=2・Month=4", headerLevel("Day", 36) === 1 && headerLevel("Week", 20) === 2 && headerLevel("Month", 4) === 4);
+  check("headerLevel: Fit は 1 日の幅で決まる", headerLevel("Fit", 40) === 1 && headerLevel("Fit", 20) === 2 && headerLevel("Fit", 8) === 3 && headerLevel("Fit", 3) === 4);
+
+  const h1 = buildHeader(range, 1, 36, text, off, d("2026-11-15"));
+  check("level 1: 上段は週（日曜始まり）。W46 は 11/15-21、範囲の端で切れる", h1.top.length === 3 && h1.top[0].label === "W45" && h1.top[1].label === "W46" && h1.top[1].sub === "11月 15 - 21" && h1.top[2].label === "W47");
+  check("level 1: 最初の週は、範囲の左端から始まり、幅は範囲の中の日数ぶん", h1.top[0].x === 0 && h1.top[0].w === 4 * 36 && h1.top[1].x === 4 * 36 && h1.top[1].w === 7 * 36);
+  check("level 1: 下段は日。曜日つきの文字、休日と今日に印", h1.bottom.length === 15 && h1.bottom[0].label === "水 11" && h1.bottom[3].label === "土 14" && h1.bottom[3].weekend === true && h1.bottom[4].label === "日 15" && h1.bottom[4].today === true && h1.bottom[1].weekend === false);
+  const h2 = buildHeader(range, 2, 20, text, off, d("2026-11-15"));
+  check("level 2: 下段は日の数字だけ", h2.bottom[0].label === "11" && h2.bottom[4].label === "15");
+  const x = buildHeader({ min: d("2026-11-25"), max: d("2026-12-08") }, 2, 20, text, off, 0);
+  check("週が月をまたぐとき、両方の月を出す（11月 22 - 28 / 11月 29 - 12月 5）", x.top[0].sub === "11月 22 - 28" && x.top[1].sub === "11月 29 - 12月 5");
+
+  const h3 = buildHeader({ min: d("2026-10-25"), max: d("2026-12-05") }, 3, 6, text, off, d("2026-11-15"));
+  check("level 3: 上段は月（年つき）、下段は週の開始日", h3.top.map((c) => c.label).join() === "2026年10月,2026年11月,2026年12月" && h3.bottom[0].label === "25" && h3.bottom[1].label === "1");
+  check("level 3: 月のセルは、月の日数ぶんの幅（11月は 30 日）", h3.top[1].w === 30 * 6);
+  check("level 3: 今日を含む週のセルに印", h3.bottom.filter((c) => c.today).length === 1 && h3.bottom.find((c) => c.today).label === "15");
+
+  const h4 = buildHeader({ min: d("2026-10-20"), max: d("2027-02-10") }, 4, 4, text, off, d("2026-11-15"));
+  check("level 4: 上段は年、下段は月（Wrike 風）", h4.top.map((c) => c.label).join() === "2026,2027" && h4.bottom.map((c) => c.label).join() === "10月,11月,12月,1月,2月");
+  check("level 4: 年のセルの幅は、範囲の中の日数ぶん（2026 は 10/20〜12/31 の 73 日）", h4.top[0].w === 73 * 4 && h4.bottom[1].today === true);
+
+  const runs = offRuns(range, off);
+  check("offRuns: 休日が続く区間（土日）", runs.length === 2 && runs[0][0] === d("2026-11-14") && runs[0][1] === d("2026-11-15") && runs[1][0] === d("2026-11-21") && runs[1][1] === d("2026-11-22"));
+  check("offRuns: 範囲が休日で終わっても閉じる", offRuns({ min: d("2026-11-13"), max: d("2026-11-15") }, off).length === 1);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -28,14 +28,17 @@ import {
   isOverdue,
   newTaskDates,
 } from "./model";
-import { cascadeDates, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
+import { cascadeDates, isWorkday, endForDuration, keepDurationOnStartChange, parseDuration, scheduleOptions, successorClosure, taskDuration, wouldLoop } from "./schedule";
 import {
   DateRange,
   computeRange,
   dayIndex,
   dayToStr,
   pxPerDay,
-  buildTicks,
+  buildHeader,
+  headerLevel,
+  offRuns,
+  HeaderModel,
   todayIndex,
   formatDate,
   buildProgressLine,
@@ -97,7 +100,12 @@ export class GanttView extends ItemView {
   plugin: GanttPlugin;
   private tasks: Task[] = [];
   private rows: Row[] = [];
-  private range: DateRange = { min: 0, max: 0 };
+  private range: DateRange = { min: 0, max: 0 }; // 表示する範囲（日付軸の全体。タスクの範囲より、前後に広い）/ the displayed range (the whole date axis; wider than the tasks' range on both sides)
+  private taskRange: DateRange = { min: 0, max: 0 }; // タスクの日程から決めた範囲（Fit と書き出しが使う）/ the range from the tasks' dates (Fit and export use it)
+  private padBefore = 0; // 範囲の前へ足した日数（0 = 初期の余白）。端へスクロールすると増える / days added before the range (0 = the initial margin); it grows as you scroll to an edge
+  private padAfter = 0;
+  private resetScroll = true; // 次の描画で、スクロール位置を作り直す（今日を中央に）/ the next draw sets the scroll position afresh (today in the middle)
+  private hdr: HeaderModel | null = null; // 今の日付軸（グリッドの縦線に使う）/ the current date axis (the grid's vertical lines use it)
   private ppd = 16;
   private selectedPath: string | null = null;
   private folder = ""; // 表示対象フォルダ / scoped folder path
@@ -386,8 +394,18 @@ export class GanttView extends ItemView {
       // 親子ネストはフォルダグループ化のときだけ / nest by parent only when grouping by folder
       this.rows = buildRows(view, this.collapsed, folders, compare, this.groupBy === "folder");
     }
-    this.range = computeRange(view);
+    // 描き直しの前に、今のスクロール位置を控える：縦の位置と、横は「見えている中央の日付」（拡大率・範囲・表の幅が変わっても、同じ日付が中央に残る）
+    // before redrawing, note the scroll: the vertical position, and horizontally the day at the centre of what is visible (so it stays centred even when the scale, the range or the table width changes)
+    const prev = this.gridHost.querySelector<HTMLElement>(".ogantt-main");
+    const keepScroll = !!prev && !this.resetScroll;
+    const prevTop = prev?.scrollTop ?? 0;
+    const prevLeft = prev?.scrollLeft ?? 0;
+    const prevWasTimeline = !!prev?.querySelector(".ogantt-svg");
+    const centreDay = keepScroll && prevWasTimeline && prev ? this.range.min + (prevLeft + Math.max(0, prev.clientWidth - this.tableWidth()) / 2) / this.ppd : null;
+
+    this.taskRange = computeRange(view);
     this.ppd = this.computePpd();
+    this.range = this.displayRange();
     const titleEl = this.contentEl.querySelector(".ogantt-title");
     if (titleEl) titleEl.setText(this.folder || "(vault root)");
 
@@ -397,17 +415,77 @@ export class GanttView extends ItemView {
       this.gridHost.createDiv({ cls: "ogantt-empty" }).setText(
         tr().emptyMessage(this.folder || "vault")
       );
+      this.resetScroll = true;
       return;
     }
     const main = this.gridHost.createDiv({ cls: "ogantt-main" });
     this.renderGrid(main);
+    // スクロール位置を戻す。初めて（または、ビューが変わったとき）は、今日を中央に（Fit は、タスクの先頭を左端に）/ restore the scroll; the first time (or after a view change) today goes in the middle (Fit starts at the first task)
+    const timeline = this.activeType() !== "table";
+    main.scrollTop = prevTop;
+    if (!timeline) main.scrollLeft = keepScroll ? prevLeft : 0;
+    else {
+      const viewW = Math.max(0, main.clientWidth - this.tableWidth());
+      let left: number;
+      if (centreDay !== null) left = (centreDay - this.range.min) * this.ppd - viewW / 2;
+      else if (this.zoom === "Fit") left = (this.taskRange.min - this.range.min) * this.ppd;
+      else left = (todayIndex() - this.range.min) * this.ppd + this.ppd / 2 - viewW / 2;
+      main.scrollLeft = Math.max(0, left);
+      this.watchEdges(main);
+    }
+    this.resetScroll = false;
+  }
+
+  // 日付軸の表示範囲：タスクの範囲と今日を含み、前後に余白（初期は 1 年か、画面 2.5 枚分の長いほう）。端の近くまでスクロールすると、余白を足す（watchEdges）
+  // the displayed range: it holds the tasks' range and today, with a margin on both sides (at first a year or 2.5 screens, whichever is longer); scrolling near an edge adds more (watchEdges)
+  private displayRange(): DateRange {
+    const today = todayIndex();
+    const chunk = this.padChunk();
+    return {
+      min: Math.min(this.taskRange.min, today) - Math.max(this.padBefore, chunk),
+      max: Math.max(this.taskRange.max, today) + Math.max(this.padAfter, chunk),
+    };
+  }
+
+  private padChunk(): number {
+    const w = this.gridHost?.clientWidth || 1200;
+    return Math.max(365, Math.ceil((w * 2.5) / Math.max(1, this.ppd)));
+  }
+
+  // 端の近くまでスクロールしたら、その側の余白を足して描き直す（スクロール位置は、中央の日付で保たれる）。長さには上限（約 10 年ぶん）を置く
+  // when scrolled near an edge, add margin on that side and redraw (the scroll is kept by the centre day); the length is capped (about ten years)
+  private watchEdges(main: HTMLElement): void {
+    let pending = false;
+    main.addEventListener(
+      "scroll",
+      () => {
+        if (pending) return;
+        pending = true;
+        window.requestAnimationFrame(() => {
+          pending = false;
+          if (!main.isConnected) return;
+          const w = main.clientWidth;
+          const chunk = this.padChunk();
+          const total = this.range.max - this.range.min;
+          if (total > 3650 + chunk * 2) return;
+          if (main.scrollLeft < w * 1.2) {
+            this.padBefore = Math.max(this.padBefore, chunk) + chunk;
+            this.rerender();
+          } else if (main.scrollWidth - main.scrollLeft - w < w * 1.2) {
+            this.padAfter = Math.max(this.padAfter, chunk) + chunk;
+            this.rerender();
+          }
+        });
+      },
+      { passive: true }
+    );
   }
 
   // 1 日あたりピクセルを決定。Fit はペイン幅から算出（収まらなければ最小幅で横スクロール）
   // pixels-per-day; Fit derives it from the pane width (falls back to scrolling below MIN_PPD)
   private computePpd(): number {
     if (this.zoom !== "Fit") return pxPerDay(this.zoom);
-    const totalDays = Math.max(1, this.range.max - this.range.min + 1);
+    const totalDays = Math.max(1, this.taskRange.max - this.taskRange.min + 1);
     const avail = (this.gridHost?.clientWidth ?? 0) - this.tableWidth() - FIT_SCROLLBAR_PAD;
     if (avail <= 0) return pxPerDay("Week"); // まだレイアウト前 / not laid out yet
     return Math.max(MIN_PPD, Math.floor(avail / totalDays));
@@ -439,6 +517,9 @@ export class GanttView extends ItemView {
   }
 
   private useView(v: BoardView): void {
+    this.resetScroll = true; // ビューが変わったら、今日へ / a new view starts at today
+    this.padBefore = 0;
+    this.padAfter = 0;
     this.cfg = v.config;
     this.collapsed = new Set(this.cfg.collapsed);
     this.syncZoomButtons();
@@ -1840,6 +1921,8 @@ export class GanttView extends ItemView {
       if (z === this.zoom) btn.addClass("is-active");
       btn.onclick = () => {
         this.zoom = z; // ppd は rerender 内の computePpd() が決める / ppd is set by computePpd() in rerender
+        this.padBefore = 0; // 拡大率が変わるので、余白は作り直す。中央の日付は、描き直しで保たれる / the scale changes, so the margin starts over; the centre day is kept by the redraw
+        this.padAfter = 0;
         this.syncZoomButtons();
         void this.refresh();
       };
@@ -2251,19 +2334,28 @@ export class GanttView extends ItemView {
   // 今見えているボード（絞り込み・グループ・折りたたみ・列・テーマのまま）を、添付ファイルの置き場所へ書き出す
   // export the board as it is shown (filters, grouping, collapsing, columns, theme) into the vault's attachment folder
   async exportBoard(format: ExportFormat, scope: ExportScope): Promise<void> {
-    const grid = this.gridHost?.querySelector<HTMLElement>(".ogantt-grid");
-    if (!grid || !this.rows.length) return void new Notice(tr().exportNothing);
+    if (!this.gridHost?.querySelector(".ogantt-grid") || !this.rows.length) return void new Notice(tr().exportNothing);
     if (this.exporting) return;
     this.exporting = true;
     const base = this.folder.split("/").pop() || "vault";
     const stamp = dayToStr(todayIndex());
     // 名前は最初に決める / named up front
     const name = `Gantt ${base} ${stamp} ${scope === "chart" ? "chart" : "table-chart"}.${format}`;
+    // 日付軸は、画面では前後に長く伸びている。書き出しは、タスクの日程の範囲だけで、別に描いたグリッドを使う
+    // the date axis is long on both sides on screen; the export uses a grid drawn separately over the tasks' own range
+    const savedRange = this.range;
+    const savedBody = this.tbodyEl;
+    const savedHdr = this.hdr;
     try {
+      this.range = this.taskRange;
+      const scratch = activeDocument.createDiv();
+      this.renderGrid(scratch);
+      const grid = scratch.querySelector<HTMLElement>(".ogantt-grid");
+      if (!grid) throw new Error("no grid");
       const input = {
         grid,
         scope,
-        chartW: (this.range.max - this.range.min + 1) * this.ppd,
+        chartW: (this.taskRange.max - this.taskRange.min + 1) * this.ppd,
         tableW: this.tableWidth(),
         rows: this.rows.length,
         rowH: this.rowH,
@@ -2287,6 +2379,9 @@ export class GanttView extends ItemView {
       console.error("Task Gantt Board: export failed", e);
       new Notice(tr().exportFailed);
     } finally {
+      this.range = savedRange; // 画面の描画に戻す / back to the on-screen state
+      this.tbodyEl = savedBody;
+      this.hdr = savedHdr;
       this.exporting = false;
     }
   }
@@ -2450,25 +2545,33 @@ export class GanttView extends ItemView {
       });
     }
 
-    // (2) 日付軸 / date axis
-    // Fit は算出した ppd から目盛り粒度を選ぶ / in Fit, pick tick granularity from the computed ppd
-    const tickZoom: ZoomMode =
-      this.zoom !== "Fit" ? this.zoom : this.ppd >= 24 ? "Day" : this.ppd >= 10 ? "Week" : "Month";
+    // (2) 日付軸：2 段（上＝週、下＝日。ズームによって、月と週、年と月）/ the date axis: two rows (weeks over days; months over weeks, or years over months, by zoom)
+    this.hdr = null;
     if (!isTable) {
+      const text = tr();
+      const cal = scheduleOptions(this.plugin.settings).cal;
+      const model = buildHeader(
+        this.range,
+        headerLevel(this.zoom, this.ppd),
+        this.ppd,
+        { weekdays: text.weekdays, monthName: text.tlMonthName, yearMonth: text.tlYearMonth },
+        (d) => isWorkday(d, cal),
+        todayIndex()
+      );
+      this.hdr = model;
       const axis = grid.createDiv({ cls: "ogantt-axis" });
-      // 今日の位置（範囲の中にあるときだけ）/ today's x (only when it is inside the range)
-      const todayX = (todayIndex() - this.range.min) * this.ppd;
-      const todayIn = todayX >= 0 && todayX <= width;
-      for (const tick of buildTicks(this.range, tickZoom, this.ppd, tr().weekdays)) {
-        // 今日のバッジの下に来る目盛りの文字は、重ならないよう隠す / a tick label that would sit under today's badge is hidden
-        const t = axis.createDiv({ cls: "ogantt-tick" + (tick.major ? " is-major" : "") + (todayIn && Math.abs(tick.x - todayX) < 16 ? " is-under-today" : "") });
-        t.style.left = `${tick.x}px`;
-        t.setText(tick.label);
-      }
-      // 今日の日付（日）の赤いバッジ。日付の軸の上で、今日の線につながる（ClickUp のように）/ today's day of the month as a red badge on the axis, joined to the today line (like ClickUp)
-      if (todayIn) {
-        const badge = axis.createDiv({ cls: "ogantt-today-badge", text: String(new Date(todayIndex() * 86400000).getUTCDate()) });
-        badge.style.left = `${todayX}px`;
+      for (const [row, cells] of [["top", model.top], ["bottom", model.bottom]] as const) {
+        for (const c of cells) {
+          const el = axis.createDiv({ cls: `ogantt-hcell is-${row}` + (c.weekend ? " is-weekend" : "") + (c.today ? " is-today" : "") });
+          el.style.left = `${c.x}px`;
+          el.style.width = `${c.w}px`;
+          // 今日の日（日の段）は、赤い丸のバッジに / today's day (in the days row) is a red round badge
+          if (c.today && model.level <= 2) el.createSpan({ cls: "ogantt-today-badge", text: c.label.replace(/^\D+\s*/, "") });
+          else {
+            el.createSpan({ cls: c.strong ? "ogantt-hcell-strong" : "", text: c.label });
+            if (c.sub && c.w >= 104) el.createSpan({ cls: "ogantt-hcell-sub", text: c.sub });
+          }
+        }
       }
     }
 
@@ -2621,6 +2724,22 @@ export class GanttView extends ItemView {
   }
 
   private drawGrid(svg: SVGElement, width: number, height: number): void {
+    // 休日（非稼働日）の斜線。日の幅が 4px 以上のときだけ / the hatch over non-working days, only when a day is at least 4px wide
+    if (this.ppd >= 4) {
+      const defs = this.svgEl("defs", {});
+      const pat = this.svgEl("pattern", { id: "ogantt-hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+      pat.appendChild(this.svgEl("line", { x1: 0, y1: 0, x2: 0, y2: 6, class: "ogantt-hatch-line" }));
+      defs.appendChild(pat);
+      svg.appendChild(defs);
+      const cal = scheduleOptions(this.plugin.settings).cal;
+      for (const [from, to] of offRuns(this.range, (d) => isWorkday(d, cal))) {
+        svg.appendChild(this.svgEl("rect", { x: (from - this.range.min) * this.ppd, y: 0, width: (to - from + 1) * this.ppd, height, fill: "url(#ogantt-hatch)", class: "ogantt-offday" }));
+      }
+    }
+    // 縦の線：日付軸の下の段の区切りに合わせる（日・週・月）/ vertical lines at the boundaries of the axis's lower row (days, weeks, months)
+    for (const c of this.hdr?.bottom ?? []) {
+      if (c.x > 0) svg.appendChild(this.svgEl("line", { x1: c.x, y1: 0, x2: c.x, y2: height, class: "ogantt-vline" }));
+    }
     // 行の区切り / row separators
     this.rows.forEach((row, i) => {
       if (row.kind === "group") {
@@ -2631,7 +2750,7 @@ export class GanttView extends ItemView {
       svg.appendChild(line);
     });
     // 今日の線 / today marker
-    const todayX = (todayIndex() - this.range.min) * this.ppd;
+    const todayX = (todayIndex() - this.range.min) * this.ppd + this.ppd / 2; // 今日の日の中央（軸のバッジの真下）/ the middle of today's day, right under the axis badge
     if (todayX >= 0 && todayX <= width) {
       svg.appendChild(this.svgEl("line", { x1: todayX, y1: 0, x2: todayX, y2: height, class: "ogantt-today" }));
     }
@@ -2658,7 +2777,7 @@ export class GanttView extends ItemView {
   // 稲妻線：今日を基準に、各行の「実績到達点」を結ぶ折れ線。左へ折れる＝遅れ / 右＝進み
   // progress line: joins each row's achieved-progress point against today; left = behind, right = ahead
   private drawProgressLine(svg: SVGElement, width: number, height: number): void {
-    const basisX = (todayIndex() - this.range.min) * this.ppd;
+    const basisX = (todayIndex() - this.range.min) * this.ppd + this.ppd / 2; // 今日の線と同じ位置 / the same x as the today line
     if (basisX < 0 || basisX > width) return; // 基準日が範囲外＝結ぶ軸がない / no basis to anchor to
     const lineRows: ProgressLineRow[] = this.rows.map((row) => {
       // グループ行とロールアップ行はサマリー（自分の進捗を持たない）ので素通し

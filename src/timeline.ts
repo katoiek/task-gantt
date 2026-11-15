@@ -110,9 +110,9 @@ export function pxPerDay(zoom: ZoomMode): number {
     case "Day":
       return 36;
     case "Week":
-      return 16;
+      return 20;
     case "Month":
-      return 5;
+      return 4;
     case "Fit":
       return 16;
   }
@@ -235,4 +235,124 @@ export function roundedPolyline(points: [number, number][], r: number): string {
   }
   if (pts.length > 1) d += ` L ${f(pts[pts.length - 1][0])} ${f(pts[pts.length - 1][1])}`;
   return d;
+}
+
+// ── ClickUp 風の 2 段の日付軸（Month だけ Wrike 風）/ the two-row date axis, like ClickUp's (Month alone follows Wrike) ──
+
+// 軸の段階。1＝日（曜日つき）、2＝日、3＝月＋週、4＝年＋月（Wrike 風）。Fit は、1 日の幅から決める
+// the axis level: 1 = days with weekdays, 2 = days, 3 = months + weeks, 4 = years + months (Wrike style). Fit picks one from the day width
+export type HeaderLevel = 1 | 2 | 3 | 4;
+export function headerLevel(zoom: ZoomMode, ppd: number): HeaderLevel {
+  if (zoom === "Day") return 1;
+  if (zoom === "Week") return 2;
+  if (zoom === "Month") return 4;
+  return ppd >= 32 ? 1 : ppd >= 12 ? 2 : ppd >= 5 ? 3 : 4;
+}
+
+export interface HeaderText {
+  weekdays: string[]; // 日曜始まり / Sunday first
+  monthName: (m: number) => string; // 1〜12 → 「11月」「Nov」/ 1–12 → "11月", "Nov"
+  yearMonth: (y: number, m: number) => string; // 「2026年11月」「Nov 2026」/ "2026年11月", "Nov 2026"
+}
+
+export interface HeaderCell {
+  x: number; // 左端（軸の左から）/ left edge from the axis start
+  w: number;
+  label: string;
+  sub?: string; // 週の日付の範囲など、ラベルの横に添える文字 / a range text beside the label (the dates of a week)
+  strong?: boolean;
+  weekend?: boolean; // 休日（非稼働日）/ a non-working day
+  today?: boolean;
+}
+
+export interface HeaderModel {
+  level: HeaderLevel;
+  top: HeaderCell[];
+  bottom: HeaderCell[];
+}
+
+// ISO 週番号（その日を含む週の、木曜の属する年の週）。日曜始まりの週は、日曜の ISO 週番号を、その週の番号にする（ClickUp の W46 と同じ）
+// the ISO week number (the week holding that day's Thursday); a Sunday-start week takes the ISO number of its Sunday (the same as ClickUp's W46)
+export function isoWeek(day: number): number {
+  const d = new Date(day * MS_PER_DAY);
+  const dow = (d.getUTCDay() + 6) % 7; // 月曜 = 0 / Monday = 0
+  const thursday = new Date(d.getTime() + (3 - dow) * MS_PER_DAY);
+  const jan1 = Date.UTC(thursday.getUTCFullYear(), 0, 1);
+  return Math.floor((thursday.getTime() - jan1) / MS_PER_DAY / 7) + 1;
+}
+
+// 範囲全体の軸のセルを作る。週は日曜始まり。isWorkday で休日の列に印を付け、today に印を付ける
+// build the axis cells for the whole range; weeks start on Sunday; isWorkday marks the non-working days and `today` is marked
+export function buildHeader(range: DateRange, level: HeaderLevel, ppd: number, text: HeaderText, isWorkday: (day: number) => boolean, today: number): HeaderModel {
+  const top: HeaderCell[] = [];
+  const bottom: HeaderCell[] = [];
+  const xOf = (day: number): number => (day - range.min) * ppd;
+  const ymd = (day: number): { y: number; m: number; d: number; dow: number } => {
+    const dt = new Date(day * MS_PER_DAY);
+    return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate(), dow: dt.getUTCDay() };
+  };
+  const clip = (a: number, b: number): [number, number] => [Math.max(a, range.min), Math.min(b, range.max)]; // [a, b]（両端を含む通日）/ inclusive day indexes
+
+  if (level <= 2) {
+    // 上段：週（日曜〜土曜）。「W46 11月 15 - 21」/ top row: weeks (Sunday to Saturday), "W46 11月 15 - 21"
+    const first = range.min - ymd(range.min).dow;
+    for (let ws = first; ws <= range.max; ws += 7) {
+      const [a, b] = clip(ws, ws + 6);
+      const s = ymd(ws);
+      const e = ymd(ws + 6);
+      const sub = s.m === e.m ? `${text.monthName(s.m)} ${s.d} - ${e.d}` : `${text.monthName(s.m)} ${s.d} - ${text.monthName(e.m)} ${e.d}`;
+      top.push({ x: xOf(a), w: (b - a + 1) * ppd, label: `W${isoWeek(ws)}`, sub, strong: true });
+    }
+    // 下段：日。幅があれば曜日も / bottom row: days, with the weekday when wide
+    for (let day = range.min; day <= range.max; day++) {
+      const v = ymd(day);
+      bottom.push({ x: xOf(day), w: ppd, label: level === 1 ? `${text.weekdays[v.dow]} ${v.d}` : String(v.d), weekend: !isWorkday(day), today: day === today });
+    }
+  } else if (level === 3) {
+    // 上段：月、下段：週の開始日 / top row: months; bottom row: the first day of each week
+    for (let day = range.min; day <= range.max; ) {
+      const v = ymd(day);
+      const end = Math.min(range.max, day + (new Date(Date.UTC(v.y, v.m, 0)).getUTCDate() - v.d));
+      top.push({ x: xOf(day), w: (end - day + 1) * ppd, label: text.yearMonth(v.y, v.m), strong: true });
+      day = end + 1;
+    }
+    const first = range.min - ymd(range.min).dow;
+    for (let ws = first; ws <= range.max; ws += 7) {
+      const [a, b] = clip(ws, ws + 6);
+      bottom.push({ x: xOf(a), w: (b - a + 1) * ppd, label: String(ymd(ws).d), today: today >= a && today <= b });
+    }
+  } else {
+    // 上段：年、下段：月（Wrike 風）/ top row: years; bottom row: months (Wrike style)
+    for (let day = range.min; day <= range.max; ) {
+      const v = ymd(day);
+      const endOfYear = Math.floor(Date.UTC(v.y + 1, 0, 1) / MS_PER_DAY) - 1;
+      const end = Math.min(range.max, endOfYear);
+      top.push({ x: xOf(day), w: (end - day + 1) * ppd, label: String(v.y), strong: true });
+      day = end + 1;
+    }
+    for (let day = range.min; day <= range.max; ) {
+      const v = ymd(day);
+      const end = Math.min(range.max, day + (new Date(Date.UTC(v.y, v.m, 0)).getUTCDate() - v.d));
+      bottom.push({ x: xOf(day), w: (end - day + 1) * ppd, label: text.monthName(v.m), today: today >= day && today <= end });
+      day = end + 1;
+    }
+  }
+  return { level, top, bottom };
+}
+
+// 休日（非稼働日）が続く区間 [from, to]（通日・両端を含む）を、範囲の中から集める。斜線の塗りに使う
+// the runs [from, to] (inclusive day indexes) of non-working days inside the range, for the hatched fill
+export function offRuns(range: DateRange, isWorkday: (day: number) => boolean): [number, number][] {
+  const runs: [number, number][] = [];
+  let start: number | null = null;
+  for (let day = range.min; day <= range.max; day++) {
+    if (!isWorkday(day)) {
+      if (start === null) start = day;
+    } else if (start !== null) {
+      runs.push([start, day - 1]);
+      start = null;
+    }
+  }
+  if (start !== null) runs.push([start, range.max]);
+  return runs;
 }

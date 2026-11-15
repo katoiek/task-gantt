@@ -117,6 +117,8 @@ interface Strings {
   dfKindRange: string; // 期間 / date range
   dfDay: string;
   weekdays: string[]; // 日付軸の曜日（日曜始まり）/ weekday labels on the date axis (Sunday first)
+  tlMonthName: (m: number) => string; // 日付軸の月の名前（1〜12）/ a month name on the date axis (1–12)
+  tlYearMonth: (y: number, m: number) => string; // 日付軸の「年 月」/ "year month" on the date axis
   dfWeek: string;
   dfMonth: string;
   dfAgo: string;
@@ -624,6 +626,8 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRange: "期間",
     dfDay: "日",
     weekdays: ["日", "月", "火", "水", "木", "金", "土"],
+    tlMonthName: (m) => `${m}月`,
+    tlYearMonth: (y, m) => `${y}年${m}月`,
     dfWeek: "週",
     dfMonth: "月",
     dfAgo: "前",
@@ -929,6 +933,8 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRange: "date range",
     dfDay: "day",
     weekdays: ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
+    tlMonthName: (m) => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1],
+    tlYearMonth: (y, m) => `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][m - 1]} ${y}`,
     dfWeek: "week",
     dfMonth: "month",
     dfAgo: "ago",
@@ -1234,6 +1240,8 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRange: "日期范围",
     dfDay: "天",
     weekdays: ["日", "一", "二", "三", "四", "五", "六"],
+    tlMonthName: (m) => `${m}月`,
+    tlYearMonth: (y, m) => `${y}年${m}月`,
     dfWeek: "周",
     dfMonth: "月",
     dfAgo: "前",
@@ -1539,6 +1547,8 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRange: "日期範圍",
     dfDay: "天",
     weekdays: ["日", "一", "二", "三", "四", "五", "六"],
+    tlMonthName: (m) => `${m}月`,
+    tlYearMonth: (y, m) => `${y}年${m}月`,
     dfWeek: "週",
     dfMonth: "月",
     dfAgo: "前",
@@ -1844,6 +1854,8 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRange: "기간",
     dfDay: "일",
     weekdays: ["일", "월", "화", "수", "목", "금", "토"],
+    tlMonthName: (m) => `${m}월`,
+    tlYearMonth: (y, m) => `${y}년 ${m}월`,
     dfWeek: "주",
     dfMonth: "개월",
     dfAgo: "전",
@@ -2149,6 +2161,8 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRange: "plage de dates",
     dfDay: "jour",
     weekdays: ["di", "lu", "ma", "me", "je", "ve", "sa"],
+    tlMonthName: (m) => ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."][m - 1],
+    tlYearMonth: (y, m) => `${["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."][m - 1]} ${y}`,
     dfWeek: "semaine",
     dfMonth: "mois",
     dfAgo: "auparavant",
@@ -2454,6 +2468,8 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRange: "rango de fechas",
     dfDay: "día",
     weekdays: ["do", "lu", "ma", "mi", "ju", "vi", "sá"],
+    tlMonthName: (m) => ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"][m - 1],
+    tlYearMonth: (y, m) => `${["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"][m - 1]} ${y}`,
     dfWeek: "semana",
     dfMonth: "mes",
     dfAgo: "atrás",
@@ -2759,6 +2775,8 @@ const STRINGS: Record<Lang, Strings> = {
     dfKindRange: "диапазон дат",
     dfDay: "день",
     weekdays: ["вс", "пн", "вт", "ср", "чт", "пт", "сб"],
+    tlMonthName: (m) => ["янв.", "февр.", "март", "апр.", "май", "июнь", "июль", "авг.", "сент.", "окт.", "нояб.", "дек."][m - 1],
+    tlYearMonth: (y, m) => `${["янв.", "февр.", "март", "апр.", "май", "июнь", "июль", "авг.", "сент.", "окт.", "нояб.", "дек."][m - 1]} ${y}`,
     dfWeek: "неделя",
     dfMonth: "месяц",
     dfAgo: "назад",
