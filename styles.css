@@ -875,6 +875,10 @@
 }
 .ogantt-grid {
   position: relative; /* 列のドラッグの縦線の基準 / the reference for the column-drag guide line */
+  /* 幅を中身いっぱいにする。固定した左の表（sticky）は、グリッドの箱の中でしか固定されないので、箱が画面の幅のままだと、遠くへスクロールしたとき表が消える */
+  /* the grid is as wide as its content: the sticky left table only sticks inside the grid's box, so with a box as wide as the screen the table would vanish when scrolled far */
+  width: max-content;
+  min-width: 100%;
   display: grid;
   /* columns/rows are set inline from JS */
 }
