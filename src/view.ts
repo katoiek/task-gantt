@@ -38,6 +38,8 @@ import {
   buildHeader,
   headerLevel,
   offRuns,
+  offscreenSide,
+  jumpScrollLeft,
   HeaderModel,
   todayIndex,
   formatDate,
@@ -105,6 +107,7 @@ export class GanttView extends ItemView {
   private padBefore = 0; // 範囲の前へ足した日数（0 = 初期の余白）。端へスクロールすると増える / days added before the range (0 = the initial margin); it grows as you scroll to an edge
   private padAfter = 0;
   private resetScroll = true; // 次の描画で、スクロール位置を作り直す（今日を中央に）/ the next draw sets the scroll position afresh (today in the middle)
+  private offEl: HTMLElement | null = null; // 画面の外のバーへの目印を重ねる層 / the layer holding the markers for off-screen bars
   private hdr: HeaderModel | null = null; // 今の日付軸（グリッドの縦線に使う）/ the current date axis (the grid's vertical lines use it)
   private ppd = 16;
   private selectedPath: string | null = null;
@@ -296,6 +299,8 @@ export class GanttView extends ItemView {
   // Obsidian がペイン/ウィンドウのリサイズ時に呼ぶフック。Fit のみ再描画（デバウンス）
   // Obsidian calls this on pane/window resize; re-fit in Fit mode only (debounced)
   onResize(): void {
+    const main = this.gridHost?.querySelector<HTMLElement>(".ogantt-main");
+    if (main) this.updateOffscreen(main); // 幅が変わると、画面の外のバーが変わる / a new width changes which bars are off-screen
     if (this.zoom !== "Fit") return;
     if (this.fitTimer != null) window.clearTimeout(this.fitTimer);
     this.fitTimer = window.setTimeout(() => this.rerender(), 80);
@@ -416,12 +421,14 @@ export class GanttView extends ItemView {
         tr().emptyMessage(this.folder || "vault")
       );
       this.resetScroll = true;
+      this.offEl = null;
       return;
     }
     const main = this.gridHost.createDiv({ cls: "ogantt-main" });
     this.renderGrid(main);
     // スクロール位置を戻す。初めて（または、ビューが変わったとき）は、今日を中央に（Fit は、タスクの先頭を左端に）/ restore the scroll; the first time (or after a view change) today goes in the middle (Fit starts at the first task)
     const timeline = this.activeType() !== "table";
+    this.offEl = null;
     main.scrollTop = prevTop;
     if (!timeline) main.scrollLeft = keepScroll ? prevLeft : 0;
     else {
@@ -432,6 +439,8 @@ export class GanttView extends ItemView {
       else left = (todayIndex() - this.range.min) * this.ppd + this.ppd / 2 - viewW / 2;
       main.scrollLeft = Math.max(0, left);
       this.watchEdges(main);
+      this.offEl = this.gridHost.createDiv({ cls: "ogantt-offscreen" });
+      this.watchOffscreen(main);
     }
     this.resetScroll = false;
   }
@@ -450,6 +459,63 @@ export class GanttView extends ItemView {
   private padChunk(): number {
     const w = this.gridHost?.clientWidth || 1200;
     return Math.max(365, Math.ceil((w * 2.5) / Math.max(1, this.ppd)));
+  }
+
+  // 画面の外（左右）にあるバーの行に、小さな矢印を出す。押すと、そのバーへ飛ぶ（ClickUp のように）。スクロール・リサイズ・描き直しのたびに作り直す（見えている行だけ）
+  // a small arrow on the row of every bar outside the screen (left or right); clicking it jumps to the bar (like ClickUp). Rebuilt on scroll, resize and redraw (visible rows only)
+  private watchOffscreen(main: HTMLElement): void {
+    let pending = false;
+    const run = (): void => {
+      pending = false;
+      if (main.isConnected) this.updateOffscreen(main);
+    };
+    main.addEventListener(
+      "scroll",
+      () => {
+        if (pending) return;
+        pending = true;
+        window.requestAnimationFrame(run);
+      },
+      { passive: true }
+    );
+    this.updateOffscreen(main);
+  }
+
+  private updateOffscreen(main: HTMLElement): void {
+    const layer = this.offEl;
+    if (!layer || this.activeType() === "table") return;
+    layer.empty();
+    const tableW = this.tableWidth();
+    const visL = main.scrollLeft;
+    const visR = main.scrollLeft + Math.max(0, main.clientWidth - tableW);
+    const headH = this.headH;
+    const rowH = this.rowH;
+    const first = Math.max(0, Math.floor(main.scrollTop / rowH));
+    const last = Math.min(this.rows.length - 1, Math.ceil((main.scrollTop + main.clientHeight - headH) / rowH));
+    const SIZE = 18;
+    for (let i = first; i <= last; i++) {
+      const row = this.rows[i];
+      if (row.kind !== "task" || !row.task) continue;
+      const t = row.task;
+      const s = anchorStart(t);
+      const e = anchorEnd(t) ?? s;
+      if (!s || !e) continue;
+      const barL = this.xOf(s);
+      const barR = this.xOf(e) + this.ppd;
+      const side = offscreenSide(barL, barR, visL, visR);
+      if (!side) continue;
+      const top = headH + i * rowH - main.scrollTop + (rowH - SIZE) / 2;
+      if (top < headH - 2 || top + SIZE > main.clientHeight) continue;
+      const fmt = this.plugin.settings.dateFormat;
+      const label = `${t.name}  (${formatDate(s, fmt)} - ${formatDate(e, fmt)})`;
+      const btn = layer.createEl("button", { cls: `ogantt-offbtn is-${side}` });
+      setIcon(btn, side === "left" ? "chevron-left" : "chevron-right");
+      btn.setAttr("aria-label", label);
+      btn.setAttr("title", label);
+      btn.style.top = `${top}px`;
+      btn.style.left = side === "left" ? `${tableW + 4}px` : `${Math.max(tableW + 4, main.clientWidth - SIZE - 6)}px`;
+      btn.onclick = () => main.scrollTo({ left: jumpScrollLeft(barL, 60), behavior: "smooth" });
+    }
   }
 
   // 端の近くまでスクロールしたら、その側の余白を足して描き直す（スクロール位置は、中央の日付で保たれる）。長さには上限（約 10 年ぶん）を置く

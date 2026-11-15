@@ -356,3 +356,19 @@ export function offRuns(range: DateRange, isWorkday: (day: number) => boolean): 
   if (start !== null) runs.push([start, range.max]);
   return runs;
 }
+
+// ── 画面の外にあるバーへの目印 / the markers for bars outside the visible part ──
+
+// バー [barL, barR]（チャートの x）が、見えている範囲 [visL, visR] の外にあるとき、どちら側か。少しでも見えていれば null
+// which side a bar [barL, barR] (chart x) lies on when it is outside the visible range [visL, visR]; null when any of it shows
+export function offscreenSide(barL: number, barR: number, visL: number, visR: number): "left" | "right" | null {
+  if (barR <= visL) return "left";
+  if (barL >= visR) return "right";
+  return null;
+}
+
+// バーへ飛ぶときの、横スクロールの位置。バーの左端を、左から margin のところに置く（バーが画面より長くても、先頭が見える）。0 未満にはしない
+// the horizontal scroll to jump to a bar: its left edge goes `margin` in from the left (so even a bar longer than the screen shows its start); never below 0
+export function jumpScrollLeft(barL: number, margin: number): number {
+  return Math.max(0, Math.round(barL - margin));
+}

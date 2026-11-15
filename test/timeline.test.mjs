@@ -1,6 +1,6 @@
 // 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
 // Tests for date-filter resolution/matching and progress-line geometry
-import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks, roundedPolyline, headerLevel, isoWeek, buildHeader, offRuns } from "./timeline.mjs";
+import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks, roundedPolyline, headerLevel, isoWeek, buildHeader, offRuns, offscreenSide, jumpScrollLeft } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -164,6 +164,16 @@ check("行が空でも両端だけ返す", buildProgressLine([], BASIS, 30, 0).l
   const runs = offRuns(range, off);
   check("offRuns: 休日が続く区間（土日）", runs.length === 2 && runs[0][0] === d("2026-11-14") && runs[0][1] === d("2026-11-15") && runs[1][0] === d("2026-11-21") && runs[1][1] === d("2026-11-22"));
   check("offRuns: 範囲が休日で終わっても閉じる", offRuns({ min: d("2026-11-13"), max: d("2026-11-15") }, off).length === 1);
+}
+
+// ── 画面の外のバーへの目印 ──
+{
+  check("offscreenSide: 見えている範囲の左の外は left", offscreenSide(0, 100, 100, 600) === "left" && offscreenSide(0, 50, 100, 600) === "left");
+  check("offscreenSide: 右の外は right", offscreenSide(600, 700, 100, 600) === "right" && offscreenSide(900, 950, 100, 600) === "right");
+  check("offscreenSide: 少しでも見えていれば null（端が 1px でも）", offscreenSide(0, 101, 100, 600) === null && offscreenSide(599, 800, 100, 600) === null && offscreenSide(200, 300, 100, 600) === null);
+  check("offscreenSide: 範囲をまたぐ長いバーは null", offscreenSide(0, 1000, 100, 600) === null);
+  check("jumpScrollLeft: バーの左端を、左から margin のところへ", jumpScrollLeft(1000, 60) === 940 && jumpScrollLeft(1000.4, 60) === 940);
+  check("jumpScrollLeft: 0 未満にはしない", jumpScrollLeft(20, 60) === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

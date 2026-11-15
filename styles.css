@@ -864,6 +864,7 @@
 /* 単一スクロール内の CSS グリッド。sticky で表ヘッダ・日付軸・左列を固定し行を揃える */
 /* CSS grid in one scroll container; sticky heads + left column keep rows aligned */
 .ogantt-host {
+  position: relative; /* 画面の外のバーへの目印の層の基準 / the reference for the off-screen markers layer */
   flex: 1;
   min-height: 0;
   display: flex;
@@ -2020,4 +2021,37 @@ button.ogantt-cal-title:hover {
   stroke: var(--background-modifier-border-hover);
   stroke-width: 1;
   pointer-events: none;
+}
+
+/* 画面の外のバーへの目印（行の左右の端の小さな矢印。押すと、そのバーへ飛ぶ）/ markers for off-screen bars (a small arrow at the left or right edge of the row; click to jump) */
+.ogantt-offscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ogantt-offbtn {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+  background: var(--background-primary);
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.ogantt-offbtn:hover {
+  border-color: var(--interactive-accent);
+  color: var(--interactive-accent);
+}
+.ogantt-offbtn svg {
+  width: 12px;
+  height: 12px;
 }
