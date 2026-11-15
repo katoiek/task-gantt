@@ -1166,6 +1166,7 @@ input.ogantt-cell-input[type="number"] {
   border-bottom: 1px solid var(--background-modifier-border);
 }
 .ogantt-svgwrap {
+  cursor: grab; /* 背景をドラッグして、横にスクロール / drag the background to scroll sideways */
   grid-column: 2;
   grid-row: 2;
 }
@@ -2054,4 +2055,9 @@ button.ogantt-cal-title:hover {
 .ogantt-offbtn svg {
   width: 12px;
   height: 12px;
+}
+
+.ogantt-svgwrap.is-panning {
+  cursor: grabbing;
+  user-select: none;
 }

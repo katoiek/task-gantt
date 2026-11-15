@@ -107,6 +107,7 @@ export class GanttView extends ItemView {
   private padBefore = 0; // 範囲の前へ足した日数（0 = 初期の余白）。端へスクロールすると増える / days added before the range (0 = the initial margin); it grows as you scroll to an edge
   private padAfter = 0;
   private resetScroll = true; // 次の描画で、スクロール位置を作り直す（今日を中央に）/ the next draw sets the scroll position afresh (today in the middle)
+  private panned = false; // 背景のドラッグで横スクロールした直後（そのあとのクリックで、詳細パネルを閉じない）/ just after a background drag scrolled the chart (the click that follows must not close the detail panel)
   private offEl: HTMLElement | null = null; // 画面の外のバーへの目印を重ねる層 / the layer holding the markers for off-screen bars
   private hdr: HeaderModel | null = null; // 今の日付軸（グリッドの縦線に使う）/ the current date axis (the grid's vertical lines use it)
   private ppd = 16;
@@ -332,7 +333,7 @@ export class GanttView extends ItemView {
     root.addEventListener(
       "click",
       (ev) => {
-        if (!this.detailEl?.hasClass("is-open")) return;
+        if (!this.detailEl?.hasClass("is-open") || this.panned) return;
         const el = ev.target as Element;
         if (el.closest(".ogantt-detail")) return;
         this.detailEl.removeClass("is-open");
@@ -459,6 +460,42 @@ export class GanttView extends ItemView {
   private padChunk(): number {
     const w = this.gridHost?.clientWidth || 1200;
     return Math.max(365, Math.ceil((w * 2.5) / Math.max(1, this.ppd)));
+  }
+
+  // ガントのチャートの背景（バー・依存の線・ハンドル・矢印のボタン以外）をドラッグして、横にスクロールする。マウスだけ（タッチは、もともとスクロールできる）。ドラッグ後のクリックは、詳細パネルを閉じない
+  // drag the chart's background (anything but bars, dependency lines, handles and the arrow buttons) to scroll sideways; mouse only (touch scrolls natively); the click after a drag doesn't close the detail panel
+  private attachPan(wrap: HTMLElement, main: HTMLElement): void {
+    wrap.addEventListener("pointerdown", (ev: PointerEvent) => {
+      if (ev.button !== 0 || ev.pointerType !== "mouse") return;
+      if ((ev.target as Element).closest(".ogantt-bar-g, .ogantt-dep-g, .ogantt-handles-layer, .ogantt-handle")) return;
+      const startX = ev.clientX;
+      const startLeft = main.scrollLeft;
+      let moved = false;
+      wrap.setPointerCapture(ev.pointerId);
+      const onMove = (e: PointerEvent): void => {
+        const dx = e.clientX - startX;
+        if (!moved && Math.abs(dx) < 3) return; // 数 px は、クリック / a few px is a click
+        if (!moved) {
+          moved = true;
+          wrap.addClass("is-panning");
+        }
+        main.scrollLeft = startLeft - dx;
+      };
+      const onUp = (e: PointerEvent): void => {
+        wrap.releasePointerCapture(e.pointerId);
+        wrap.removeEventListener("pointermove", onMove);
+        wrap.removeEventListener("pointerup", onUp);
+        wrap.removeEventListener("pointercancel", onUp);
+        wrap.removeClass("is-panning");
+        if (moved) {
+          this.panned = true;
+          window.setTimeout(() => (this.panned = false), 0); // ドラッグのあとのクリックが済んでから戻す / cleared once the click after the drag has passed
+        }
+      };
+      wrap.addEventListener("pointermove", onMove);
+      wrap.addEventListener("pointerup", onUp);
+      wrap.addEventListener("pointercancel", onUp);
+    });
   }
 
   // 画面の外（左右）にあるバーの行に、小さな矢印を出す。押すと、そのバーへ飛ぶ（ClickUp のように）。スクロール・リサイズ・描き直しのたびに作り直す（見えている行だけ）
@@ -2771,6 +2808,7 @@ export class GanttView extends ItemView {
       return;
     }
     const svgWrap = grid.createDiv({ cls: "ogantt-svgwrap" });
+    this.attachPan(svgWrap, main);
     const svg = svgWrap.createSvg("svg", { cls: "ogantt-svg" });
     svg.setAttribute("width", String(width));
     svg.setAttribute("height", String(bodyH));
