@@ -1,5 +1,5 @@
 // カンバンの振り分け（列の並び・未割当・サブタスク）の検証 / Tests for the Kanban sorting (column order, unassigned, subtasks)
-import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes, applyManualOrder, placeInOrder, cardZone, manualRowCompare } from "./kanban.mjs";
+import { orderStatusIds, buildKanbanColumns, moveId, subtasksOf, columnKey, toggleCollapsed, collapseColumns, UNASSIGNED_KEY, ROOT_LANE_KEY, laneKeyOf, splitLanes, applyManualOrder, placeInOrder, cardZone, manualRowCompare, laneFolderPath, folderChoices } from "./kanban.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -155,6 +155,29 @@ check("列: タスクが無くても全部の列が出る", buildKanbanColumns([
   check("manualRowCompare: 入っていない行は、base の比べ方で後ろに", sortBy(["d"]) === "d,a,b,c");
   check("manualRowCompare: 順序が空なら、base のまま", sortBy([]) === "a,b,c,d");
   check("manualRowCompare: 知らないパスは無視", sortBy(["ghost", "b"]) === "b,a,c,d");
+}
+
+// ── laneFolderPath（フォルダのレーンへのドロップ先）/ drop destination of a folder lane ──
+{
+  check("laneFolderPath: サブフォルダのレーンは、ボードのフォルダの下", laneFolderPath("Projects", "PJ2") === "Projects/PJ2");
+  check("laneFolderPath: 入れ子のレーンも、そのまま下に", laneFolderPath("Projects", "PJ2/Sub") === "Projects/PJ2/Sub");
+  check("laneFolderPath: 直下のレーンは、ボードのフォルダそのもの", laneFolderPath("Projects", ROOT_LANE_KEY) === "Projects");
+  check("laneFolderPath: Vault 全体のボードでは、レーンの名前がそのままフォルダ", laneFolderPath("", "PJ2") === "PJ2");
+  check("laneFolderPath: Vault 全体の直下のレーンは Vault のルート", laneFolderPath("", ROOT_LANE_KEY) === "");
+  // laneKeyOf と行き来できる：カードのレーンのキーから、そのカードのいるフォルダへ戻る / round trip with laneKeyOf: a card's lane key leads back to its own folder
+  const t = { ...T("Projects/PJ2/Sub/x", "todo"), groups: ["PJ2", "Sub"] };
+  check("laneFolderPath: laneKeyOf と対になる", laneFolderPath("Projects", laneKeyOf(t, "folder")) === "Projects/PJ2/Sub");
+}
+
+// ── folderChoices（移動先に選べるフォルダ）/ folders to choose as a destination ──
+{
+  check("folderChoices: サブフォルダが無ければ空（選ぶ意味がない）", folderChoices([]).length === 0);
+  const c = folderChoices([["PJ2"], ["PJ1", "Sub"], ["PJ1"]]);
+  check("folderChoices: 先頭は直下、あとは相対パスの名前順", c.join("|") === `${ROOT_LANE_KEY}|PJ1|PJ1/Sub|PJ2`);
+  check("folderChoices: 重なりは 1 つに", folderChoices([["A"], ["A"]]).join("|") === `${ROOT_LANE_KEY}|A`);
+  // laneKeyOf と同じ表し方：カードのいるフォルダのキーが、必ず選択肢に入っている / same key shape as laneKeyOf: a card's own folder key is always one of the choices
+  const t = { ...T("Projects/PJ1/Sub/x", "todo"), groups: ["PJ1", "Sub"] };
+  check("folderChoices: カードの今のフォルダが選択肢に入る", c.includes(laneKeyOf(t, "folder")));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

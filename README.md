@@ -102,7 +102,8 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 - **Collapse columns**: the **⋯** in a column header has **Collapse column**, **Collapse empty columns**, **Collapse all columns** and **Expand all columns**. A collapsed column becomes a thin strip with its colour, count and name; click it to open it again (cards can still be dropped on it). Which columns are collapsed is saved in that view.
 
   ![The column header menu, and a collapsed Unassigned column](docs/images/kanban-column-menu-en.png)
-- **Swimlanes**: the **Group** button at the left of the toolbar splits the board into horizontal lanes by **Assignee** or **Folder** (**None** turns them off). The column headers stay on top and every lane has the same columns; click a lane's title to collapse it. Dragging a card into another **assignee** lane changes its assignee as well as its status (one undo restores both); a card can't be dropped into another **folder**'s lane, since that would move the file. Tasks with no assignee go into an **Unassigned** lane, and tasks directly in the board's folder into a **(top level)** lane. The grouping and the collapsed lanes are saved in that view.
+- **Swimlanes**: the **Group** button at the left of the toolbar splits the board into horizontal lanes by **Assignee** or **Folder** (**None** turns them off). The column headers stay on top and every lane has the same columns; click a lane's title to collapse it. Dragging a card into another **assignee** lane changes its assignee as well as its status (one undo restores both); dragging a card into another **folder**'s lane moves the file into that folder (its subtasks go with it and its parent link is cleared; if the status changes too, one undo restores the move and the status). Tasks with no assignee go into an **Unassigned** lane, and tasks directly in the board's folder into a **(top level)** lane. The grouping and the collapsed lanes are saved in that view.
+  ![Dragging a card into another folder lane](docs/images/kanban-folder-drag-en.png)
 
   ![The Group menu: None, Assignee or Folder](docs/images/kanban-group-menu-en.png)
 
@@ -114,7 +115,9 @@ A board (a folder) can hold several **views**, shown as tabs above the toolbar, 
 - **Card fields**: a card shows the task name and, by default, its **assignee, start and due dates**. The **Cards** button (the list icon at the left of the toolbar, before the folder name) lists every other column, including custom fields, as checkboxes.
 
   ![The Cards menu: tick the fields to show on every card](docs/images/kanban-card-fields-en.png)
-- **Add tasks**: the **＋** in a column header, or the **＋ Add task** button under the cards, creates a task with that column's status (none in Unassigned), using the new-task dates from **Settings**. A card's **⋯** menu (or a right-click) has **Add subtask**, which creates a subtask in its parent's folder, and **Delete**.
+- **Add tasks**: the **＋** in a column header, or the **＋ Add task** button under the cards, creates a task with that column's status (none in Unassigned), using the new-task dates from **Settings**. A card's **⋯** menu (or a right-click) has **Add subtask**, which creates a subtask in its parent's folder, **Move to folder…** (on a board that has subfolders; it opens the list of folders, and the file moves there with its subtasks while its parent link is cleared; undoable), and **Delete**. The detail panel has the same thing as a **Folder** dropdown under **Status**.
+  ![The card menu: Move to folder…](docs/images/kanban-move-to-folder-en.png)
+  ![The Folder dropdown in the detail panel](docs/images/detail-folder-en.png)
 - **Subtasks**: a card with subtasks shows a count icon; click it to open the first-level subtasks inside the card, each with the same fields as the card. A subtask is not a card of its own while its parent is shown.
 
   ![The subtask count icon on a card](docs/images/kanban-subtask-button-en.png)
@@ -478,7 +481,8 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
 - **列の折りたたみ**: 列の見出しの **⋯** に、**この列を折りたたむ**・**空の列をすべて折りたたむ**・**すべての列を折りたたむ**・**すべての列を開く**があります。折りたたんだ列は、色・件数・名前だけの細い帯になり、クリックで開きます（カードを落とすこともできます）。折りたたみの状態は、そのビューに保存されます。
 
   ![列の見出しのメニューと、折りたたんだ未割当の列](docs/images/kanban-column-menu-ja.png)
-- **スイムレーン**: ツールバーの左端の**グループ**ボタンで、ボードを**担当者**または**フォルダ**ごとの横帯（レーン）に分けられます（**なし**で解除）。列の見出しは上に残り、どのレーンにも同じ列が並びます。レーンのタイトルをクリックすると、そのレーンを折りたたみます。カードを別の**担当者**のレーンへドラッグすると、ステータスに加えて担当者も書き換わります（取り消しは 1 回で両方戻ります）。別の**フォルダ**のレーンへは、ファイルの移動になるので落とせません。担当者のないタスクは**未割当**のレーン、ボードのフォルダ直下のタスクは**（直下）**のレーンに入ります。グループの設定と、折りたたんだレーンは、そのビューに保存されます。
+- **スイムレーン**: ツールバーの左端の**グループ**ボタンで、ボードを**担当者**または**フォルダ**ごとの横帯（レーン）に分けられます（**なし**で解除）。列の見出しは上に残り、どのレーンにも同じ列が並びます。レーンのタイトルをクリックすると、そのレーンを折りたたみます。カードを別の**担当者**のレーンへドラッグすると、ステータスに加えて担当者も書き換わります（取り消しは 1 回で両方戻ります）。別の**フォルダ**のレーンへドラッグすると、そのフォルダへファイルが移動します（サブタスクも一緒に移り、親タスクとの関係は外れます。ステータスも変わる場合は、移動と合わせて取り消し 1 回で戻ります）。担当者のないタスクは**未割当**のレーン、ボードのフォルダ直下のタスクは**（直下）**のレーンに入ります。グループの設定と、折りたたんだレーンは、そのビューに保存されます。
+  ![カードを別のフォルダのレーンへドラッグ＆ドロップ](docs/images/kanban-folder-drag-ja.png)
 
   ![グループのメニュー：なし・担当者・フォルダ](docs/images/kanban-group-menu-ja.png)
 
@@ -490,7 +494,9 @@ Wrike のボードビューのように、ボードのタスクを、**ステー
 - **カードの項目**: カードには、タスク名と、既定で**担当者・開始日・期限**が出ます。**カード**ボタン（ツールバーの左端、フォルダ名の左にある一覧のアイコン）から、ほかの列（カスタムフィールドを含む）を、チェックボックスで出せます。
 
   ![カードのメニュー：すべてのカードに出す項目を選ぶ](docs/images/kanban-card-fields-ja.png)
-- **タスクの追加**: 列の見出しの **＋**、または、カードの下の **＋ タスクを追加** で、その列のステータスのタスクを作ります（未割当の列ではステータスなし。日付は**設定**の新規タスクの日付に従います）。カードの **⋯** メニュー（または右クリック）には、**サブタスクを追加**（親と同じフォルダに作ります）と**削除**があります。
+- **タスクの追加**: 列の見出しの **＋**、または、カードの下の **＋ タスクを追加** で、その列のステータスのタスクを作ります（未割当の列ではステータスなし。日付は**設定**の新規タスクの日付に従います）。カードの **⋯** メニュー（または右クリック）には、**サブタスクを追加**（親と同じフォルダに作ります）、**フォルダへ移動…**（サブフォルダのあるボードだけ。フォルダの一覧が開き、選ぶとサブタスクごとファイルが移り、親との関係は外れます。取り消せます）、**削除**があります。詳細パネルにも、**ステータス**の下に同じ**フォルダ**のドロップダウンがあります。
+  ![カードの⋯メニュー：フォルダへ移動…](docs/images/kanban-move-to-folder-ja.png)
+  ![詳細パネルのフォルダ](docs/images/detail-folder-ja.png)
 - **サブタスク**: サブタスクのあるカードには、件数のアイコンが出ます。クリックすると、1 階層目のサブタスクが、親のカードと同じ項目つきで、カードの中に開きます。親が表示されているあいだ、サブタスクは独立したカードにはなりません。
 
   ![カードのサブタスクの件数アイコン](docs/images/kanban-subtask-button-ja.png)

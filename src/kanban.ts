@@ -84,6 +84,21 @@ export function laneKeyOf(t: Task, by: LaneBy): string {
   return "";
 }
 
+// フォルダのレーンに落としたカードの移動先フォルダ。直下のレーンはボードのフォルダそのもの、それ以外はその下のサブフォルダ（scope が "" ならボードは Vault 全体）
+// the folder a card dropped on a folder lane moves into: the top-level lane is the board's folder itself, any other lane is a subfolder of it (scope "" = the whole vault)
+export function laneFolderPath(scope: string, laneKey: string): string {
+  if (laneKey === ROOT_LANE_KEY) return scope;
+  return scope ? `${scope}/${laneKey}` : laneKey;
+}
+
+// 移動先に選べるフォルダの一覧（レーンのキー）。先頭は直下、あとは相対パスの名前順。ボード配下にサブフォルダが無ければ空（選ぶ意味がない）
+// the folders a task can be moved to, as lane keys: the top level first, then the relative paths by name; empty when the board has no subfolder (nothing to choose)
+export function folderChoices(allFolders: string[][]): string[] {
+  if (allFolders.length === 0) return [];
+  const paths = allFolders.map((segs) => segs.join("/"));
+  return [ROOT_LANE_KEY, ...[...new Set(paths)].sort((a, b) => a.localeCompare(b))];
+}
+
 export interface KanbanLane {
   key: string;
   count: number; // このレーンのカードの数（親の中のサブタスクは数えない）/ cards in this lane (subtasks inside a parent aren't counted)

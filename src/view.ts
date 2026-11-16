@@ -54,7 +54,7 @@ import { attachLinkSuggest, handleLinkClick, renderLinkValue, wireLinkHover } fr
 import { t as tr, statusGroupLabel } from "./i18n"; // tr() … ローカル変数 t（Task）との衝突回避 / aliased to avoid clashing with the `t` task var
 import { schedulePush } from "./gcal/sync";
 import { GanttSettings, defaultViewConfig, legacyViewConfig } from "./settings";
-import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, applyManualOrder, buildKanbanColumns, cardZone, CardZone, collapseColumns, columnKey, laneKeyOf, moveId, manualRowCompare, orderStatusIds, placeInOrder, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
+import { KanbanColumn, KanbanLane, ROOT_LANE_KEY, UNASSIGNED_KEY, applyManualOrder, buildKanbanColumns, cardZone, CardZone, collapseColumns, columnKey, folderChoices, laneFolderPath, laneKeyOf, moveId, manualRowCompare, orderStatusIds, placeInOrder, splitLanes, subtasksOf, toggleCollapsed } from "./kanban";
 import { BoardView, ViewConfig, ViewType, activeView, addView, boardKey, createBoardViews, deleteView, duplicateView, moveView, renameView, LaneBy } from "./views";
 import { ExportFormat, ExportScope, boardToPdf, boardToPng } from "./export";
 import { isConnected } from "./gcal/auth";
@@ -1035,15 +1035,10 @@ export class GanttView extends ItemView {
     });
   }
 
-  // カードのドロップ先：この列のステータスになり、落とした位置に入る。レーンの中なら、担当者のレーンは担当者も書き換わる。フォルダのレーンへは、ファイルの移動になるので落とせない
-  // the drop target of a card: it takes this column's status and goes in where it was dropped; inside an assignee lane it takes that assignee too; a card can't be dropped into another folder's lane (that would move the file)
+  // カードのドロップ先：この列のステータスになり、落とした位置に入る。レーンの中なら、担当者のレーンは担当者も書き換わり、フォルダのレーンはそのフォルダへファイルが移る（サブタスクごと・親は外れる）
+  // the drop target of a card: it takes this column's status and goes in where it was dropped; inside an assignee lane it takes that assignee too, and on a folder lane the file moves into that folder (with its subtasks; the parent link is cleared)
   private attachCardDrop(el: HTMLElement, col: KanbanColumn, laneKey: string | null): void {
-    const allowed = (): boolean => {
-      if (!this.dragPath) return false;
-      if (laneKey === null || this.cfg.laneBy !== "folder") return true;
-      const t = this.tasks.find((x) => x.path === this.dragPath);
-      return !!t && laneKeyOf(t, "folder") === laneKey;
-    };
+    const allowed = (): boolean => !!this.dragPath;
     // 落とす位置：ポインタがカードの上なら、そのカードの前・後ろ・真ん中（サブタスクにする）。カードの間や空きなら、ポインタより下で最初のカードの前、無ければ最後のカードの後ろ（カードが無ければ末尾）。ドラッグ中のカード自身は数えない
     // the drop slot: over a card it is before, after or the middle of it (make a subtask); between cards or in the empty part, before the first card below the pointer, else after the last card (the end when there are none); the dragged card itself doesn't count
     const slotAt = (e: DragEvent): { ref: HTMLElement | null; after: boolean; child: boolean } => {
@@ -1200,9 +1195,40 @@ export class GanttView extends ItemView {
     const menu = new Menu();
     menu.addItem((it) => it.setTitle(tr().kanbanAddSubtask).setIcon("plus").onClick(() => void this.createTaskWith({ parentPath: t.path })));
     if (t.parent) menu.addItem((it) => it.setTitle(tr().kanbanDetachSub).setIcon("unlink").onClick(() => void this.reparentTo(t.path, this.taskFolder(t.path), null)));
+    // サブフォルダがあるボードだけ：「フォルダへ移動…」で、フォルダの一覧を開く / only on a board with subfolders: "Move to folder…" opens the list of folders
+    if (folderChoices(this.allFolders).length > 0) menu.addItem((it) => it.setTitle(tr().kanbanMoveToFolder).setIcon("folder-input").onClick(() => this.openFolderMenu(e, t)));
     menu.addSeparator();
     menu.addItem((it) => it.setTitle(tr().menuDelete).setIcon("trash-2").onClick(() => this.confirmDelete(t.path)));
     menu.showAtMouseEvent(e);
+  }
+
+  // 移動先のフォルダを選ぶメニュー（今のフォルダにチェック）。同じ位置に開く / the menu to pick the destination folder (the current one checked), opened at the same spot
+  private openFolderMenu(e: MouseEvent, t: Task): void {
+    const cur = laneKeyOf(t, "folder");
+    const menu = new Menu();
+    for (const key of folderChoices(this.allFolders)) {
+      menu.addItem((it) => it.setTitle(this.laneLabel(key)).setIcon("folder").setChecked(key === cur).onClick(() => void this.moveTaskToFolder(t.path, key)));
+    }
+    menu.showAtPosition({ x: e.clientX, y: e.clientY });
+  }
+
+  // タスクを別のフォルダへ移す（取り消せる）。サブタスクも一緒に移り、親との関係は外れる（親子は同じフォルダに置くため）。移れたら新しいパスを返す
+  // move a task into another folder (undoable). Its subtasks go with it and its parent link is cleared (a subtree lives in one folder). Returns the new path when it moved
+  private async moveTaskToFolder(path: string, laneKey: string): Promise<string | null> {
+    const t = this.tasks.find((x) => x.path === path);
+    if (!t || laneKeyOf(t, "folder") === laneKey) return null;
+    let moves: Move[] = [];
+    const ok = await this.mutate(tr().undoEdit(t.name), [path], async () => {
+      const res = await reparentTask(this.app, this.plugin.settings, this.tasks, path, laneFolderPath(this.folder, laneKey), null);
+      if (!res) return false;
+      moves = res.moves;
+      return { moves };
+    });
+    if (!ok) return null;
+    const to = moves.find((m) => m.from === path)?.to ?? path;
+    if (this.selectedPath === path) this.selectedPath = to;
+    await this.refresh();
+    return to;
   }
 
   // カードを別の列へ動かす＝ステータスを書き換える（取り消せる）。未割当の列へ動かすとステータスを外す
@@ -1229,7 +1255,9 @@ export class GanttView extends ItemView {
     const statusChanged = from !== status;
     const byAssignee = laneKey !== null && this.cfg.laneBy === "assignee";
     const assigneeChanged = byAssignee && laneKeyOf(t, "assignee") !== laneKey;
-    const moved = statusChanged || assigneeChanged;
+    // フォルダのレーンへ落とした＝そのフォルダへファイルを移す（今と同じレーンなら移さない）/ dropped on a folder lane = move the file into that folder (nothing to move within its own lane)
+    const folderChanged = laneKey !== null && this.cfg.laneBy === "folder" && laneKeyOf(t, "folder") !== laneKey;
+    const moved = statusChanged || assigneeChanged || folderChanged;
     // 手動の順序：落とした列の今の並びを土台に、位置を決める / the manual order: the dropped column's current order is the base for the new place
     const key = columnKey(status);
     const shown = (this.kanbanCols.find((c) => columnKey(c.status) === key)?.cards ?? []).map((c) => c.path);
@@ -1250,10 +1278,20 @@ export class GanttView extends ItemView {
       return;
     }
     const keys = this.plugin.settings.keys;
+    let moves: Move[] = [];
     await this.mutate(tr().undoEdit(t.name), [path], async () => {
+      // フィールドの書き込みを先に（ファイルがまだ元の場所にあるうちに）、そのあとでフォルダへ移す。取り消しは 1 回で全部戻る
+      // write the fields first (while the file is still where it was), then move it into the folder; one undo restores everything
       if (statusChanged) await writeField(this.app, path, keys.status, status ?? undefined);
       if (assigneeChanged) await writeField(this.app, path, keys.assignee, laneKey === UNASSIGNED_KEY ? undefined : laneKey);
+      if (!folderChanged || laneKey === null) return;
+      const res = await reparentTask(this.app, this.plugin.settings, this.tasks, path, laneFolderPath(this.folder, laneKey), null);
+      if (!res) return false;
+      moves = res.moves;
+      return { moves };
     });
+    const srcMove = moves.find((m) => m.from === path);
+    if (srcMove && this.selectedPath === path) this.selectedPath = srcMove.to;
     await this.refresh();
   }
 
@@ -3638,6 +3676,24 @@ export class GanttView extends ItemView {
       if (s.id === t.status) opt.selected = true;
     }
     statusSel.addEventListener("change", () => void this.saveField(k.status, statusSel.value));
+
+    // フォルダ / folder（選ぶとファイルがそのフォルダへ移る。サブフォルダの無いボードでは出さない）
+    // folder: choosing one moves the file there (not shown on a board without subfolders)
+    const folderKeys = folderChoices(this.allFolders);
+    if (folderKeys.length > 0) {
+      const curKey = laneKeyOf(t, "folder");
+      if (!folderKeys.includes(curKey)) folderKeys.push(curKey); // 一覧に無い場所にいても、今の値を出す / show the current value even if it isn't in the list
+      const folderSel = fieldRow(tr().optGroupFolder).createEl("select");
+      for (const key of folderKeys) {
+        const opt = folderSel.createEl("option", { text: this.laneLabel(key), value: key });
+        if (key === curKey) opt.selected = true;
+      }
+      folderSel.addEventListener("change", () => void (async () => {
+        const to = await this.moveTaskToFolder(t.path, folderSel.value);
+        if (to) await this.openDetail(to); // パスが変わるので、新しいパスで開き直す / the path changed, so reopen on the new one
+        else folderSel.value = curKey; // 動かせなかったら元に戻す / revert when nothing moved
+      })());
+    }
 
     // 担当 / assignee（wikilink はリンク表示。リンク以外の所をクリックで入力欄に、"[[" でノート候補）
     // assignee: a wikilink shows as a link; click elsewhere in the field to edit, "[[" suggests notes

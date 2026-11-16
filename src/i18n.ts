@@ -91,6 +91,7 @@ interface Strings {
   kanbanSortTitle: string;
   kanbanSortAsc: string;
   kanbanDetachSub: string;
+  kanbanMoveToFolder: string;
   kanbanSortDesc: string;
   optHideLabels: string; // バーの名前・担当を隠す / hide the names and assignees on the bars
   optManualOrder: string;
@@ -417,6 +418,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortTitle: "タスク名",
     kanbanSortAsc: "昇順",
     kanbanDetachSub: "親タスクから切り離す",
+    kanbanMoveToFolder: "フォルダへ移動…",
     kanbanSortDesc: "降順",
     optHideLabels: "バーの名前・担当を隠す",
     optManualOrder: "手動の並び順",
@@ -724,6 +726,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortTitle: "Task title",
     kanbanSortAsc: "Ascending",
     kanbanDetachSub: "Detach from parent",
+    kanbanMoveToFolder: "Move to folder…",
     kanbanSortDesc: "Descending",
     optHideLabels: "Hide bar labels",
     optManualOrder: "Manual order",
@@ -1031,6 +1034,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortTitle: "任务标题",
     kanbanSortAsc: "升序",
     kanbanDetachSub: "从父任务分离",
+    kanbanMoveToFolder: "移动到文件夹…",
     kanbanSortDesc: "降序",
     optHideLabels: "隐藏条上的标签",
     optManualOrder: "手动排序",
@@ -1338,6 +1342,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortTitle: "任務標題",
     kanbanSortAsc: "升冪",
     kanbanDetachSub: "從父任務分離",
+    kanbanMoveToFolder: "移動到資料夾…",
     kanbanSortDesc: "降冪",
     optHideLabels: "隱藏長條標籤",
     optManualOrder: "手動排序",
@@ -1645,6 +1650,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortTitle: "작업 제목",
     kanbanSortAsc: "오름차순",
     kanbanDetachSub: "상위 작업에서 분리",
+    kanbanMoveToFolder: "폴더로 이동…",
     kanbanSortDesc: "내림차순",
     optHideLabels: "막대 라벨 숨기기",
     optManualOrder: "수동 정렬",
@@ -1952,6 +1958,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortTitle: "Titre de la tâche",
     kanbanSortAsc: "Croissant",
     kanbanDetachSub: "Détacher de la tâche parente",
+    kanbanMoveToFolder: "Déplacer vers un dossier…",
     kanbanSortDesc: "Décroissant",
     optHideLabels: "Masquer les libellés des barres",
     optManualOrder: "Ordre manuel",
@@ -2259,6 +2266,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortTitle: "Título de la tarea",
     kanbanSortAsc: "Ascendente",
     kanbanDetachSub: "Separar de la tarea principal",
+    kanbanMoveToFolder: "Mover a una carpeta…",
     kanbanSortDesc: "Descendente",
     optHideLabels: "Ocultar etiquetas de las barras",
     optManualOrder: "Orden manual",
@@ -2566,6 +2574,7 @@ const STRINGS: Record<Lang, Strings> = {
     kanbanSortTitle: "Название задачи",
     kanbanSortAsc: "По возрастанию",
     kanbanDetachSub: "Отделить от родительской задачи",
+    kanbanMoveToFolder: "Переместить в папку…",
     kanbanSortDesc: "По убыванию",
     optHideLabels: "Скрыть подписи на полосах",
     optManualOrder: "Ручной порядок",
