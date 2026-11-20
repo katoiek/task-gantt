@@ -490,18 +490,17 @@ async function applyDateText(ctx: BoardContext, t: Task, which: "start" | "end",
 // テーブルのセルから範囲カレンダーを開いて日付を直接編集 / open the range calendar from a table cell
 function openCellDatePicker(ctx: BoardContext, anchor: HTMLElement, t: Task, which: "start" | "end"): void {
   const state = { start: t.start ?? "", end: t.end ?? "" };
+  // 時刻は、カレンダーの下の欄で設定できる。日付を変えても、今の時刻は引き継ぐ / the time of day is set in the fields under the calendar; changing a date keeps the current time
+  const times: { start?: string; end?: string } = { start: t.startTime, end: t.endTime };
   const save = async (): Promise<void> => {
     // 「開始のみ・終了なし」は無効ルール → 終了=開始 / "start only" isn't valid: fill end = start
     if (state.start && !state.end) state.end = state.start;
-    // 既存の時刻は日付変更後も引き継ぐ（同日で逆転したら終了=開始に補正）
-    // keep the existing time of day across the date change (clamp if inverted on the same day)
-    const ts = t.startTime;
-    let te = t.endTime;
-    if (state.start && state.start === state.end && ts && te && te < ts) te = ts;
-    await ctx.reschedule(t.path, state, { start: ts, end: te });
+    // 同日で時刻が逆転したら、終了=開始に補正 / on the same day, an inverted time clamps the due time to the start time
+    if (state.start && state.start === state.end && times.start && times.end && times.end < times.start) times.end = times.start;
+    await ctx.reschedule(t.path, state, { start: times.start, end: times.end });
   };
   // repaint はテーブル側では不要（save→refresh で再描画される）/ no chip repaint needed here
-  ctx.openRangePicker(anchor, state, which, () => {}, save);
+  ctx.openRangePicker(anchor, state, which, () => {}, save, undefined, times);
 }
 
 // 期間セル（稼働日数）。日付が無いときは空欄 / duration cell in workdays; blank when the dates aren't set

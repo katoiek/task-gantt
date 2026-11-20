@@ -1739,6 +1739,26 @@ button.ogantt-cal-title:hover {
   background: var(--interactive-accent);
   color: var(--text-on-accent);
 }
+/* カレンダーの下の、開始・期限の時刻の欄 / the start and due time fields under the calendar */
+.ogantt-cal-time {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ogantt-cal-time-box {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+.ogantt-cal-time-label {
+  color: var(--text-muted);
+  font-size: 0.75em;
+}
+.ogantt-cal-time-box input {
+  min-width: 0;
+  font-size: 0.85em;
+}
 .ogantt-cal-foot {
   display: flex;
   justify-content: space-between;

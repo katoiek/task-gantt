@@ -47,7 +47,8 @@ export interface BoardContext {
     active: "start" | "end",
     repaint: () => void,
     save: () => void | Promise<void>,
-    single?: string // 単一日付モード（見出しに出す名前）/ single-date mode (the field name shown)
+    single?: string, // 単一日付モード（見出しに出す名前）/ single-date mode (the field name shown)
+    times?: { start?: string; end?: string } // 渡すと、カレンダーの下に時刻の欄（開始・期限）を出し、変えるたびに save を呼ぶ / when given, time fields (start, due) show under the calendar and save is called on every change
   ): void;
   // 入力欄に datalist の候補を付ける / attach datalist suggestions to an input
   attachSuggestions(inp: HTMLInputElement, fill: (list: HTMLDataListElement) => void): HTMLDataListElement;

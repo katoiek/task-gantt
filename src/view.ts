@@ -4149,7 +4149,7 @@ export class GanttView extends ItemView {
         rerender: () => this.rerender(),
         inlineInput: (cell, value, repaint, commit, configure) => this.inlineInput(cell, value, repaint, commit, configure),
         openPopover: (anchor, cls, build) => this.openPopover(anchor, cls, build),
-        openRangePicker: (anchor, state, active, repaint, save, single) => this.openRangePicker(anchor, state, active, repaint, save, single),
+        openRangePicker: (anchor, state, active, repaint, save, single, times) => this.openRangePicker(anchor, state, active, repaint, save, single, times),
         attachSuggestions: (inp, fill) => this.attachSuggestions(inp, fill),
         attachSingleTagSuggestions: (inp, exclude) => this.attachSingleTagSuggestions(inp, exclude),
         paintTagChip: (chip, tag) => this.paintTagChip(chip, tag),
@@ -4621,7 +4621,10 @@ export class GanttView extends ItemView {
     save: () => void | Promise<void>,
     // 指定すると単一日付モード（start = end に同じ日を入れ、選んだら閉じる）。値は見出しに出す名前
     // single-date mode when given: a pick sets start = end to that day and closes; the value names the field
-    single?: string
+    single?: string,
+    // 渡すと、カレンダーの下に開始・期限の時刻の欄を出す（空欄＝時刻なし）。変えると、この中身を書き換えて save を呼ぶ
+    // when given, start and due time fields show under the calendar (blank = no time); a change rewrites this object and calls save
+    times?: { start?: string; end?: string }
   ): void {
     activeDocument.querySelectorAll(".ogantt-cal").forEach((e) => e.remove());
     const todayStr = dayToStr(todayIndex());
@@ -4702,6 +4705,30 @@ export class GanttView extends ItemView {
         if (ds === state.end) cell.addClass("is-range-end");
         if (state.start && state.end && ds > state.start && ds < state.end) cell.addClass("is-in-range");
         cell.onclick = () => pick(ds);
+      }
+
+      // 時刻（開始・期限）。空にすると、時刻なし（日付だけ）/ the time of day (start, due); blank = no time (the date alone)
+      if (times && single === undefined) {
+        const row = cal.createDiv({ cls: "ogantt-cal-time" });
+        const inputs: Partial<Record<"start" | "end", HTMLInputElement>> = {};
+        for (const key of ["start", "end"] as const) {
+          const box = row.createDiv({ cls: "ogantt-cal-time-box" });
+          box.createSpan({ cls: "ogantt-cal-time-label", text: `${key === "start" ? tr().fieldStart : tr().fieldDue} ${tr().fieldTime}` });
+          const inp = box.createEl("input", { type: "time" });
+          inp.value = times[key] ?? "";
+          inp.setAttr("aria-label", `${key === "start" ? tr().fieldStart : tr().fieldDue} ${tr().fieldTime}`);
+          inputs[key] = inp;
+          inp.addEventListener("change", () => {
+            times[key] = inp.value || undefined;
+            // 同日で、終了の時刻が開始より前になったら、終了を開始に合わせる / on one day, a due time before the start time follows the start
+            if (state.start && state.start === state.end && times.start && times.end && times.end < times.start) {
+              times.end = times.start;
+              if (inputs.end) inputs.end.value = times.end;
+            }
+            repaint();
+            void save();
+          });
+        }
       }
 
       const foot = cal.createDiv({ cls: "ogantt-cal-foot" });
