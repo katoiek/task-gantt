@@ -300,7 +300,9 @@ You can also rename the **frontmatter keys** the plugin reads (start, end, statu
 
 ## Notifications (optional)
 
-Task Gantt Board can post reminders for tasks that have a **time of day** to **Discord** and/or **Slack** via incoming webhooks. In **Settings → Task Gantt Board → Notifications**, set the webhook URLs, choose the targets (start / due), and pick the lead times (1 week / 1 day / 1 hour / 10 minutes before, or at the exact time). Use **Send a test message** to verify the webhook instantly.
+Task Gantt Board can post reminders for tasks that have a **time of day** to **Discord**, **Slack** and/or **Microsoft Teams** via incoming webhooks. In **Settings → Task Gantt Board → Notifications**, set the webhook URLs, choose the targets (start / due), and pick the lead times (1 week / 1 day / 1 hour / 10 minutes before, or at the exact time). Use **Send a test message** to verify the webhooks instantly.
+
+For **Teams**, create a channel Workflow (channel **…** menu → **Workflows** → template *"Post to a channel when a webhook request is received"*) and paste the generated URL. The retired Office 365 connector URLs are not supported; this uses the current Power Automate webhook, and messages are posted as Adaptive Cards.
 
 ![Notification settings](docs/images/notification_en.png)
 
@@ -678,7 +680,9 @@ after:
 
 ## 通知（任意）
 
-**時刻を設定した**タスクの開始・期限を、Incoming Webhook 経由で **Discord** / **Slack** に通知できます。**設定 → Task Gantt Board → 通知** で Webhook URL・対象（開始/期限）・通知タイミング（1週間前・1日前・1時間前・10分前・時刻ちょうど）を設定してください。**テスト送信**ボタンで Webhook の疎通をすぐ確認できます。
+**時刻を設定した**タスクの開始・期限を、Incoming Webhook 経由で **Discord** / **Slack** / **Microsoft Teams** に通知できます。**設定 → Task Gantt Board → 通知** で Webhook URL・対象（開始/期限）・通知タイミング（1週間前・1日前・1時間前・10分前・時刻ちょうど）を設定してください。**テスト送信**ボタンで Webhook の疎通をすぐ確認できます。
+
+**Teams** はチャネルのワークフローを使います（チャネルの **…** メニュー → **ワークフロー** → テンプレート「**Webhook 要求を受信したらチャネルに投稿する**」→ 発行された URL を貼り付け）。廃止済みの Office 365 コネクタ URL には対応していません。現行の Power Automate Webhook を使い、メッセージは Adaptive Card として投稿されます。
 
 ![通知設定](docs/images/notification_ja.png)
 
