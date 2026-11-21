@@ -2081,3 +2081,12 @@ button.ogantt-cal-title:hover {
   cursor: grabbing;
   user-select: none;
 }
+
+/* 書き出し用の描画先（画面の外に置く）/ the export's drawing target (parked off-screen) */
+.ogantt-export-scratch {
+  position: fixed;
+  top: 0;
+  left: -100000px;
+  visibility: hidden;
+  pointer-events: none;
+}

@@ -68,7 +68,8 @@ function prepareClone(inp: BoardExportInput): HTMLElement {
   // 操作用のもの（依存を作るハンドル・列幅のつまみ）と、選択・ホバーの強調は絵に要らない
   // controls (link handles, column grips) and selection/hover highlights don't belong in a picture
   clone.querySelectorAll(".ogantt-handles-layer, .ogantt-col-grip").forEach((el) => el.remove());
-  for (const cls of ["is-selected", "is-dragging", "is-drop-target", "is-link-target", "is-visible"]) {
+  clone.querySelectorAll(".ogantt-fill-handle").forEach((el) => el.remove());
+  for (const cls of ["is-selected", "is-dragging", "is-drop-target", "is-link-target", "is-visible", "is-cell-sel", "is-sel-t", "is-sel-b", "is-sel-l", "is-sel-r"]) {
     clone.querySelectorAll("." + cls).forEach((el) => el.classList.remove(cls));
   }
   if (inp.scope === "chart") {

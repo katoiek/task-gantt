@@ -2487,9 +2487,11 @@ export class GanttView extends ItemView {
     const savedRange = this.range;
     const savedBody = this.tbodyEl;
     const savedHdr = this.hdr;
+    // 書き出し用の描画先は、画面の外（見えない位置）に置いた、ビューの中の入れ物。文書に付いていないと、テーマの色が読めない（getComputedStyle）。document 自体には、div を足せない
+    // the export's drawing target is a box inside the view, parked off-screen: unattached it can't read the theme colours (getComputedStyle), and a div can't be added to `document` itself
+    const scratch = this.contentEl.createDiv({ cls: "ogantt-export-scratch" });
     try {
       this.range = this.taskRange;
-      const scratch = activeDocument.createDiv();
       this.renderGrid(scratch);
       const grid = scratch.querySelector<HTMLElement>(".ogantt-grid");
       if (!grid) throw new Error("no grid");
@@ -2520,6 +2522,7 @@ export class GanttView extends ItemView {
       console.error("Task Gantt Board: export failed", e);
       new Notice(tr().exportFailed);
     } finally {
+      scratch.remove();
       this.range = savedRange; // 画面の描画に戻す / back to the on-screen state
       this.tbodyEl = savedBody;
       this.hdr = savedHdr;
