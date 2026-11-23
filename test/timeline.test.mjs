@@ -1,6 +1,6 @@
 // 日付フィルタの解決・判定（resolveDateValue / matchDate）と稲妻線ジオメトリの検証
 // Tests for date-filter resolution/matching and progress-line geometry
-import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks, roundedPolyline, headerLevel, isoWeek, buildHeader, offRuns, offscreenSide, jumpScrollLeft } from "./timeline.mjs";
+import { resolveDateValue, matchDate, dayIndex, progressLineX, buildProgressLine, buildTicks, roundedPolyline, headerLevel, isoWeek, buildHeader, offRuns, offscreenSide, jumpScrollLeft, dayAtX, orderedSpan } from "./timeline.mjs";
 
 let pass = 0;
 let fail = 0;
@@ -174,6 +174,19 @@ check("行が空でも両端だけ返す", buildProgressLine([], BASIS, 30, 0).l
   check("offscreenSide: 範囲をまたぐ長いバーは null", offscreenSide(0, 1000, 100, 600) === null);
   check("jumpScrollLeft: バーの左端を、左から margin のところへ", jumpScrollLeft(1000, 60) === 940 && jumpScrollLeft(1000.4, 60) === 940);
   check("jumpScrollLeft: 0 未満にはしない", jumpScrollLeft(20, 60) === 0);
+}
+
+// ── ドラッグで日程を決める：x → 日、2 点 → 開始と終了 / scheduling by dragging: x to day, two ends to start and due ──
+{
+  const range = { min: 100, max: 200 };
+  check("dayAtX: 左端は、範囲の最初の日", dayAtX(0, range, 16) === 100);
+  check("dayAtX: 1 日の幅ごとに 1 日進む", dayAtX(15, range, 16) === 100 && dayAtX(16, range, 16) === 101 && dayAtX(16 * 5 + 3, range, 16) === 105);
+  check("dayAtX: 範囲の外は、端の日", dayAtX(-50, range, 16) === 100 && dayAtX(16 * 500, range, 16) === 200);
+  check("dayAtX: 幅 0 や不正な値でも、壊れない", dayAtX(40, range, 0) === 100 && dayAtX(NaN, range, 16) === 100);
+  check("dayAtX: 小数の幅（Fit のズーム）", dayAtX(10, range, 4.5) === 102);
+  check("orderedSpan: 右へのドラッグ", JSON.stringify(orderedSpan(3, 7)) === "[3,7]");
+  check("orderedSpan: 左へのドラッグでも、開始が前", JSON.stringify(orderedSpan(7, 3)) === "[3,7]");
+  check("orderedSpan: 同じ日は 1 日", JSON.stringify(orderedSpan(5, 5)) === "[5,5]");
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

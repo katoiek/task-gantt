@@ -123,6 +123,17 @@ export interface DateRange {
   max: number; // 終了日（通日）/ last day index
 }
 
+// タイムライン上の x（チャートの左端から）が指す日。範囲の外は、端の日にとどめる / the day at an x on the timeline (from the chart's left edge); outside the range it stays on the end day
+export function dayAtX(x: number, range: DateRange, ppd: number): number {
+  if (!(ppd > 0) || !Number.isFinite(x)) return range.min;
+  return Math.min(range.max, Math.max(range.min, range.min + Math.floor(x / ppd)));
+}
+
+// ドラッグの 2 点（押した日・離した日）から、開始日と終了日。左へドラッグしても、開始が前になる / the start and end from the two ends of a drag; dragging leftwards still puts the start first
+export function orderedSpan(a: number, b: number): [number, number] {
+  return a <= b ? [a, b] : [b, a];
+}
+
 // タスク群から表示範囲を決める（前後に余白）/ compute the visible range with padding
 export function computeRange(tasks: Task[]): DateRange {
   const days: number[] = [];

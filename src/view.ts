@@ -40,6 +40,8 @@ import {
   offRuns,
   offscreenSide,
   jumpScrollLeft,
+  dayAtX,
+  orderedSpan,
   HeaderModel,
   todayIndex,
   formatDate,
@@ -128,6 +130,7 @@ export class GanttView extends ItemView {
   private zoomBtns = new Map<ZoomMode, HTMLButtonElement>();
   private kanbanExpanded = new Set<string>(); // サブタスクを開いているカード（パス）/ cards whose subtasks are open (paths)
   private dragPath: string | null = null; // ドラッグ中のカード / the card being dragged
+  private dragRowPath: string | null = null; // ドラッグ中の表の行（dragover では dataTransfer を読めないので、ここに持つ）/ the table row being dragged (dataTransfer can't be read during dragover, so it is kept here)
   // テーブルのセル選択（表のセルを、スプレッドシートのように選んで、コピー・貼り付け・フィルする）。パスと列 ID で持つので、描き直しても残る
   // the table's cell selection (pick cells like a spreadsheet to copy, paste and fill); held as path + column id, so it survives a redraw
   private cellSel: { anchor: CellRef; focus: CellRef } | null = null;
@@ -467,7 +470,7 @@ export class GanttView extends ItemView {
   private attachPan(wrap: HTMLElement, main: HTMLElement): void {
     wrap.addEventListener("pointerdown", (ev: PointerEvent) => {
       if (ev.button !== 0 || ev.pointerType !== "mouse") return;
-      if ((ev.target as Element).closest(".ogantt-bar-g, .ogantt-dep-g, .ogantt-handles-layer, .ogantt-handle")) return;
+      if ((ev.target as Element).closest(".ogantt-bar-g, .ogantt-dep-g, .ogantt-handles-layer, .ogantt-handle, .ogantt-undated-lane")) return;
       const startX = ev.clientX;
       const startLeft = main.scrollLeft;
       let moved = false;
@@ -2862,6 +2865,127 @@ export class GanttView extends ItemView {
     if (this.progressLine) this.drawProgressLine(svg, width, bodyH);
     this.drawDependencies(svg); // バーの上に描いて矢印を隠さない / on top of bars so arrows stay visible
     svg.appendChild(handlesLayer); // 矢印の上にハンドルを重ねる / handles above arrows
+    this.makeTimelineDropTarget(svgWrap, svg); // 表の行をここへドロップ＝その日から始める / drop a table row here to start it on that day
+    this.attachLanePaint(svg); // 空きレーンのドラッグ＝開始〜終了を塗る / drag an empty lane to paint start to due
+  }
+
+  // ----- 日付のないタスクを、チャートの上で日程にする / scheduling an undated task on the chart itself -----
+
+  // 日程をドラッグで決められるタスクの行番号（無ければ -1）。日付が何も無い、まとめバー（ロールアップ）ではないタスクだけ。日付のあるタスクは、うっかり動かさない
+  // the row index of a task whose schedule can be set by dragging (-1 when it can't): only a task with no dates at all and no rolled-up bar; a dated task is never moved by accident
+  private scheduleRowIndex(path: string): number {
+    const i = this.rows.findIndex((r) => r.kind === "task" && r.task!.path === path);
+    return i >= 0 && this.isUndatedRow(this.rows[i]) ? i : -1;
+  }
+
+  // 日程をドラッグで決められる行か（日付が何も無く、まとめバーでもないタスクの行）/ whether the row's schedule can be set by dragging (a task with no dates and no rolled-up bar)
+  private isUndatedRow(row: Row): boolean {
+    return row.kind === "task" && !row.span && !row.task!.start && !row.task!.end;
+  }
+
+  // 画面上の x が指す日 / the day under a screen x
+  private dayAtClientX(svg: SVGElement, clientX: number): number {
+    return dayAtX(clientX - svg.getBoundingClientRect().left, this.range, this.ppd);
+  }
+
+  // 日程のプレビュー（点線のバー）。ドラッグの間だけ / the schedule preview (a dashed bar), only while dragging
+  private ghostBar(rowIndex: number, from: number, to: number): SVGElement {
+    return this.svgEl("rect", {
+      x: (from - this.range.min) * this.ppd,
+      y: rowIndex * this.rowH + BAR_PAD,
+      width: (to - from + 1) * this.ppd,
+      height: this.rowH - BAR_PAD * 2,
+      rx: 3,
+      class: "ogantt-ghost-bar",
+    });
+  }
+
+  // 日付のないタスクの日程を書く（取り消せる。SS/FF の後続も連動する）。1 日だけなら from = to / write an undated task's schedule (undoable; SS/FF successors follow). A single day has from = to
+  private async scheduleUndated(path: string, from: number, to: number): Promise<void> {
+    const [a, b] = orderedSpan(from, to);
+    await this.reschedule(path, { start: dayToStr(a), end: dayToStr(b) });
+  }
+
+  // 日付のないタスクの表の行を、タイムラインへドロップ＝その日の 1 日のタスクにする（ゴーストで位置を見せる）
+  // drop an undated task's table row on the timeline = a one-day task on that day (a ghost shows where)
+  private makeTimelineDropTarget(wrap: HTMLElement, svg: SVGElement): void {
+    let ghost: SVGElement | null = null;
+    const clear = (): void => {
+      ghost?.remove();
+      ghost = null;
+    };
+    wrap.addEventListener("dragover", (e: DragEvent) => {
+      const i = this.dragRowPath ? this.scheduleRowIndex(this.dragRowPath) : -1;
+      if (i < 0) return; // 日付のある行・グループは受けない / dated rows and groups aren't accepted
+      e.preventDefault(); // preventDefault でドロップを許可 / allow dropping
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      const day = this.dayAtClientX(svg, e.clientX);
+      clear();
+      ghost = this.ghostBar(i, day, day);
+      svg.appendChild(ghost);
+    });
+    wrap.addEventListener("dragleave", (e: DragEvent) => {
+      if (wrap.contains(e.relatedTarget as Node | null)) return;
+      clear();
+    });
+    wrap.addEventListener("drop", (e: DragEvent) => {
+      const path = this.dragRowPath;
+      const i = path ? this.scheduleRowIndex(path) : -1;
+      clear();
+      if (!path || i < 0) return;
+      e.preventDefault();
+      void this.scheduleUndated(path, this.dayAtClientX(svg, e.clientX), this.dayAtClientX(svg, e.clientX));
+    });
+  }
+
+  // 日付のないタスクの空きレーンをドラッグ＝押した日から離した日までを日程にする（左へも可）。少し動かしただけで離したら、何もしない（ただのクリック）
+  // dragging across an undated task's empty lane = a schedule from the pressed day to the released day (leftwards too); releasing without moving does nothing (a plain click)
+  private attachLanePaint(svg: SVGElement): void {
+    svg.addEventListener("pointerdown", (ev: PointerEvent) => {
+      if (ev.button !== 0 || ev.pointerType !== "mouse") return;
+      const lane = (ev.target as Element).closest(".ogantt-undated-lane");
+      if (!lane) return;
+      const i = Number(lane.getAttribute("data-row"));
+      const row = this.rows[i];
+      if (row?.kind !== "task" || this.scheduleRowIndex(row.task!.path) !== i) return;
+      const path = row.task!.path;
+      const from = this.dayAtClientX(svg, ev.clientX);
+      const startX = ev.clientX;
+      let to = from;
+      let moved = false;
+      let ghost: SVGElement | null = null;
+      ev.preventDefault(); // ドラッグ中に文字が選択されないように / no text selection while dragging
+      svg.setPointerCapture(ev.pointerId);
+      const draw = (): void => {
+        ghost?.remove();
+        const [a, b] = orderedSpan(from, to);
+        ghost = this.ghostBar(i, a, b);
+        svg.appendChild(ghost);
+      };
+      const onMove = (e: PointerEvent): void => {
+        if (!moved && Math.abs(e.clientX - startX) < 3) return; // 数 px は、クリック / a few px is a click
+        moved = true;
+        to = this.dayAtClientX(svg, e.clientX);
+        draw();
+      };
+      const finish = (e: PointerEvent, commit: boolean): void => {
+        svg.releasePointerCapture(e.pointerId);
+        svg.removeEventListener("pointermove", onMove);
+        svg.removeEventListener("pointerup", onUp);
+        svg.removeEventListener("pointercancel", onCancel);
+        ghost?.remove();
+        if (moved) {
+          this.panned = true; // そのあとのクリックで、詳細パネルを閉じない / the click that follows must not close the detail panel
+          window.setTimeout(() => (this.panned = false), 0);
+        }
+        if (commit && moved) void this.scheduleUndated(path, from, to);
+      };
+      const onUp = (e: PointerEvent): void => finish(e, true);
+      const onCancel = (e: PointerEvent): void => finish(e, false);
+      svg.addEventListener("pointermove", onMove);
+      svg.addEventListener("pointerup", onUp);
+      svg.addEventListener("pointercancel", onCancel);
+    });
   }
 
   private xOf(dateStr: string): number {
@@ -2890,6 +3014,9 @@ export class GanttView extends ItemView {
       if (row.kind === "group") {
         const bg = this.svgEl("rect", { x: 0, y: i * this.rowH, width, height: this.rowH, class: "ogantt-grid-group" });
         svg.appendChild(bg);
+      } else if (this.isUndatedRow(row)) {
+        // 日付のないタスクの空きレーン：ドラッグして、開始〜終了を塗る / an undated task's empty lane: drag across it to paint start to due
+        svg.appendChild(this.svgEl("rect", { x: 0, y: i * this.rowH, width, height: this.rowH, class: "ogantt-undated-lane", "data-row": i }));
       }
       const line = this.svgEl("line", { x1: 0, y1: (i + 1) * this.rowH, x2: width, y2: (i + 1) * this.rowH, class: "ogantt-grid-row" });
       svg.appendChild(line);
@@ -3491,9 +3618,13 @@ export class GanttView extends ItemView {
     row.addEventListener("dragstart", (e: DragEvent) => {
       e.dataTransfer?.setData("text/plain", path);
       if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      this.dragRowPath = path;
       row.addClass("is-dragging");
     });
-    row.addEventListener("dragend", () => row.removeClass("is-dragging"));
+    row.addEventListener("dragend", () => {
+      this.dragRowPath = null; // drop のあとに届くので、日程の側は読み終わっている / arrives after the drop, so the schedule side has already read it
+      row.removeClass("is-dragging");
+    });
   }
 
   // 行をドロップ先にする（ドロップ時に handler(srcPath) を呼ぶ）/ make a row a drop target

@@ -1186,6 +1186,18 @@ input.ogantt-cell-input[type="number"] {
   stroke: var(--color-red);
   stroke-width: 1.5; /* 実線 / solid */
 }
+/* 日付のないタスクの空きレーン：ドラッグして日程を塗る。ドロップ・ドラッグ中のプレビューは点線のバー / an undated task's empty lane: drag across it to paint a schedule; the drop and drag preview is a dashed bar */
+.ogantt-undated-lane {
+  fill: transparent;
+  cursor: crosshair;
+}
+.ogantt-ghost-bar {
+  fill: var(--interactive-accent);
+  fill-opacity: 0.25;
+  stroke: var(--interactive-accent);
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
 /* バーの両端のつかみ（バーにカーソルを載せたとき）/ the bar's edge grips (shown when hovering the bar) */
 .ogantt-bar-grip {
   fill: #fff;
